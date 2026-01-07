@@ -4,6 +4,7 @@ import gleam/json.{type Json}
 import gleam/list
 import gleam/option
 import gleam/result
+import sad/artifacts
 import sad/bridge/port_process
 import sad/bridge/serialization
 import sad/runner_contract
@@ -53,7 +54,11 @@ pub fn execute_transient(
 
   case first_result(events, input.context.trace_id) {
     Ok(response) ->
-      runner_response_to_interaction_result(response, input.context.trace_id)
+      runner_response_to_interaction_result(
+        response,
+        input.runner_def.artifact_config,
+        input.context.trace_id,
+      )
     Error(error) -> Error(error)
   }
 }
@@ -288,6 +293,7 @@ fn provision_result_from_events(
 
 fn runner_response_to_interaction_result(
   response: types.RunnerResponse,
+  artifact_config: types.ArtifactConfig,
   trace_id: types.TraceId,
 ) -> Result(types.InteractionResult, types.InteractionError) {
   case response.status {
@@ -308,7 +314,22 @@ fn runner_response_to_interaction_result(
     }
     types.StatusSuccess -> {
       let data = response_data_from_runner(response.data)
-      Ok(types.InteractionResult(data: data, artifacts: [], trace_id: trace_id))
+      let artifacts =
+        artifacts.collect(response.artifacts, artifact_config)
+        |> result.map_error(fn(err) {
+          interaction_error(
+            trace_id,
+            "Invalid artifact path: " <> artifact_error_to_string(err),
+          )
+        })
+
+      use public_artifacts <- result.try(artifacts)
+
+      Ok(types.InteractionResult(
+        data: data,
+        artifacts: public_artifacts,
+        trace_id: trace_id,
+      ))
     }
   }
 }
@@ -347,5 +368,11 @@ fn contract_error_to_string(error: runner_contract.ContractError) -> String {
     runner_contract.ChunkWithoutStreaming -> "chunk without streaming"
     runner_contract.StdoutBytesExceeded(max, total) ->
       "stdout exceeded " <> int.to_string(total) <> " > " <> int.to_string(max)
+  }
+}
+
+fn artifact_error_to_string(error: artifacts.ArtifactError) -> String {
+  case error {
+    artifacts.InvalidPath(message) -> message
   }
 }
