@@ -1,4 +1,4 @@
-.PHONY: ci fmt test coverage
+.PHONY: ci fmt test
 
 fmt:
 	gleam format --check src test
@@ -6,10 +6,6 @@ fmt:
 test:
 	gleam test
 
-coverage:
-	gleam test --coverage
-
 ci:
 	$(MAKE) fmt
 	$(MAKE) test
-	$(MAKE) coverage
