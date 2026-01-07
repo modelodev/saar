@@ -60,10 +60,7 @@ fn parse_status(status: String) -> Result(types.RunnerStatus, JsonlError) {
   }
 }
 
-fn extract_string_field(
-  line: String,
-  key: String,
-) -> Result(String, JsonlError) {
+fn extract_string_field(line: String, key: String) -> Result(String, JsonlError) {
   let pattern = "\"" <> key <> "\":"
 
   case string.split_once(line, pattern) {

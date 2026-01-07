@@ -10,6 +10,7 @@ import sad/types
 import test_assertions
 
 const max_event_bytes = 262_144
+
 const read_timeout_ms = 200
 
 pub fn main() {
@@ -105,19 +106,15 @@ fn ensure_wrapper_path() {
 }
 
 fn base_env(shutdown_ms: Int) -> List(#(String, String)) {
-  let path_env =
-    case envoy.get("PATH") {
-      Ok(path) -> [#("PATH", path)]
-      Error(_) -> []
-    }
+  let path_env = case envoy.get("PATH") {
+    Ok(path) -> [#("PATH", path)]
+    Error(_) -> []
+  }
 
-  list.append(
-    path_env,
-    [
-      #("SAD_SHUTDOWN_MS", int.to_string(shutdown_ms)),
-      #("SAD_WRAPPER_FORCE_FALLBACK", "1"),
-    ],
-  )
+  list.append(path_env, [
+    #("SAD_SHUTDOWN_MS", int.to_string(shutdown_ms)),
+    #("SAD_WRAPPER_FORCE_FALLBACK", "1"),
+  ])
 }
 
 fn read_line_with_retries(
@@ -129,7 +126,8 @@ fn read_line_with_retries(
     _ ->
       case port_process.read_line(process, read_timeout_ms) {
         Ok(line) -> Ok(line)
-        Error(port_process.Timeout) -> read_line_with_retries(process, attempts - 1)
+        Error(port_process.Timeout) ->
+          read_line_with_retries(process, attempts - 1)
         Error(error) -> Error(error)
       }
   }
@@ -144,7 +142,8 @@ fn read_noeol_fragment(
     _ ->
       case port_process.receive(process, read_timeout_ms) {
         Ok(port_process.PortNoeol(fragment)) -> Ok(fragment)
-        Ok(port_process.PortExit(_)) -> read_noeol_fragment(process, attempts - 1)
+        Ok(port_process.PortExit(_)) ->
+          read_noeol_fragment(process, attempts - 1)
         Ok(_) -> Error(Nil)
         Error(_) -> read_noeol_fragment(process, attempts - 1)
       }
@@ -163,10 +162,7 @@ fn wait_for_exit(process: port_process.PortProcess, attempts: Int) {
   }
 }
 
-fn assert_no_stdout_until_exit(
-  process: port_process.PortProcess,
-  attempts: Int,
-) {
+fn assert_no_stdout_until_exit(process: port_process.PortProcess, attempts: Int) {
   case attempts {
     0 -> panic as "Timed out waiting for port exit"
     _ ->
