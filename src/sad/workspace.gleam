@@ -30,9 +30,18 @@ pub fn workspace_path_validate(
 }
 
 fn validate_non_empty(raw: String) -> Result(WorkspacePath, PathError) {
-  case string.starts_with(raw, "/") {
-    True -> Error(AbsolutePathNotAllowed(raw))
-    False -> validate_relative(raw)
+  let segments =
+    raw
+    |> string.split("/")
+    |> list.filter(fn(segment) { segment != "" && segment != "." })
+
+  case segments {
+    [] -> Error(EmptyPath)
+    _ ->
+      case string.starts_with(raw, "/") {
+        True -> Error(AbsolutePathNotAllowed(raw))
+        False -> validate_relative(raw)
+      }
   }
 }
 
