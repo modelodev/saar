@@ -62,6 +62,11 @@
           "status": "completed",
           "branch": "feat/s02-t03-test-helpers",
           "commit": "94402e763fe29dd98d75b3ce9a21934c84fa5a19"
+        },
+        "S02-T04": {
+          "status": "completed",
+          "branch": "feat/s02-t04-types-props",
+          "commit": "f795a6874e916fbc0eec7772ba48fb2b2a159ff2"
         }
       }
     }
