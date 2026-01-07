@@ -18,6 +18,11 @@
           "status": "completed",
           "branch": "feat/s01-t02-gleam-deps",
           "commit": "b3566147b5c72c18a0015f61065efe5397497194"
+        },
+        "S01-T03": {
+          "status": "completed",
+          "branch": "feat/s01-t03-ci-make",
+          "commit": "a3c1c61ba0cf6d2944f411d0094f1f3ce2d62c93"
         }
       }
     }
