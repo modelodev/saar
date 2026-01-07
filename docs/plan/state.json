@@ -37,7 +37,7 @@
         "S01-T06": {
           "status": "completed",
           "branch": "feat/s01-t06-doc-lint",
-          "commit": "cb644820787086ae26c6c15dffeec96b07492707"
+          "commit": "c6be8086433a96391d05240469c299518d3c1a23"
         }
       }
     }
