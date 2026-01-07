@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "id": "file_delivery_examples",
+    "lifecycle": "transient",
+    "description": "Example: std:files with FileRef.url (runner materializes inside workspace)."
+  },
+  "parameters": {},
+  "runner": {
+    "type": "generic_uvx",
+    "tool_config": { "package": "example-agent", "command": "example-agent" },
+    "args": ["--help"]
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {
+      "files_by_url": {
+        "description": "Runner expects a URL and will download it itself.",
+        "input_schema": { "$ref": "std:files" }
+      }
+    }
+  }
+}

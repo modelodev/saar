@@ -1,0 +1,61 @@
+test/
+├── fixtures/
+│   ├── source_local/
+│   │   ├── profiles/
+│   │   │   ├── echo_cli.json
+│   │   │   ├── echo_server.json
+│   │   │   ├── greedy_logger.json
+│   │   │   ├── slow_poke.json
+│   │   │   ├── crasher.json
+│   │   │   ├── artifact_gen.json
+│   │   │   └── streaming_echo.json
+│   │   └── runners/
+│   │       ├── echo_cli.py
+│   │       ├── echo_server.py
+│   │       ├── greedy_logger.py
+│   │       ├── slow_poke.py
+│   │       ├── crasher.py
+│   │       ├── artifact_gen.py
+│   │       └── streaming_echo.py
+│   └── config/
+│       └── test_config.toml
+├── unit/
+│   ├── types_test.gleam         # 14 tests
+│   ├── workspace_test.gleam     # 15 tests
+│   ├── runner_contract_test.gleam # 5 tests
+│   ├── params_test.gleam        # 9 tests
+│   ├── decoders_test.gleam      # 16 tests
+│   ├── ffi_test.gleam           # 5 tests
+│   ├── messages_test.gleam      # 3 tests
+│   ├── agent_test.gleam         # 10 tests (mock bridge)
+│   ├── agent_api_test.gleam     # 4 tests
+│   ├── registry_test.gleam      # 5 tests
+│   ├── supervisor_test.gleam    # 2 tests
+│   ├── agui_test.gleam          # 8 tests
+│   ├── a2a_test.gleam           # 14 tests
+│   ├── sse_test.gleam           # 4 tests
+│   ├── cli_test.gleam           # 9 tests
+│   ├── artifact_registry_test.gleam # 7 tests
+│   ├── response_mapping_test.gleam # 7 tests
+│   └── port_pool_test.gleam     # 7 tests
+├── integration/
+│   ├── config_test.gleam        # 4 tests
+│   ├── serialization_test.gleam # 5 tests
+│   ├── interpolator_test.gleam  # 13 tests
+│   ├── runner_test.gleam        # 10 tests (zoo agents)
+│   ├── client_test.gleam        # 6 tests (zoo agents)
+│   ├── api_test.gleam           # 7 tests
+│   ├── proxy_test.gleam         # 4 tests (artefactos)
+│   ├── ui_proxy_test.gleam      # 6 tests (UI HTTP-only)
+│   ├── sad_test.gleam           # 2 tests (smoke)
+│   ├── system_log_test.gleam    # 8 tests
+│   └── shutdown_test.gleam      # 8 tests
+└── properties/
+    ├── types_props.gleam        # 5 properties
+    ├── workspace_props.gleam    # 4 properties
+    ├── runner_contract_props.gleam # 2 properties
+    ├── params_props.gleam       # 3 properties
+    ├── decoders_props.gleam     # 3 properties
+    ├── serialization_props.gleam # 1 property
+    ├── interpolator_props.gleam # 2 properties
+    └── adapters_props.gleam     # 3 properties (agui + a2a)

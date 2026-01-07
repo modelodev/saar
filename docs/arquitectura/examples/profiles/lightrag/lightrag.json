@@ -1,0 +1,110 @@
+{
+  "meta": {
+    "id": "lightrag",
+    "lifecycle": "continuous",
+    "description": "LightRAG: Document-based RAG queries"
+  },
+  "parameters": {
+    "llm_binding": { "source": "fixed", "value": "openai", "type": "string" },
+    "embedding_binding": { "source": "fixed", "value": "openai", "type": "string" },
+    "embedding_dim": { "source": "fixed", "value": 3072, "type": "int" },
+    "lightrag_api_key": { "source": "fixed", "value": "alsjdlaskjd191039uh", "type": "string" },
+    "name": { "source": "fixed", "value": "lightrag", "type": "string" },
+    "embedding_binding_api_key": { "source": "secret", "key": "gemini_api_key", "type": "string" },
+    "embedding_binding_host": { "source": "config", "key": "gemini_url", "type": "string" },
+    "llm_binding_api_key": { "source": "secret", "key": "openrouter_api_key", "type": "string" },
+    "llm_binding_host": { "source": "config", "key": "openrouter_url", "type": "string" },
+    "llm_model": { "source": "config", "key": "model", "type": "string" },
+    "embedding_model": { "source": "config", "key": "embedding_model", "type": "string" }
+  },
+  "runner": {
+    "type": "generic_uvx_server",
+    "tool_config": {
+      "package": "lightrag-hku[api]",
+      "command": "lightrag-server",
+      "with_packages": [
+        "ollama",
+        "pip",
+        "nano_vectordb",
+        "fastapi",
+        "uvicorn",
+        "jwt",
+        "aiofiles",
+        "python_multipart"
+      ]
+    },
+    "runtime": {
+      "mode": "managed_port",
+      "port_env_var": "PORT",
+      "host_env_var": "HOST"
+    },
+    "env_map": {
+      "LLM_BINDING": "{{params.llm_binding}}",
+      "EMBEDDING_BINDING": "{{params.embedding_binding}}",
+      "EMBEDDING_DIM": "{{params.embedding_dim}}",
+      "LIGHTRAG_API_KEY": "{{params.lightrag_api_key}}",
+      "NAME": "{{params.name}}",
+      "EMBEDDING_BINDING_API_KEY": "{{params.embedding_binding_api_key}}",
+      "EMBEDDING_BINDING_HOST": "{{params.embedding_binding_host}}",
+      "LLM_BINDING_API_KEY": "{{params.llm_binding_api_key}}",
+      "LLM_BINDING_HOST": "{{params.llm_binding_host}}",
+      "LLM_MODEL": "{{params.llm_model}}",
+      "EMBEDDING_MODEL": "{{params.embedding_model}}"
+    }
+  },
+  "interface": {
+    "protocol": "http",
+    "base_url": "http://{{runner.host}}:{{runner.port}}",
+    "headers": {
+      "X-API-Key": "{{params.lightrag_api_key}}"
+    },
+    "health_check": {
+      "path": "/health",
+      "method": "GET",
+      "expect_statuses": [200]
+    },
+    "capabilities": {
+      "chat": {
+        "path": "/query",
+        "method": "POST",
+        "input_schema": {
+          "base": "std:chat",
+          "extra_fields": {
+            "mode": {
+              "type": "string",
+              "enum": ["hybrid", "naive", "local", "global", "mix"],
+              "default": "hybrid"
+            }
+          }
+        },
+        "body": {
+          "type": "json",
+          "template": {
+            "query": "{{helpers.last_user_content}}",
+            "mode": { "$from": "/input/mode" },
+            "top_k": 5,
+            "history_turns": 5
+          }
+        },
+        "response": {
+          "text_pointer": "/response"
+        }
+      },
+      "files": {
+        "path": "/documents/upload",
+        "method": "POST",
+        "input_schema": "std:files",
+        "body": {
+          "type": "multipart",
+          "fields": {},
+          "files": [
+            { "field": "file", "source_pointer": "/input/files/0" }
+          ]
+        },
+        "response": {
+          "text_pointer": "/message"
+        }
+      }
+    }
+  }
+}

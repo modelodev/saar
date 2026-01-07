@@ -1,0 +1,53 @@
+{
+  "meta": {
+    "id": "vanna",
+    "lifecycle": "transient",
+    "description": "Vanna, a business intelligence agent for SQL databases."
+  },
+  "parameters": {
+    "llm_api_key": { "source": "secret", "key": "openrouter_api_key", "type": "string" },
+    "llm_base_url": { "source": "config", "key": "openrouter_url", "type": "string" },
+    "llm_model": { "source": "config", "key": "model", "type": "string" },
+    "db_url": { "source": "init", "key": "db_url", "type": "string" }
+  },
+  "runner": {
+    "type": "generic_uvx",
+    "tool_config": {
+      "package": "vanna-adapter",
+      "command": "vanna-adapter",
+      "with_packages": ["pip"]
+    },
+    "env_map": {
+      "LLM_API_KEY": "{{params.llm_api_key}}",
+      "LLM_BASE_URL": "{{params.llm_base_url}}",
+      "LLM_MODEL": "{{params.llm_model}}",
+      "DB_URL": "{{params.db_url}}"
+    },
+    "args": [
+      "--query",
+      "{{helpers.last_user_content}}",
+      "--graph",
+      "{{input.graph}}",
+      "--questions",
+      "{{input.questions}}"
+    ],
+    "artifact_config": {
+      "include": "**/*.html",
+      "exclude": [".git/**", ".aider*", "__pycache__"]
+    }
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {
+      "chat": {
+        "input_schema": {
+          "base": "std:chat",
+          "extra_fields": {
+            "graph": { "type": "boolean", "default": true },
+            "questions": { "type": "boolean", "default": true }
+          }
+        }
+      }
+    }
+  }
+}

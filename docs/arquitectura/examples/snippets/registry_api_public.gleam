@@ -1,0 +1,91 @@
+// Extracted reference snippet (v0)
+// Source: arquitectura/actores.md:1017
+// Purpose: documentation-only; may not compile as-is.
+
+// sad/core/registry_api.gleam
+
+import gleam/erlang/process.{type Subject}
+import gleam/option.{type Option}
+import gleam/list
+import sad/otp/safe_call
+import sad/otp/safe_call.{type CallError, type ApiCallError}
+import sad/core/messages.{type RegistryMsg, Register, Unregister, Lookup, ListByProfile, ListAll, type RegistryError}
+import sad/core/agent.{type AgentRef}
+import sad/types.{type InstanceKey, InstanceKey, type ProfileId, type InstanceId}
+
+/// Registra un agente en el registry.
+/// Falla si ya existe una entrada con la misma clave.
+pub fn register(
+  registry: Subject(RegistryMsg),
+  key: InstanceKey,
+  agent: AgentRef,
+  timeout_ms: Int,
+) -> Result(Nil, ApiCallError(RegistryError)) {
+  safe_call.call_result_within(registry, timeout_ms, fn(reply_to) { Register(key, agent, reply_to) })
+}
+
+/// Elimina un agente del registry.
+/// Fire-and-forget: no espera confirmación.
+pub fn unregister(
+  registry: Subject(RegistryMsg),
+  key: InstanceKey,
+) -> Nil {
+  actor.send(registry, Unregister(key))
+}
+
+/// Busca un agente por clave.
+pub fn lookup(
+  registry: Subject(RegistryMsg),
+  key: InstanceKey,
+  timeout_ms: Int,
+) -> Result(Option(AgentRef), CallError) {
+  safe_call.call_within(registry, timeout_ms, fn(reply_to) { Lookup(key, reply_to) })
+}
+
+/// Busca un agente por profile_id e instance_id.
+/// Convenience wrapper sobre lookup.
+pub fn lookup_by_ids(
+  registry: Subject(RegistryMsg),
+  profile_id: ProfileId,
+  instance_id: InstanceId,
+  timeout_ms: Int,
+) -> Result(Option(AgentRef), CallError) {
+  lookup(registry, InstanceKey(profile_id, instance_id), timeout_ms)
+}
+
+/// Lista todas las instancias de un perfil.
+pub fn list_by_profile(
+  registry: Subject(RegistryMsg),
+  profile_id: ProfileId,
+  timeout_ms: Int,
+) -> Result(List(InstanceId), CallError) {
+  safe_call.call_within(registry, timeout_ms, fn(reply_to) { ListByProfile(profile_id, reply_to) })
+}
+
+/// Lista todas las instancias registradas.
+pub fn list_all(
+  registry: Subject(RegistryMsg),
+  timeout_ms: Int,
+) -> Result(List(InstanceKey), CallError) {
+  safe_call.call_within(registry, timeout_ms, fn(reply_to) { ListAll(reply_to) })
+}
+
+/// Cuenta el número de instancias registradas.
+pub fn count(registry: Subject(RegistryMsg), timeout_ms: Int) -> Result(Int, CallError) {
+  case list_all(registry, timeout_ms) {
+    Ok(keys) -> Ok(list.length(keys))
+    Error(e) -> Error(e)
+  }
+}
+
+/// Cuenta las instancias de un perfil específico.
+pub fn count_by_profile(
+  registry: Subject(RegistryMsg),
+  profile_id: ProfileId,
+  timeout_ms: Int,
+) -> Result(Int, CallError) {
+  case list_by_profile(registry, profile_id, timeout_ms) {
+    Ok(ids) -> Ok(list.length(ids))
+    Error(e) -> Error(e)
+  }
+}

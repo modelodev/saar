@@ -1,0 +1,66 @@
+{
+  "meta": {
+    "id": "profile-searcher",
+    "lifecycle": "continuous",
+    "description": "Conversational agent for LinkedIn profile searching."
+  },
+  "parameters": {
+    "openrouter_api_key": { "source": "secret", "key": "openrouter_api_key", "type": "string" },
+    "openrouter_model": { "source": "config", "key": "model", "type": "string" },
+    "openrouter_temperature": { "source": "fixed", "value": 0.3, "type": "float" },
+    "apify_api_token": { "source": "secret", "key": "apify_api_token", "type": "string" },
+    "api_security_token": { "source": "fixed", "value": "eqhkecnlkjql", "type": "string" },
+    "apify_timeout": { "source": "fixed", "value": 300, "type": "int" },
+    "max_profiles_to_show": { "source": "fixed", "value": 25, "type": "int" },
+    "api_host": { "source": "fixed", "value": "127.0.0.1", "type": "string" }
+  },
+  "runner": {
+    "type": "generic_uvx_server",
+    "tool_config": {
+      "package": "profile-searcher-sam",
+      "command": "profile-searcher"
+    },
+    "runtime": {
+      "mode": "managed_port",
+      "port_env_var": "API_PORT",
+      "host_env_var": "API_HOST"
+    },
+    "env_map": {
+      "OPENROUTER_API_KEY": "{{params.openrouter_api_key}}",
+      "OPENROUTER_MODEL": "{{params.openrouter_model}}",
+      "OPENROUTER_TEMPERATURE": "{{params.openrouter_temperature}}",
+      "APIFY_API_TOKEN": "{{params.apify_api_token}}",
+      "APIFY_TIMEOUT": "{{params.apify_timeout}}",
+      "API_SECURITY_TOKEN": "{{params.api_security_token}}",
+      "MAX_PROFILES_TO_SHOW": "{{params.max_profiles_to_show}}"
+    }
+  },
+  "interface": {
+    "protocol": "http",
+    "base_url": "http://{{runner.host}}:{{runner.port}}",
+    "headers": {
+      "Authorization": "Bearer {{params.api_security_token}}"
+    },
+    "health_check": {
+      "path": "/api/v1/status",
+      "method": "GET",
+      "expect_statuses": [200]
+    },
+    "capabilities": {
+      "chat": {
+        "path": "/api/v1/chat",
+        "method": "POST",
+        "input_schema": { "$ref": "std:chat" },
+        "body": {
+          "type": "json",
+          "template": {
+            "messages": { "$from": "/input/messages" }
+          }
+        },
+        "response": {
+          "text_pointer": "/response"
+        }
+      }
+    }
+  }
+}

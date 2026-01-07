@@ -1,0 +1,46 @@
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[auth]
+api_key = "${SAD_API_KEY}"
+
+[limits]
+call_timeout_ms = 30000
+status_timeout_ms = 5000
+registry_timeout_ms = 5000
+health_check_timeout_ms = 10000
+shutdown_timeout_ms = 10000
+log_buffer_bytes = 1048576
+max_stdout_bytes = 10485760
+max_runner_event_bytes = 262144
+max_request_body_bytes = 1048576
+max_http_response_bytes = 10485760
+max_file_fetch_bytes = 52428800
+port_range_min = 9000
+port_range_max = 9999
+sse_keep_alive_interval_ms = 15000
+
+[profiles]
+sources = [
+  {type = "dir", path = "./profiles"}
+]
+git_cache_dir = "./.sad/cache/git"
+
+[runners]
+python_bin = "python3"
+
+[network]
+managed_port_host = "127.0.0.1"
+
+[log_stream]
+batch_byte_size = 4096
+flush_interval_ms = 50
+
+[interaction_stream]
+batch_byte_size = 4096
+flush_interval_ms = 25
+push_timeout_ms = 250
+
+[workspaces]
+directory = "./workspaces"
