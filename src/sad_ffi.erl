@@ -6,18 +6,21 @@ now_ms() ->
 
 open_port(Command, Args, Env, Cd, MaxRunnerEventBytes) ->
     EnvList = env_pairs(Env),
+    ArgsList = arg_list(Args),
+    CommandList = to_list(Command),
+    CdList = to_list(Cd),
     LineLimit = line_limit(MaxRunnerEventBytes),
     Opts = [
-        {args, Args},
+        {args, ArgsList},
         {env, EnvList},
-        {cd, Cd},
+        {cd, CdList},
         binary,
         exit_status,
         use_stdio,
         {line, LineLimit}
     ],
     try
-        Port = erlang:open_port({spawn_executable, Command}, Opts),
+        Port = erlang:open_port({spawn_executable, CommandList}, Opts),
         {ok, Port}
     catch
         _:Reason -> {error, format_error(Reason)}
@@ -52,6 +55,14 @@ env_pairs(Env) ->
 
 format_error(Reason) ->
     lists:flatten(io_lib:format("~p", [Reason])).
+
+arg_list(Args) ->
+    [to_list(Arg) || Arg <- Args].
+
+to_list(Value) when is_binary(Value) ->
+    binary_to_list(Value);
+to_list(Value) when is_list(Value) ->
+    Value.
 
 line_limit(MaxRunnerEventBytes) when is_integer(MaxRunnerEventBytes), MaxRunnerEventBytes > 0 ->
     case MaxRunnerEventBytes > 65535 of
