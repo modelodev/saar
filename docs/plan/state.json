@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": null,
+  "current_sprint": "S04",
   "sprints": {
     "S01": {
       "status": "completed",
@@ -101,6 +101,45 @@
           "status": "completed",
           "branch": "feat/s03-t05-e2e-echo",
           "commit": "f434946c31267252f2737ba7fe72619074b32191"
+        }
+      }
+    },
+    "S04": {
+      "status": "in_progress",
+      "branch": "sprint/s04-transient-e2e-jsonl-workspace",
+      "started_at": "2026-01-07T21:35:54Z",
+      "completed_at": null,
+      "current_story": null,
+      "stories": {
+        "S04-T01": {
+          "status": "completed",
+          "branch": "feat/s04-t01-workspace-path",
+          "commit": "69f4a7d11553d2ca7b7e7af7413c595d31b5a528"
+        },
+        "S04-T02": {
+          "status": "completed",
+          "branch": "feat/s04-t02-runner-contract",
+          "commit": "d673ca09caebea73d4f35199ef2fcd6b7fc14b02"
+        },
+        "S04-T03": {
+          "status": "completed",
+          "branch": "feat/s04-t03-serialization",
+          "commit": "584bbb318892c19c5b930de7768cbe040c305f2b"
+        },
+        "S04-T04": {
+          "status": "completed",
+          "branch": "feat/s04-t04-bridge-transient",
+          "commit": "e40090f795e1027b046573c471b37132fb95e533"
+        },
+        "S04-T05": {
+          "status": "completed",
+          "branch": "feat/s04-t05-artifacts",
+          "commit": "41b930bb1035d21a8282cedc43446d41278ace0b"
+        },
+        "S04-T06": {
+          "status": "completed",
+          "branch": "feat/s04-t06-e2e-zoo",
+          "commit": "2e82ec42564ab2af266d85fb50c14e8ae14452f7"
         }
       }
     }

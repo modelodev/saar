@@ -1,4 +1,4 @@
-.PHONY: ci fmt test coverage wrapper e2e-echo
+.PHONY: ci fmt test coverage wrapper e2e-echo e2e-transient
 
 fmt:
 	gleam format --check src test
@@ -22,5 +22,7 @@ wrapper:
 	mkdir -p priv
 	cc -O2 -Wall -Wextra -o priv/sad_wrapper native/wrapper/sad_wrapper.c
 
-e2e-echo: wrapper
+e2e-transient: wrapper
 	gleam test
+
+e2e-echo: e2e-transient
