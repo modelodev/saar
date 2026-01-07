@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": null,
+  "current_sprint": "S04",
   "sprints": {
     "S01": {
       "status": "completed",
@@ -101,6 +101,34 @@
           "status": "completed",
           "branch": "feat/s03-t05-e2e-echo",
           "commit": "f434946c31267252f2737ba7fe72619074b32191"
+        }
+      }
+    },
+    "S04": {
+      "status": "in_progress",
+      "branch": "sprint/s04-transient-e2e-jsonl-workspace",
+      "started_at": "2026-01-07T21:35:54Z",
+      "completed_at": null,
+      "current_story": "S04-T01",
+      "stories": {
+        "S04-T01": {
+          "status": "in_progress",
+          "branch": "feat/s04-t01-workspace-path"
+        },
+        "S04-T02": {
+          "status": "pending"
+        },
+        "S04-T03": {
+          "status": "pending"
+        },
+        "S04-T04": {
+          "status": "pending"
+        },
+        "S04-T05": {
+          "status": "pending"
+        },
+        "S04-T06": {
+          "status": "pending"
         }
       }
     }
