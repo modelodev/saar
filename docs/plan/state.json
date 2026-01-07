@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": "S03",
+  "current_sprint": null,
   "sprints": {
     "S01": {
       "status": "completed",
@@ -71,10 +71,10 @@
       }
     },
     "S03": {
-      "status": "in_progress",
+      "status": "completed",
       "branch": "sprint/s03-wrapper-v0-1-portprocess-smoke-e2e",
       "started_at": "2026-01-07T18:15:34Z",
-      "completed_at": null,
+      "completed_at": "2026-01-07T19:01:54Z",
       "current_story": null,
       "stories": {
         "S03-T01": {
@@ -96,6 +96,11 @@
           "status": "completed",
           "branch": "feat/s03-t04-jsonl-min",
           "commit": "774df2fe4cecc4d8db3c2ab39c167ced9900ce8c"
+        },
+        "S03-T05": {
+          "status": "completed",
+          "branch": "feat/s03-t05-e2e-echo",
+          "commit": "f434946c31267252f2737ba7fe72619074b32191"
         }
       }
     }
