@@ -1,5 +1,5 @@
 -module(sad_ffi).
--export([now_ms/0, open_port/5, port_send/2, port_close/1, port_receive/2]).
+-export([now_ms/0, open_port/5, port_send/2, port_close/1, port_receive/2, priv_dir/0]).
 
 now_ms() ->
     erlang:monotonic_time(millisecond).
@@ -38,6 +38,12 @@ port_receive(Port, TimeoutMs) ->
         {Port, {exit_status, Status}} -> {ok, {port_exit, Status}}
     after
         TimeoutMs -> {error, nil}
+    end.
+
+priv_dir() ->
+    case code:priv_dir(sad) of
+        {error, Reason} -> {error, format_error(Reason)};
+        Dir -> {ok, list_to_binary(Dir)}
     end.
 
 env_pairs(Env) ->

@@ -52,3 +52,10 @@ pub fn port_receive(port: Port, timeout_ms: Int) -> Result(PortMessage, Nil) {
 
 @external(erlang, "sad_ffi", "port_receive")
 fn port_receive_ffi(port: Port, timeout_ms: Int) -> Result(PortMessage, Nil)
+
+pub fn priv_dir() -> Result(String, String) {
+  priv_dir_ffi()
+}
+
+@external(erlang, "sad_ffi", "priv_dir")
+fn priv_dir_ffi() -> Result(String, String)
