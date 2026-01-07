@@ -17,11 +17,7 @@
 static volatile sig_atomic_t child_exited = 0;
 
 static void sigchld_handler(int _) {
-  int status;
-  (void)status;
   child_exited = 1;
-  while (waitpid(-1, &status, WNOHANG) > 0) {
-  }
 }
 
 static bool debug_enabled(void) {
@@ -79,7 +75,46 @@ static void kill_namespace_all(int sig) {
 #endif
 }
 
+static bool write_all(int fd, const char *buf, size_t len) {
+  size_t written = 0;
+  while (written < len) {
+    ssize_t n = write(fd, buf + written, len - written);
+    if (n < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return false;
+    }
+    written += (size_t)n;
+  }
+  return true;
+}
+
+static void close_child_stdin(int *child_stdin_fd) {
+  if (*child_stdin_fd >= 0) {
+    close(*child_stdin_fd);
+    *child_stdin_fd = -1;
+  }
+}
+
+static bool wait_for_child_exit(pid_t child_pid, int timeout_ms) {
+  int waited = 0;
+  int status = 0;
+  while (waited < timeout_ms) {
+    pid_t result = waitpid(child_pid, &status, WNOHANG);
+    if (result == child_pid) {
+      return true;
+    }
+    usleep(50 * 1000);
+    waited += 50;
+  }
+  return false;
+}
+
 static void stop_sequence(pid_t child_pid, int shutdown_ms, bool in_namespace) {
+  if (wait_for_child_exit(child_pid, shutdown_ms)) {
+    _exit(0);
+  }
   if (in_namespace) {
     debug_log("wrapper stop: namespace kill SIGTERM");
     kill_namespace_all(SIGTERM);
@@ -110,7 +145,7 @@ static int run_child(char **argv) {
   _exit(127);
 }
 
-static int main_loop(pid_t child_pid, bool in_namespace) {
+static int main_loop(pid_t child_pid, bool in_namespace, int child_stdin_fd) {
   char buf[4096];
   const int shutdown_ms = read_shutdown_ms();
 
@@ -119,6 +154,7 @@ static int main_loop(pid_t child_pid, bool in_namespace) {
       int status = 0;
       pid_t waited = waitpid(child_pid, &status, WNOHANG);
       if (waited == child_pid) {
+        close_child_stdin(&child_stdin_fd);
         return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
       }
       child_exited = 0;
@@ -127,6 +163,7 @@ static int main_loop(pid_t child_pid, bool in_namespace) {
     ssize_t n = read(STDIN_FILENO, buf, sizeof(buf) - 1);
     if (n == 0) {
       debug_log("wrapper stop: stdin EOF");
+      close_child_stdin(&child_stdin_fd);
       stop_sequence(child_pid, shutdown_ms, in_namespace);
     }
     if (n < 0) {
@@ -134,13 +171,20 @@ static int main_loop(pid_t child_pid, bool in_namespace) {
         continue;
       }
       debug_log("wrapper stop: stdin error");
+      close_child_stdin(&child_stdin_fd);
       stop_sequence(child_pid, shutdown_ms, in_namespace);
     }
     if (n > 0) {
       buf[n] = '\0';
       if (is_stop_message(buf)) {
         debug_log("wrapper stop: stop message");
+        close_child_stdin(&child_stdin_fd);
         stop_sequence(child_pid, shutdown_ms, in_namespace);
+      }
+      if (child_stdin_fd >= 0) {
+        if (!write_all(child_stdin_fd, buf, (size_t)n)) {
+          debug_log("wrapper stdin forward failed");
+        }
       }
     }
   }
@@ -148,17 +192,31 @@ static int main_loop(pid_t child_pid, bool in_namespace) {
 
 static int fallback_main(char **argv) {
   setup_signals();
+  int stdin_pipe[2];
+  if (pipe(stdin_pipe) != 0) {
+    perror("pipe");
+    return 1;
+  }
   pid_t pid = fork();
   if (pid == 0) {
+    close(stdin_pipe[1]);
+    if (dup2(stdin_pipe[0], STDIN_FILENO) < 0) {
+      perror("dup2");
+      _exit(127);
+    }
+    close(stdin_pipe[0]);
     setpgid(0, 0);
     return run_child(argv);
   }
   if (pid < 0) {
     perror("fork");
+    close(stdin_pipe[0]);
+    close(stdin_pipe[1]);
     return 1;
   }
+  close(stdin_pipe[0]);
   setpgid(pid, pid);
-  return main_loop(pid, false);
+  return main_loop(pid, false, stdin_pipe[1]);
 }
 
 #ifdef __linux__
@@ -167,15 +225,29 @@ static int ns_init_main(void *arg) {
   setup_signals();
 
   char **argv = (char **)arg;
+  int stdin_pipe[2];
+  if (pipe(stdin_pipe) != 0) {
+    perror("pipe");
+    return 1;
+  }
   pid_t pid = fork();
   if (pid == 0) {
+    close(stdin_pipe[1]);
+    if (dup2(stdin_pipe[0], STDIN_FILENO) < 0) {
+      perror("dup2");
+      _exit(127);
+    }
+    close(stdin_pipe[0]);
     return run_child(argv);
   }
   if (pid < 0) {
     perror("fork");
+    close(stdin_pipe[0]);
+    close(stdin_pipe[1]);
     return 1;
   }
-  return main_loop(pid, true);
+  close(stdin_pipe[0]);
+  return main_loop(pid, true, stdin_pipe[1]);
 }
 #endif
 
