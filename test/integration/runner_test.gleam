@@ -9,6 +9,7 @@ import sad/bridge/runner
 import sad/types
 
 const max_event_bytes = 262_144
+
 const max_stdout_bytes = 10_485_760
 
 pub fn main() {
@@ -31,8 +32,11 @@ pub fn transient_echo_happy_test() {
     )
 
   let assert Ok(output) = result
-  let types.InteractionResult(data: data, artifacts: artifacts, trace_id: trace_id) =
-    output
+  let types.InteractionResult(
+    data: data,
+    artifacts: artifacts,
+    trace_id: trace_id,
+  ) = output
 
   trace_id |> should.equal(input.context.trace_id)
   artifacts |> should.equal([])
@@ -94,9 +98,12 @@ fn base_input() -> types.SadInput {
       mode: types.Transient,
     ),
     params: dict.from_list([#("model", "gpt-4")]),
-    input: types.PayloadChat([
-      types.ChatMessage(role: "user", content: "Hello"),
-    ], dict.new()),
+    input: types.PayloadChat(
+      [
+        types.ChatMessage(role: "user", content: "Hello"),
+      ],
+      dict.new(),
+    ),
     context: types.RequestContext(
       trace_id: types.trace_id("trace-1"),
       extra: dict.new(),
