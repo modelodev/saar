@@ -57,6 +57,11 @@
           "status": "completed",
           "branch": "feat/s02-t02-runner-types",
           "commit": "78baf49023b459c7d88f3d66b395385d36b584fb"
+        },
+        "S02-T03": {
+          "status": "completed",
+          "branch": "feat/s02-t03-test-helpers",
+          "commit": "94402e763fe29dd98d75b3ce9a21934c84fa5a19"
         }
       }
     }
