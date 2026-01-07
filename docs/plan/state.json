@@ -81,6 +81,11 @@
           "status": "completed",
           "branch": "feat/s03-t01-wrapper-v0-1",
           "commit": "b5648dac19b833fd05d9866d19e56875752bff04"
+        },
+        "S03-T02": {
+          "status": "completed",
+          "branch": "feat/s03-t02-ffi",
+          "commit": "75213e9be7fa49f1a1d62f5eea5e74ace3dc0de3"
         }
       }
     }
