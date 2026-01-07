@@ -91,6 +91,11 @@
           "status": "completed",
           "branch": "feat/s03-t03-port-process",
           "commit": "5b7569ad9f3986a7994f9b36495b21054e03500c"
+        },
+        "S03-T04": {
+          "status": "completed",
+          "branch": "feat/s03-t04-jsonl-min",
+          "commit": "774df2fe4cecc4d8db3c2ab39c167ced9900ce8c"
         }
       }
     }
