@@ -32,6 +32,7 @@ pub fn transient_echo_happy_test() {
       input,
       max_event_bytes,
       max_stdout_bytes,
+      False,
     )
 
   let assert Ok(output) = result
@@ -63,6 +64,7 @@ pub fn transient_invalid_json_fails_test() {
       input,
       max_event_bytes,
       max_stdout_bytes,
+      False,
     )
 
   let assert Error(err) = result
@@ -92,6 +94,62 @@ pub fn provision_requires_single_result_test() {
   kind |> should.equal(types.InfraError)
 }
 
+pub fn streaming_chunks_ok_test() {
+  ensure_wrapper_path()
+  let input = base_input(types.ArtifactConfig(include: [], exclude: []))
+
+  let result =
+    runner.execute_transient(
+      "python3",
+      ["./test/fixtures/source_local/runners/streaming_echo.py"],
+      base_env(500),
+      ".",
+      input,
+      max_event_bytes,
+      max_stdout_bytes,
+      True,
+    )
+
+  let assert Ok(_) = result
+
+  let result =
+    runner.execute_transient(
+      "python3",
+      ["./test/fixtures/source_local/runners/streaming_echo.py"],
+      base_env(500),
+      ".",
+      input,
+      max_event_bytes,
+      max_stdout_bytes,
+      False,
+    )
+
+  let assert Error(err) = result
+  let types.InteractionError(kind: kind, ..) = err
+  kind |> should.equal(types.InfraError)
+}
+
+pub fn runner_crash_returns_infra_error_test() {
+  ensure_wrapper_path()
+  let input = base_input(types.ArtifactConfig(include: [], exclude: []))
+
+  let result =
+    runner.execute_transient(
+      "python3",
+      ["./test/fixtures/source_local/runners/crasher.py"],
+      base_env(500),
+      ".",
+      input,
+      max_event_bytes,
+      max_stdout_bytes,
+      False,
+    )
+
+  let assert Error(err) = result
+  let types.InteractionError(kind: kind, ..) = err
+  kind |> should.equal(types.InfraError)
+}
+
 pub fn artifact_collection_respects_globs_test() {
   ensure_wrapper_path()
   let workspace = "./build/test-workspaces/artifacts"
@@ -111,6 +169,7 @@ pub fn artifact_collection_respects_globs_test() {
       input,
       max_event_bytes,
       max_stdout_bytes,
+      False,
     )
 
   let assert Ok(types.InteractionResult(artifacts: artifacts, ..)) = result
@@ -129,6 +188,7 @@ pub fn artifact_collection_respects_globs_test() {
       input,
       max_event_bytes,
       max_stdout_bytes,
+      False,
     )
 
   let assert Ok(types.InteractionResult(artifacts: artifacts, ..)) = result
@@ -154,6 +214,7 @@ pub fn artifact_id_is_uuid_v7_test() {
       input,
       max_event_bytes,
       max_stdout_bytes,
+      False,
     )
 
   let assert Ok(types.InteractionResult(artifacts: artifacts, ..)) = result

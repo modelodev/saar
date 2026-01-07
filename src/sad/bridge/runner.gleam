@@ -22,6 +22,7 @@ pub fn execute_transient(
   input: types.SadInput,
   max_runner_event_bytes: Int,
   max_stdout_bytes: Int,
+  streaming: Bool,
 ) -> Result(types.InteractionResult, types.InteractionError) {
   use process <- result.try(start_process(
     runner_path,
@@ -43,7 +44,7 @@ pub fn execute_transient(
   ))
 
   use _ <- result.try(
-    runner_contract.validate_sequence(events, False)
+    runner_contract.validate_sequence(events, streaming)
     |> result.map_error(fn(error) {
       interaction_error(
         input.context.trace_id,
