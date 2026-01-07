@@ -1,3 +1,4 @@
+import gleam/option
 import gleeunit
 import gleeunit/should
 import sad/runner_contract
@@ -49,8 +50,8 @@ pub fn allows_result_first_test() {
 fn success_result() -> types.RunnerEvent {
   types.RunnerEventResult(response: types.RunnerResponse(
     status: types.StatusSuccess,
-    data: None,
+    data: option.None,
     artifacts: [],
-    error: None,
+    error: option.None,
   ))
 }

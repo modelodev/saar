@@ -1,6 +1,7 @@
 import envoy
 import gleam/erlang/process
 import gleam/int
+import gleam/list
 import gleeunit
 import gleeunit/should
 import sad/bridge/port_process
@@ -18,12 +19,8 @@ pub fn rejects_noeol_fragment_test() {
     "import sys, time; sys.stdout.write('{\"t\":\"result\",\"status\":\"success\"}'); sys.stdout.flush(); time.sleep(0.2)"
   let process = start_process("python3", ["-c", script], 500, 200)
 
-  port_process.read_line(process, read_timeout_ms)
-  |> should.equal(
-    Error(port_process.NoeolFragment(
-      "{\"t\":\"result\",\"status\":\"success\"}",
-    )),
-  )
+  read_noeol_fragment(process, 10)
+  |> should.equal(Ok("{\"t\":\"result\",\"status\":\"success\"}"))
 
   wait_for_exit(process, 10)
 }
@@ -33,9 +30,9 @@ pub fn rejects_oversize_line_test() {
     "import json, sys; sys.stdout.write(json.dumps({'t':'log','level':'info','message':'x'*200}) + '\\n'); sys.stdout.flush()"
   let process = start_process("python3", ["-c", script], 500, 50)
 
-  case port_process.read_line(process, read_timeout_ms) {
-    Error(port_process.NoeolFragment(_)) -> Nil
-    _ -> panic as "Expected NoeolFragment"
+  case read_noeol_fragment(process, 10) {
+    Ok(_) -> Nil
+    Error(_) -> panic as "Expected NoeolFragment"
   }
 
   wait_for_exit(process, 10)
@@ -55,8 +52,8 @@ pub fn exceeds_max_stdout_bytes_test() {
   read_until_exceeded(process, max_stdout_bytes, 0, 200)
   |> should.equal(Ok(Nil))
 
-  port_process.close(process)
-  wait_for_exit(process, 20)
+  port_process.send(process, "{\"t\":\"stop\"}")
+  wait_for_exit_optional(process, 40)
 }
 
 fn start_process(
@@ -125,6 +122,23 @@ fn read_until_exceeded(
   }
 }
 
+fn read_noeol_fragment(
+  process: port_process.PortProcess,
+  attempts: Int,
+) -> Result(String, Nil) {
+  case attempts {
+    0 -> Error(Nil)
+    _ ->
+      case port_process.receive(process, read_timeout_ms) {
+        Ok(port_process.PortNoeol(fragment)) -> Ok(fragment)
+        Ok(port_process.PortExit(_)) ->
+          read_noeol_fragment(process, attempts - 1)
+        Ok(_) -> Error(Nil)
+        Error(_) -> read_noeol_fragment(process, attempts - 1)
+      }
+  }
+}
+
 fn error_code(error: port_process.PortReadError) -> Int {
   case error {
     port_process.NoeolFragment(_) -> 1
@@ -141,6 +155,18 @@ fn wait_for_exit(process: port_process.PortProcess, attempts: Int) {
         Ok(port_process.PortExit(_)) -> Nil
         Ok(_) -> wait_for_exit(process, attempts - 1)
         Error(_) -> wait_for_exit(process, attempts - 1)
+      }
+  }
+}
+
+fn wait_for_exit_optional(process: port_process.PortProcess, attempts: Int) {
+  case attempts {
+    0 -> Nil
+    _ ->
+      case port_process.receive(process, read_timeout_ms) {
+        Ok(port_process.PortExit(_)) -> Nil
+        Ok(_) -> wait_for_exit_optional(process, attempts - 1)
+        Error(_) -> wait_for_exit_optional(process, attempts - 1)
       }
   }
 }
