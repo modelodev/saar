@@ -52,6 +52,11 @@
           "status": "completed",
           "branch": "feat/s02-t01-tipos-base",
           "commit": "69c9eb48f6987545c7309f9c7d39d7fdc5671b7d"
+        },
+        "S02-T02": {
+          "status": "completed",
+          "branch": "feat/s02-t02-runner-types",
+          "commit": "78baf49023b459c7d88f3d66b395385d36b584fb"
         }
       }
     }
