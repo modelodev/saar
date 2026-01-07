@@ -87,7 +87,6 @@ pub fn provision_requires_single_result_test() {
       input,
       max_event_bytes,
       max_stdout_bytes,
-      False,
     )
 
   let assert Error(err) = result
@@ -215,6 +214,7 @@ pub fn artifact_id_is_uuid_v7_test() {
       input,
       max_event_bytes,
       max_stdout_bytes,
+      False,
     )
 
   let assert Ok(types.InteractionResult(artifacts: artifacts, ..)) = result
