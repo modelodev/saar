@@ -1,5 +1,6 @@
 import gleam/float
 import gleam/int
+import gleam/json.{type Json}
 import gleam/option.{type Option}
 import gleam/string
 
@@ -150,6 +151,39 @@ pub fn error_kind_to_string(kind: ErrorKind) -> String {
     InfraError -> "infra_error"
     BadRequest -> "bad_request"
   }
+}
+
+pub type RunnerStatus {
+  StatusSuccess
+  StatusError
+}
+
+pub type RunnerError {
+  RunnerError(kind: ErrorKind, message: String)
+}
+
+pub type ArtifactRef {
+  ArtifactRef(name: String, path: String, mime: String)
+}
+
+pub type RunnerResponse {
+  RunnerResponse(
+    status: RunnerStatus,
+    data: Option(Json),
+    artifacts: List(ArtifactRef),
+    error: Option(RunnerError),
+  )
+}
+
+pub type RunnerProvisionResult {
+  RunnerProvisionResult(status: RunnerStatus, log_files: List(String))
+}
+
+pub type RunnerEvent {
+  RunnerEventLog(message: String, level: String)
+  RunnerEventChunk(delta: String)
+  RunnerEventResult(response: RunnerResponse)
+  RunnerEventProvisionResult(result: RunnerProvisionResult)
 }
 
 pub type ProfileSource {
