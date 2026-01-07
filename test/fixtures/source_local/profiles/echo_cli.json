@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "id": "echo_cli",
+    "lifecycle": "transient",
+    "description": "Echo CLI for testing"
+  },
+  "parameters": {
+    "delay_ms": {"source": "fixed", "value": 100, "type": "int"}
+  },
+  "runner": {
+    "type": "echo_cli",
+    "tool_config": {"script": "echo_cli.py"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {
+      "echo": {"input_schema": "std:chat", "streaming": false}
+    }
+  }
+}

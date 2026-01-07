@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "id": "greedy_logger",
+    "lifecycle": "transient",
+    "description": "Runner that emits many log events"
+  },
+  "parameters": {},
+  "runner": {
+    "type": "greedy_logger",
+    "tool_config": {"script": "greedy_logger.py"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {
+      "log_stream": {"input_schema": "std:chat", "streaming": false}
+    }
+  }
+}

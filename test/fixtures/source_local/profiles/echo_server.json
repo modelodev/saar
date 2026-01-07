@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "id": "echo_server",
+    "lifecycle": "continuous",
+    "description": "Echo HTTP server for testing"
+  },
+  "parameters": {},
+  "runner": {
+    "type": "echo_server",
+    "tool_config": {"script": "echo_server.py"}
+  },
+  "interface": {
+    "protocol": "http",
+    "base_url": "http://{{runner.host}}:{{runner.port}}",
+    "health_check": {"path": "/health", "method": "GET", "expect_statuses": [200]},
+    "capabilities": {
+      "echo": {"path": "/echo", "method": "POST", "streaming": false}
+    }
+  }
+}

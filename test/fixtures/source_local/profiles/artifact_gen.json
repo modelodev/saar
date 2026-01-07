@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "id": "artifact_gen",
+    "lifecycle": "transient",
+    "description": "Artifact generator"
+  },
+  "parameters": {},
+  "runner": {
+    "type": "artifact_gen",
+    "tool_config": {"script": "artifact_gen.py"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {
+      "generate": {"input_schema": "std:chat", "streaming": false}
+    }
+  }
+}
