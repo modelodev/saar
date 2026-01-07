@@ -1,2 +1,3 @@
 build/
 manifest.toml
+priv/sad_wrapper

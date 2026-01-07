@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": null,
+  "current_sprint": "S03",
   "sprints": {
     "S01": {
       "status": "completed",
@@ -67,6 +67,35 @@
           "status": "completed",
           "branch": "feat/s02-t04-types-props",
           "commit": "f795a6874e916fbc0eec7772ba48fb2b2a159ff2"
+        }
+      }
+    },
+    "S03": {
+      "status": "in_progress",
+      "branch": "sprint/s03-wrapper-v0-1-portprocess-smoke-e2e",
+      "started_at": "2026-01-07T18:15:34Z",
+      "completed_at": null,
+      "current_story": null,
+      "stories": {
+        "S03-T01": {
+          "status": "completed",
+          "branch": "feat/s03-t01-wrapper-v0-1",
+          "commit": "b5648dac19b833fd05d9866d19e56875752bff04"
+        },
+        "S03-T02": {
+          "status": "completed",
+          "branch": "feat/s03-t02-ffi",
+          "commit": "75213e9be7fa49f1a1d62f5eea5e74ace3dc0de3"
+        },
+        "S03-T03": {
+          "status": "completed",
+          "branch": "feat/s03-t03-port-process",
+          "commit": "5b7569ad9f3986a7994f9b36495b21054e03500c"
+        },
+        "S03-T04": {
+          "status": "completed",
+          "branch": "feat/s03-t04-jsonl-min",
+          "commit": "774df2fe4cecc4d8db3c2ab39c167ced9900ce8c"
         }
       }
     }
