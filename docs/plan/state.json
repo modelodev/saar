@@ -7,7 +7,7 @@
       "branch": "sprint/s01-scaffolding-ci-zoo",
       "started_at": "2026-01-07T16:40:59Z",
       "completed_at": "2026-01-07T17:23:58Z",
-      "current_story": "S04-T05",
+      "current_story": null,
       "stories": {
         "S01-T01": {
           "status": "completed",
@@ -132,8 +132,9 @@
           "commit": "e40090f795e1027b046573c471b37132fb95e533"
         },
         "S04-T05": {
-          "status": "in_progress",
-          "branch": "feat/s04-t05-artifacts"
+          "status": "completed",
+          "branch": "feat/s04-t05-artifacts",
+          "commit": "41b930bb1035d21a8282cedc43446d41278ace0b"
         },
         "S04-T06": {
           "status": "pending"
