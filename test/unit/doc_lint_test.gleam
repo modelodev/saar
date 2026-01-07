@@ -1,8 +1,8 @@
 import filepath
-import gleeunit
 import gleam/list
 import gleam/result
 import gleam/string
+import gleeunit
 import simplifile
 
 type Violation {
@@ -29,15 +29,14 @@ pub fn doc_lint_actor_stop_usage() {
 
 fn assert_no_patterns(patterns: List(String)) {
   let files = doc_files()
-  let violations =
-    case collect_violations(files, patterns) {
-      Ok(found) -> found
-      Error(err) ->
-        panic as {
-          "DOC_LINT_FAIL file=<read_error> pattern="
-          <> simplifile.describe_error(err)
-        }
-    }
+  let violations = case collect_violations(files, patterns) {
+    Ok(found) -> found
+    Error(err) ->
+      panic as {
+        "DOC_LINT_FAIL file=<read_error> pattern="
+        <> simplifile.describe_error(err)
+      }
+  }
 
   case violations {
     [] -> Nil
@@ -47,27 +46,27 @@ fn assert_no_patterns(patterns: List(String)) {
 }
 
 fn doc_files() -> List(String) {
-  let arch_docs =
-    case collect_files("docs/arquitectura") {
-      Ok(paths) ->
-        paths
-        |> list.filter(fn(path) { string.ends_with(path, ".md") })
-      Error(err) ->
-        panic as {
-          "DOC_LINT_FAIL file=docs/arquitectura pattern="
-          <> simplifile.describe_error(err)
-        }
-    }
+  let arch_docs = case collect_files("docs/arquitectura") {
+    Ok(paths) ->
+      paths
+      |> list.filter(fn(path) { string.ends_with(path, ".md") })
+    Error(err) ->
+      panic as {
+        "DOC_LINT_FAIL file=docs/arquitectura pattern="
+        <> simplifile.describe_error(err)
+      }
+  }
 
-  let snippet_files =
-    case collect_files("docs/arquitectura/examples/snippets") {
-      Ok(paths) -> paths
-      Error(err) ->
-        panic as {
-          "DOC_LINT_FAIL file=docs/arquitectura/examples/snippets pattern="
-          <> simplifile.describe_error(err)
-        }
-    }
+  let snippet_files = case
+    collect_files("docs/arquitectura/examples/snippets")
+  {
+    Ok(paths) -> paths
+    Error(err) ->
+      panic as {
+        "DOC_LINT_FAIL file=docs/arquitectura/examples/snippets pattern="
+        <> simplifile.describe_error(err)
+      }
+  }
 
   list.append(arch_docs, snippet_files)
 }
