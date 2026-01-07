@@ -313,6 +313,26 @@ pub type SadInput {
   )
 }
 
+pub type ResponseData {
+  ResponseData(content: Option(String), metadata: Dict(String, Json))
+}
+
+pub type PublicArtifact {
+  PublicArtifact(name: String, url: String, mime: String)
+}
+
+pub type InteractionResult {
+  InteractionResult(
+    data: ResponseData,
+    artifacts: List(PublicArtifact),
+    trace_id: TraceId,
+  )
+}
+
+pub type InteractionError {
+  InteractionError(kind: ErrorKind, message: String, trace_id: TraceId)
+}
+
 pub type ProfileSource {
   ProfileSourceDir(path: String)
   ProfileSourceGit(url: String, ref: Option(String))
