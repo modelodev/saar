@@ -107,6 +107,11 @@ fn collect_violations(
     use found <- result.try(acc)
     use content <- result.try(simplifile.read(file))
 
+    let content = case file {
+      "docs/arquitectura/tests.md" -> strip_doc_lint_self_refs(content)
+      _ -> content
+    }
+
     let matches =
       patterns
       |> list.filter(fn(pattern) { string.contains(content, pattern) })
@@ -114,4 +119,16 @@ fn collect_violations(
 
     Ok(list.append(found, matches))
   })
+}
+
+fn strip_doc_lint_self_refs(content: String) -> String {
+  content
+  |> string.split("\n")
+  |> list.filter(fn(line) { !is_doc_lint_self_ref(line) })
+  |> string.join("\n")
+}
+
+fn is_doc_lint_self_ref(line: String) -> Bool {
+  string.contains(line, "docs_do_not_reference_nonexistent_apis")
+  || string.contains(line, "docs_actor_stop_usage_is_valid")
 }
