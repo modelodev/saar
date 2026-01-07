@@ -1,7 +1,8 @@
+import gleam/dict.{type Dict}
 import gleam/float
 import gleam/int
 import gleam/json.{type Json}
-import gleam/option.{type Option}
+import gleam/option.{type Option, None}
 import gleam/string
 
 pub opaque type ProfileId {
@@ -212,6 +213,104 @@ pub type RunnerEvent {
   RunnerEventChunk(delta: String)
   RunnerEventResult(response: RunnerResponse)
   RunnerEventProvisionResult(result: RunnerProvisionResult)
+}
+
+pub type ChatMessage {
+  ChatMessage(role: String, content: String)
+}
+
+pub type FileRef {
+  FileRef(url: String, mime: String, name: String, context: Option(String))
+}
+
+pub type InputValue =
+  Value
+
+pub type InputPayload {
+  PayloadChat(
+    messages: List(ChatMessage),
+    extra_params: Dict(String, InputValue),
+  )
+  PayloadFiles(files: List(FileRef))
+  PayloadMixed(
+    messages: List(ChatMessage),
+    files: List(FileRef),
+    extra_params: Dict(String, InputValue),
+  )
+}
+
+pub type SadHelpers {
+  SadHelpers(last_user_content: Option(String), last_user_files: List(FileRef))
+}
+
+pub type RequestContext {
+  RequestContext(trace_id: TraceId, extra: Dict(String, String))
+}
+
+pub type SadInputMeta {
+  SadInputMeta(
+    spec_version: String,
+    profile_id: ProfileId,
+    instance_id: Option(InstanceId),
+    mode: Lifecycle,
+  )
+}
+
+pub type ResolvedParams =
+  Dict(String, String)
+
+pub type ToolConfig {
+  ToolConfig(package: String, command: String, with_packages: List(String))
+}
+
+pub type NetworkMode {
+  ManagedPort
+  NoNetwork
+}
+
+pub fn network_mode_to_string(mode: NetworkMode) -> String {
+  case mode {
+    ManagedPort -> "managed_port"
+    NoNetwork -> "no_network"
+  }
+}
+
+pub type RuntimeConfig {
+  RuntimeConfig(
+    mode: NetworkMode,
+    port_env_var: Option(String),
+    host_env_var: Option(String),
+  )
+}
+
+pub fn default_runtime_config() -> RuntimeConfig {
+  RuntimeConfig(NoNetwork, None, None)
+}
+
+pub type ArtifactConfig {
+  ArtifactConfig(include: List(String), exclude: List(String))
+}
+
+pub type Runner {
+  Runner(
+    type_: String,
+    tool_config: ToolConfig,
+    runtime: RuntimeConfig,
+    env_map: Dict(String, String),
+    args: List(String),
+    artifact_config: ArtifactConfig,
+  )
+}
+
+pub type SadInput {
+  SadInput(
+    meta: SadInputMeta,
+    params: ResolvedParams,
+    input: InputPayload,
+    context: RequestContext,
+    helpers: Option(SadHelpers),
+    runner_def: Runner,
+  )
 }
 
 pub type ProfileSource {
