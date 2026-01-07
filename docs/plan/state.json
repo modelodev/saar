@@ -109,11 +109,12 @@
       "branch": "sprint/s04-transient-e2e-jsonl-workspace",
       "started_at": "2026-01-07T21:35:54Z",
       "completed_at": null,
-      "current_story": "S04-T01",
+      "current_story": null,
       "stories": {
         "S04-T01": {
-          "status": "in_progress",
-          "branch": "feat/s04-t01-workspace-path"
+          "status": "completed",
+          "branch": "feat/s04-t01-workspace-path",
+          "commit": "69f4a7d11553d2ca7b7e7af7413c595d31b5a528"
         },
         "S04-T02": {
           "status": "pending"
