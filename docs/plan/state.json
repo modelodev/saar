@@ -40,6 +40,35 @@
           "commit": "8606382b6350e832a1eb980afa74f090aa91f6a8"
         }
       }
+    },
+    "S02": {
+      "status": "completed",
+      "branch": "sprint/s02-tipos-base-errores-sadconfig",
+      "started_at": "2026-01-07T17:35:35Z",
+      "completed_at": "2026-01-07T17:59:51Z",
+      "current_story": null,
+      "stories": {
+        "S02-T01": {
+          "status": "completed",
+          "branch": "feat/s02-t01-tipos-base",
+          "commit": "69c9eb48f6987545c7309f9c7d39d7fdc5671b7d"
+        },
+        "S02-T02": {
+          "status": "completed",
+          "branch": "feat/s02-t02-runner-types",
+          "commit": "78baf49023b459c7d88f3d66b395385d36b584fb"
+        },
+        "S02-T03": {
+          "status": "completed",
+          "branch": "feat/s02-t03-test-helpers",
+          "commit": "94402e763fe29dd98d75b3ce9a21934c84fa5a19"
+        },
+        "S02-T04": {
+          "status": "completed",
+          "branch": "feat/s02-t04-types-props",
+          "commit": "f795a6874e916fbc0eec7772ba48fb2b2a159ff2"
+        }
+      }
     }
   }
 }
