@@ -23,6 +23,11 @@
           "status": "completed",
           "branch": "feat/s01-t03-ci-make",
           "commit": "a3c1c61ba0cf6d2944f411d0094f1f3ce2d62c93"
+        },
+        "S01-T04": {
+          "status": "completed",
+          "branch": "feat/s01-t04-fixtures-tree",
+          "commit": "97b44c10132a082da5f678df450056e0fa965c47"
         }
       }
     }
