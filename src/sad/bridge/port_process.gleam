@@ -106,15 +106,15 @@ fn wrapper_candidates() -> List(String) {
 }
 
 fn first_existing(paths: List(String)) -> Option(String) {
-  case
-    list.find(paths, fn(path) {
-      case simplifile.is_file(path) {
-        Ok(True) -> True
-        _ -> False
-      }
-    })
-  {
+  case list.find(paths, is_existing_file) {
     Ok(path) -> Some(path)
     Error(_) -> None
+  }
+}
+
+fn is_existing_file(path: String) -> Bool {
+  case simplifile.is_file(path) {
+    Ok(True) -> True
+    _ -> False
   }
 }

@@ -35,13 +35,10 @@ fn validate_non_empty(raw: String) -> Result(WorkspacePath, PathError) {
     |> string.split("/")
     |> list.filter(fn(segment) { segment != "" && segment != "." })
 
-  case segments {
-    [] -> Error(EmptyPath)
-    _ ->
-      case string.starts_with(raw, "/") {
-        True -> Error(AbsolutePathNotAllowed(raw))
-        False -> validate_relative(raw)
-      }
+  case segments, string.starts_with(raw, "/") {
+    [], _ -> Error(EmptyPath)
+    _, True -> Error(AbsolutePathNotAllowed(raw))
+    _, False -> validate_relative(raw)
   }
 }
 
@@ -120,18 +117,27 @@ fn assert_no_symlink(
   |> string.split("/")
   |> list.fold(Ok(root), fn(acc, segment) {
     use current <- result.try(acc)
-    let next = filepath.join(current, segment)
-
-    case simplifile.link_info(next) {
-      Ok(info) ->
-        case simplifile.file_info_type(info) {
-          simplifile.Symlink -> Error(PathOutsideWorkspace(raw, root))
-          _ -> Ok(next)
-        }
-      Error(_) -> Ok(next)
-    }
+    check_path_segment(raw, root, current, segment)
   })
   |> result.map(fn(_) { Nil })
+}
+
+fn check_path_segment(
+  raw: String,
+  root: String,
+  current: String,
+  segment: String,
+) -> Result(String, PathError) {
+  let next = filepath.join(current, segment)
+
+  case simplifile.link_info(next) {
+    Ok(info) ->
+      case simplifile.file_info_type(info) {
+        simplifile.Symlink -> Error(PathOutsideWorkspace(raw, root))
+        _ -> Ok(next)
+      }
+    Error(_) -> Ok(next)
+  }
 }
 
 pub fn workspace_dir_name(instance_id: types.InstanceId) -> String {
