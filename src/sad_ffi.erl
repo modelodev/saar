@@ -51,7 +51,7 @@ priv_dir() ->
     end.
 
 env_pairs(Env) ->
-    [binary_to_list(Key) ++ "=" ++ binary_to_list(Value) || {Key, Value} <- Env].
+    [{to_list(Key), to_list(Value)} || {Key, Value} <- Env].
 
 format_error(Reason) ->
     lists:flatten(io_lib:format("~p", [Reason])).
