@@ -11,21 +11,15 @@ pub fn main() {
 
 pub fn rejects_absolute_path_test() {
   workspace.workspace_path_validate("/etc/passwd")
-  |> should.equal(
-    Error(workspace.AbsolutePathNotAllowed("/etc/passwd")),
-  )
+  |> should.equal(Error(workspace.AbsolutePathNotAllowed("/etc/passwd")))
 }
 
 pub fn rejects_dotdot_segments_test() {
   workspace.workspace_path_validate("../x")
-  |> should.equal(
-    Error(workspace.PathTraversalDetected("../x")),
-  )
+  |> should.equal(Error(workspace.PathTraversalDetected("../x")))
 
   workspace.workspace_path_validate("a/../../b")
-  |> should.equal(
-    Error(workspace.PathTraversalDetected("a/../../b")),
-  )
+  |> should.equal(Error(workspace.PathTraversalDetected("a/../../b")))
 }
 
 pub fn rejects_empty_path_test() {
@@ -72,17 +66,14 @@ pub fn symlink_escape_is_rejected_test() {
   let _ = simplifile.delete(file_or_dir_at: outside_file)
 
   let assert Ok(_) = simplifile.create_directory_all(base_dir)
-  let assert Ok(_) =
-    simplifile.write(to: outside_file, contents: "secret")
+  let assert Ok(_) = simplifile.write(to: outside_file, contents: "secret")
   let assert Ok(_) =
     simplifile.create_symlink(to: outside_file, from: link_path)
 
   let assert Ok(path) = workspace.workspace_path_validate("escape.txt")
 
   workspace.read_artifact_symlink_safe(base_dir, path)
-  |> should.equal(
-    Error(workspace.PathOutsideWorkspace("escape.txt", base_dir)),
-  )
+  |> should.equal(Error(workspace.PathOutsideWorkspace("escape.txt", base_dir)))
 
   let _ = simplifile.delete(file_or_dir_at: base_dir)
   let _ = simplifile.delete(file_or_dir_at: outside_file)
