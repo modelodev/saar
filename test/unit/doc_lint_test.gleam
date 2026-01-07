@@ -33,13 +33,16 @@ fn assert_no_patterns(patterns: List(String)) {
     case collect_violations(files, patterns) {
       Ok(found) -> found
       Error(err) ->
-        panic as ("DOC_LINT_FAIL file=<read_error> pattern=" <> simplifile.describe_error(err))
+        panic as {
+          "DOC_LINT_FAIL file=<read_error> pattern="
+          <> simplifile.describe_error(err)
+        }
     }
 
   case violations {
     [] -> Nil
     [Violation(file, pattern), ..] ->
-      panic as ("DOC_LINT_FAIL file=" <> file <> " pattern=" <> pattern)
+      panic as { "DOC_LINT_FAIL file=" <> file <> " pattern=" <> pattern }
   }
 }
 
@@ -50,20 +53,20 @@ fn doc_files() -> List(String) {
         paths
         |> list.filter(fn(path) { string.ends_with(path, ".md") })
       Error(err) ->
-        panic as (
+        panic as {
           "DOC_LINT_FAIL file=docs/arquitectura pattern="
           <> simplifile.describe_error(err)
-        )
+        }
     }
 
   let snippet_files =
     case collect_files("docs/arquitectura/examples/snippets") {
       Ok(paths) -> paths
       Error(err) ->
-        panic as (
+        panic as {
           "DOC_LINT_FAIL file=docs/arquitectura/examples/snippets pattern="
           <> simplifile.describe_error(err)
-        )
+        }
     }
 
   list.append(arch_docs, snippet_files)
