@@ -13,7 +13,7 @@
         "S01-T01": {
           "status": "completed",
           "branch": "feat/s01-t01-repo-skeleton",
-          "commit": "a495cb7c4060172c0159aff3d6f708e6beef88d6"
+          "commit": "496c605b092a45154dd9483a25699cea3f565aee"
         },
         "S01-T02": {
           "status": "completed",
@@ -38,7 +38,7 @@
         "S01-T06": {
           "status": "completed",
           "branch": "feat/s01-t06-doc-lint",
-          "commit": "d9e571f0c78335a30b9631f9f84dc4003367b121"
+          "commit": "496c605b092a45154dd9483a25699cea3f565aee"
         }
       }
     }
