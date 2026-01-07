@@ -33,6 +33,11 @@
           "status": "completed",
           "branch": "feat/s01-t05-zoo",
           "commit": "9f507456a46bb35c37ebf475a0ca86642a94f1ac"
+        },
+        "S01-T06": {
+          "status": "completed",
+          "branch": "feat/s01-t06-doc-lint",
+          "commit": "cb644820787086ae26c6c15dffeec96b07492707"
         }
       }
     }
