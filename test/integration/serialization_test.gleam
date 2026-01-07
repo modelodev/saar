@@ -92,8 +92,10 @@ fn load_chat_payload() -> types.InputPayload {
     simplifile.read(from: "test/fixtures/payloads/chat_simple.json")
 
   let decoder = {
-    use messages <-
-      decode.field("messages", decode.list(of: chat_message_decoder()))
+    use messages <- decode.field(
+      "messages",
+      decode.list(of: chat_message_decoder()),
+    )
     decode.success(messages)
   }
 
