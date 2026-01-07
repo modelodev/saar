@@ -17,11 +17,7 @@
 static volatile sig_atomic_t child_exited = 0;
 
 static void sigchld_handler(int _) {
-  int status;
-  (void)status;
   child_exited = 1;
-  while (waitpid(-1, &status, WNOHANG) > 0) {
-  }
 }
 
 static bool debug_enabled(void) {
