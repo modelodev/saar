@@ -3,10 +3,13 @@ import gleam/dict
 import gleam/int
 import gleam/list
 import gleam/option
+import gleam/string
 import gleeunit
 import gleeunit/should
 import sad/bridge/runner
 import sad/types
+import simplifile
+import youid/uuid
 
 const max_event_bytes = 262_144
 
@@ -18,7 +21,7 @@ pub fn main() {
 
 pub fn transient_echo_happy_test() {
   ensure_wrapper_path()
-  let input = base_input()
+  let input = base_input(types.ArtifactConfig(include: [], exclude: []))
 
   let result =
     runner.execute_transient(
@@ -48,7 +51,7 @@ pub fn transient_echo_happy_test() {
 
 pub fn transient_invalid_json_fails_test() {
   ensure_wrapper_path()
-  let input = base_input()
+  let input = base_input(types.ArtifactConfig(include: [], exclude: []))
   let script = "print('not-json')"
 
   let result =
@@ -69,7 +72,7 @@ pub fn transient_invalid_json_fails_test() {
 
 pub fn provision_requires_single_result_test() {
   ensure_wrapper_path()
-  let input = base_input()
+  let input = base_input(types.ArtifactConfig(include: [], exclude: []))
   let script =
     "import json; print(json.dumps({'t':'provision_result','status':'success','log_files':[]})); print(json.dumps({'t':'provision_result','status':'success','log_files':[]}))"
 
@@ -89,7 +92,92 @@ pub fn provision_requires_single_result_test() {
   kind |> should.equal(types.InfraError)
 }
 
-fn base_input() -> types.SadInput {
+pub fn artifact_collection_respects_globs_test() {
+  ensure_wrapper_path()
+  let workspace = "./build/test-workspaces/artifacts"
+  ensure_workspace(workspace)
+
+  let include_only = types.ArtifactConfig(
+    include: ["outputs/**"],
+    exclude: [],
+  )
+
+  let input = base_input(include_only)
+  let env = env_with_workspace(500, workspace)
+
+  let result =
+    runner.execute_transient(
+      "python3",
+      ["./test/fixtures/source_local/runners/artifact_gen.py"],
+      env,
+      ".",
+      input,
+      max_event_bytes,
+      max_stdout_bytes,
+    )
+
+  let assert Ok(types.InteractionResult(artifacts: artifacts, ..)) = result
+  list.length(artifacts) |> should.equal(1)
+
+  let exclude_pdf = types.ArtifactConfig(
+    include: ["outputs/**"],
+    exclude: ["**/*.pdf"],
+  )
+
+  let input = base_input(exclude_pdf)
+  let result =
+    runner.execute_transient(
+      "python3",
+      ["./test/fixtures/source_local/runners/artifact_gen.py"],
+      env,
+      ".",
+      input,
+      max_event_bytes,
+      max_stdout_bytes,
+    )
+
+  let assert Ok(types.InteractionResult(artifacts: artifacts, ..)) = result
+  list.length(artifacts) |> should.equal(0)
+}
+
+pub fn artifact_id_is_uuid_v7_test() {
+  ensure_wrapper_path()
+  let workspace = "./build/test-workspaces/artifacts-uuid"
+  ensure_workspace(workspace)
+
+  let config = types.ArtifactConfig(
+    include: ["outputs/**"],
+    exclude: [],
+  )
+
+  let input = base_input(config)
+  let env = env_with_workspace(500, workspace)
+
+  let result =
+    runner.execute_transient(
+      "python3",
+      ["./test/fixtures/source_local/runners/artifact_gen.py"],
+      env,
+      ".",
+      input,
+      max_event_bytes,
+      max_stdout_bytes,
+    )
+
+  let assert Ok(types.InteractionResult(artifacts: artifacts, ..)) = result
+
+  case artifacts {
+    [only] -> {
+      let types.PublicArtifact(url: url, ..) = only
+      let id = artifact_id_from_url(url)
+      let assert Ok(parsed) = uuid.from_string(id)
+      uuid.version(parsed) |> should.equal(uuid.V7)
+    }
+    _ -> panic as "Expected one artifact"
+  }
+}
+
+fn base_input(artifact_config: types.ArtifactConfig) -> types.SadInput {
   types.SadInput(
     meta: types.SadInputMeta(
       spec_version: "v0",
@@ -119,7 +207,7 @@ fn base_input() -> types.SadInput {
       runtime: types.default_runtime_config(),
       env_map: dict.new(),
       args: [],
-      artifact_config: types.ArtifactConfig(include: [], exclude: []),
+      artifact_config: artifact_config,
     ),
   )
 }
@@ -138,4 +226,22 @@ fn base_env(shutdown_ms: Int) -> List(#(String, String)) {
     #("SAD_SHUTDOWN_MS", int.to_string(shutdown_ms)),
     #("SAD_WRAPPER_FORCE_FALLBACK", "1"),
   ])
+}
+
+fn env_with_workspace(shutdown_ms: Int, workspace: String) -> List(#(String, String)) {
+  list.append(base_env(shutdown_ms), [#("SAD_WORKSPACE", workspace)])
+}
+
+fn ensure_workspace(path: String) {
+  let _ = simplifile.delete(file_or_dir_at: path)
+  let assert Ok(_) = simplifile.create_directory_all(path)
+}
+
+fn artifact_id_from_url(url: String) -> String {
+  let prefix = "/artifacts/"
+
+  case string.starts_with(url, prefix) {
+    True -> string.drop_start(url, string.length(prefix))
+    False -> url
+  }
 }
