@@ -28,6 +28,11 @@
           "status": "completed",
           "branch": "feat/s01-t04-fixtures-tree",
           "commit": "97b44c10132a082da5f678df450056e0fa965c47"
+        },
+        "S01-T05": {
+          "status": "completed",
+          "branch": "feat/s01-t05-zoo",
+          "commit": "9f507456a46bb35c37ebf475a0ca86642a94f1ac"
         }
       }
     }
