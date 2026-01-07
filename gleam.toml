@@ -21,3 +21,4 @@ youid = "~> 1.5"
 [dev-dependencies]
 gleeunit = "~> 1.2"
 startest = "~> 0.2"
+qcheck = "~> 1.0"
