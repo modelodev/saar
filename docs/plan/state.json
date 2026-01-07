@@ -7,7 +7,7 @@
       "branch": "sprint/s01-scaffolding-ci-zoo",
       "started_at": "2026-01-07T16:40:59Z",
       "completed_at": "2026-01-07T17:23:58Z",
-      "current_story": null,
+      "current_story": "S04-T03",
       "stories": {
         "S01-T01": {
           "status": "completed",
@@ -122,7 +122,8 @@
           "commit": "d673ca09caebea73d4f35199ef2fcd6b7fc14b02"
         },
         "S04-T03": {
-          "status": "pending"
+          "status": "in_progress",
+          "branch": "feat/s04-t03-serialization"
         },
         "S04-T04": {
           "status": "pending"
