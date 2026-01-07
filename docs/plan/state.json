@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": null,
+  "current_sprint": "S02",
   "sprints": {
     "S01": {
       "status": "completed",
@@ -38,6 +38,20 @@
           "status": "completed",
           "branch": "feat/s01-t06-doc-lint",
           "commit": "8606382b6350e832a1eb980afa74f090aa91f6a8"
+        }
+      }
+    },
+    "S02": {
+      "status": "in_progress",
+      "branch": "sprint/s02-tipos-base-errores-sadconfig",
+      "started_at": "2026-01-07T17:35:35Z",
+      "completed_at": null,
+      "current_story": null,
+      "stories": {
+        "S02-T01": {
+          "status": "completed",
+          "branch": "feat/s02-t01-tipos-base",
+          "commit": "69c9eb48f6987545c7309f9c7d39d7fdc5671b7d"
         }
       }
     }
