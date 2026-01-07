@@ -9,3 +9,7 @@ pub fn smoke_test_passes() {
   True
   |> should.equal(True)
 }
+
+pub fn smoke_test_passes_test() {
+  smoke_test_passes()
+}

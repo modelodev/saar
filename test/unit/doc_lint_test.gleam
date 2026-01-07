@@ -21,10 +21,18 @@ pub fn doc_lint_forbidden_patterns() {
   ])
 }
 
+pub fn doc_lint_forbidden_patterns_test() {
+  doc_lint_forbidden_patterns()
+}
+
 pub fn doc_lint_actor_stop_usage() {
   assert_no_patterns([
     "actor.stop(process.Normal)",
   ])
+}
+
+pub fn doc_lint_actor_stop_usage_test() {
+  doc_lint_actor_stop_usage()
 }
 
 fn assert_no_patterns(patterns: List(String)) {
