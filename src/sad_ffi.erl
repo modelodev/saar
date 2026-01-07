@@ -39,7 +39,9 @@ port_receive(Port, TimeoutMs) ->
         {Port, {data, {eol, Line}}} -> {ok, {port_data_eol, Line}};
         {Port, {data, {noeol, Line}}} -> {ok, {port_data_noeol, Line}};
         {Port, {data, Line}} -> {ok, {port_data_noeol, Line}};
-        {Port, {exit_status, Status}} -> {ok, {port_exit, Status}}
+        {Port, {exit_status, Status}} -> {ok, {port_exit, Status}};
+        {'EXIT', Port, normal} -> {ok, {port_exit, 0}};
+        {'EXIT', Port, _} -> {ok, {port_exit, 1}}
     after
         TimeoutMs -> {error, nil}
     end.

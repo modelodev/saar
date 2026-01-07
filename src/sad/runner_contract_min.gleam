@@ -11,33 +11,45 @@ pub type JsonlError {
 pub fn decode_runner_event(
   line: String,
 ) -> Result(types.RunnerEvent, JsonlError) {
-  use tag <- extract_string_field(line, "t")
-
-  case tag {
-    "log" -> decode_log(line)
-    "result" -> decode_result(line)
-    other -> Error(UnknownEvent(other))
+  case extract_string_field(line, "t") {
+    Ok(tag) ->
+      case tag {
+        "log" -> decode_log(line)
+        "result" -> decode_result(line)
+        other -> Error(UnknownEvent(other))
+      }
+    Error(error) -> Error(error)
   }
 }
 
 fn decode_log(line: String) -> Result(types.RunnerEvent, JsonlError) {
-  use message <- extract_string_field(line, "message")
-  use level <- extract_string_field(line, "level")
-  Ok(types.RunnerEventLog(message: message, level: level))
+  case extract_string_field(line, "message") {
+    Ok(message) ->
+      case extract_string_field(line, "level") {
+        Ok(level) -> Ok(types.RunnerEventLog(message: message, level: level))
+        Error(error) -> Error(error)
+      }
+    Error(error) -> Error(error)
+  }
 }
 
 fn decode_result(line: String) -> Result(types.RunnerEvent, JsonlError) {
-  use status <- extract_string_field(line, "status")
-  use status_value <- parse_status(status)
-
-  Ok(
-    types.RunnerEventResult(response: types.RunnerResponse(
-      status: status_value,
-      data: None,
-      artifacts: [],
-      error: None,
-    )),
-  )
+  case extract_string_field(line, "status") {
+    Ok(status) ->
+      case parse_status(status) {
+        Ok(status_value) ->
+          Ok(
+            types.RunnerEventResult(response: types.RunnerResponse(
+              status: status_value,
+              data: None,
+              artifacts: [],
+              error: None,
+            )),
+          )
+        Error(error) -> Error(error)
+      }
+    Error(error) -> Error(error)
+  }
 }
 
 fn parse_status(status: String) -> Result(types.RunnerStatus, JsonlError) {

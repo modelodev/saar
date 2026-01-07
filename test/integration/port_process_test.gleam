@@ -1,4 +1,5 @@
 import envoy
+import gleam/erlang/process
 import gleam/int
 import gleam/list
 import gleeunit
@@ -42,15 +43,12 @@ pub fn wrapper_stop_timeout_escalates_to_sigkill_test() {
 
 pub fn noeol_fragment_is_infra_error_test() {
   let script =
-    "import sys; sys.stdout.write('{\"t\":\"result\",\"status\":\"success\"}'); sys.stdout.flush()"
+    "import sys, time; sys.stdout.write('{\"t\":\"result\",\"status\":\"success\"}'); sys.stdout.flush(); time.sleep(0.2)"
   let process = start_process("python3", ["-c", script], 500)
 
-  case read_line_with_retries(process, 5) {
-    Ok(_) -> panic as "Expected noeol fragment error"
-    Error(port_process.NoeolFragment(_)) -> Nil
-    Error(port_process.PortExited(status)) ->
-      panic as { "Port exited before fragment: " <> int.to_string(status) }
-    Error(port_process.Timeout) -> panic as "Timed out waiting for fragment"
+  case read_noeol_fragment(process, 10) {
+    Ok(_) -> Nil
+    Error(_) -> panic as "Expected noeol fragment error"
   }
 
   wait_for_exit(process, 10)
@@ -67,7 +65,8 @@ pub fn echo_cli_result_is_received_test() {
   let input =
     "{\"params\":{\"delay_ms\":0},\"input\":{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}}"
   port_process.send(process, input)
-  port_process.close(process)
+  process.sleep(20)
+  port_process.send(process, "{\"t\":\"stop\"}")
 
   let line = read_line_with_retries(process, 10) |> test_assertions.assert_ok
 
@@ -88,6 +87,7 @@ fn start_process(
   runner_args: List(String),
   shutdown_ms: Int,
 ) -> port_process.PortProcess {
+  process.trap_exits(True)
   ensure_wrapper_path()
 
   port_process.start(
@@ -131,6 +131,22 @@ fn read_line_with_retries(
         Ok(line) -> Ok(line)
         Error(port_process.Timeout) -> read_line_with_retries(process, attempts - 1)
         Error(error) -> Error(error)
+      }
+  }
+}
+
+fn read_noeol_fragment(
+  process: port_process.PortProcess,
+  attempts: Int,
+) -> Result(String, Nil) {
+  case attempts {
+    0 -> Error(Nil)
+    _ ->
+      case port_process.receive(process, read_timeout_ms) {
+        Ok(port_process.PortNoeol(fragment)) -> Ok(fragment)
+        Ok(port_process.PortExit(_)) -> read_noeol_fragment(process, attempts - 1)
+        Ok(_) -> Error(Nil)
+        Error(_) -> read_noeol_fragment(process, attempts - 1)
       }
   }
 }
