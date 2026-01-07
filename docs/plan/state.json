@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "current_sprint": "S01",
+  "sprints": {
+    "S01": {
+      "status": "in_progress",
+      "branch": "sprint/s01-scaffolding-ci-zoo",
+      "started_at": "2026-01-07T16:40:59Z",
+      "completed_at": null,
+      "current_story": null,
+      "stories": {
+        "S01-T01": {
+          "status": "completed",
+          "branch": "feat/s01-t01-repo-skeleton",
+          "commit": "a495cb7c4060172c0159aff3d6f708e6beef88d6"
+        }
+      }
+    }
+  }
+}
