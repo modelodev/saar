@@ -1,3 +1,5 @@
+import gleam/list
+import gleam/option.{None}
 import gleeunit
 import gleeunit/should
 import sad/types
@@ -120,4 +122,29 @@ pub fn default_config_invariants_test() {
   interaction_batch_byte_size |> should.equal(4096)
   interaction_flush_interval_ms |> should.equal(25)
   interaction_push_timeout_ms |> should.equal(250)
+}
+
+pub fn runner_event_variants_test() {
+  let response =
+    types.RunnerResponse(
+      status: types.StatusSuccess,
+      data: None,
+      artifacts: [],
+      error: None,
+    )
+
+  let events = [
+    types.RunnerEventLog(message: "ok", level: "info"),
+    types.RunnerEventChunk(delta: "hello"),
+    types.RunnerEventResult(response: response),
+    types.RunnerEventProvisionResult(
+      result: types.RunnerProvisionResult(
+        status: types.StatusSuccess,
+        log_files: [],
+      ),
+    ),
+  ]
+
+  list.length(events)
+  |> should.equal(4)
 }
