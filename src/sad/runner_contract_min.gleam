@@ -1,7 +1,4 @@
-import gleam/dynamic/decode
-import gleam/json
 import gleam/option.{None}
-import gleam/result
 import gleam/string
 import sad/types
 
@@ -14,15 +11,7 @@ pub type JsonlError {
 pub fn decode_runner_event(
   line: String,
 ) -> Result(types.RunnerEvent, JsonlError) {
-  let tag_decoder = {
-    use tag <- decode.field("t", decode.string)
-    decode.success(tag)
-  }
-
-  use tag <- result.try(
-    json.parse(line, tag_decoder)
-    |> result.map_error(fn(err) { InvalidJson(string.inspect(err)) }),
-  )
+  use tag <- extract_string_field(line, "t")
 
   case tag {
     "log" -> decode_log(line)
@@ -32,29 +21,14 @@ pub fn decode_runner_event(
 }
 
 fn decode_log(line: String) -> Result(types.RunnerEvent, JsonlError) {
-  let decoder = {
-    use message <- decode.field("message", decode.string)
-    use level <- decode.field("level", decode.string)
-    decode.success(types.RunnerEventLog(message: message, level: level))
-  }
-
-  json.parse(line, decoder)
-  |> result.map_error(fn(err) { InvalidJson(string.inspect(err)) })
+  use message <- extract_string_field(line, "message")
+  use level <- extract_string_field(line, "level")
+  Ok(types.RunnerEventLog(message: message, level: level))
 }
 
 fn decode_result(line: String) -> Result(types.RunnerEvent, JsonlError) {
-  let decoder = {
-    use status <- decode.field("status", decode.string)
-    decode.success(status)
-  }
-
-  let parse_result =
-    json.parse(line, decoder)
-    |> result.map_error(fn(err) { InvalidJson(string.inspect(err)) })
-
-  use status <- result.try(parse_result)
-
-  use status_value <- result.try(parse_status(status))
+  use status <- extract_string_field(line, "status")
+  use status_value <- parse_status(status)
 
   Ok(
     types.RunnerEventResult(response: types.RunnerResponse(
@@ -71,5 +45,29 @@ fn parse_status(status: String) -> Result(types.RunnerStatus, JsonlError) {
     "success" -> Ok(types.StatusSuccess)
     "error" -> Ok(types.StatusError)
     other -> Error(UnknownStatus(other))
+  }
+}
+
+fn extract_string_field(
+  line: String,
+  key: String,
+) -> Result(String, JsonlError) {
+  let pattern = "\"" <> key <> "\":"
+
+  case string.split_once(line, pattern) {
+    Error(_) -> Error(InvalidJson("missing field: " <> key))
+    Ok(#(_, rest)) -> {
+      let rest = string.trim_start(rest)
+      case string.starts_with(rest, "\"") {
+        False -> Error(InvalidJson("expected string for: " <> key))
+        True -> {
+          let rest = string.drop_start(rest, 1)
+          case string.split_once(rest, "\"") {
+            Ok(#(value, _)) -> Ok(value)
+            Error(_) -> Error(InvalidJson("unterminated string: " <> key))
+          }
+        }
+      }
+    }
   }
 }
