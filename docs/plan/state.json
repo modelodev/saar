@@ -13,6 +13,11 @@
           "status": "completed",
           "branch": "feat/s01-t01-repo-skeleton",
           "commit": "a495cb7c4060172c0159aff3d6f708e6beef88d6"
+        },
+        "S01-T02": {
+          "status": "completed",
+          "branch": "feat/s01-t02-gleam-deps",
+          "commit": "b3566147b5c72c18a0015f61065efe5397497194"
         }
       }
     }
