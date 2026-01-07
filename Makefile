@@ -1,4 +1,4 @@
-.PHONY: ci fmt test wrapper e2e-echo
+.PHONY: ci fmt test coverage wrapper e2e-echo
 
 fmt:
 	gleam format --check src test
@@ -6,9 +6,17 @@ fmt:
 test:
 	gleam test
 
+coverage:
+	@if gleam test --help | rg -q -- "--coverage"; then \
+		gleam test --coverage; \
+	else \
+		echo "coverage not supported by gleam test; skipping"; \
+	fi
+
 ci:
 	$(MAKE) fmt
 	$(MAKE) test
+	$(MAKE) coverage
 
 wrapper:
 	mkdir -p priv

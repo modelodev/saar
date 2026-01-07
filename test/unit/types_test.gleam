@@ -78,11 +78,12 @@ pub fn default_config_invariants_test() {
     log_stream: log_stream,
     interaction_stream: interaction_stream,
     managed_port_host: managed_port_host,
+    landlock_mode: landlock_mode,
   ) = types.default_sad_config()
 
   server_host |> should.equal("0.0.0.0")
   server_port |> should.equal(8080)
-  api_key |> should.equal("")
+  api_key |> types.secret_to_env_value |> should.equal("")
   call_timeout_ms |> should.equal(30_000)
   status_timeout_ms |> should.equal(5000)
   registry_timeout_ms |> should.equal(5000)
@@ -101,6 +102,7 @@ pub fn default_config_invariants_test() {
   port_range_max |> should.equal(9999)
   sse_keep_alive_interval_ms |> should.equal(15_000)
   managed_port_host |> should.equal("127.0.0.1")
+  landlock_mode |> should.equal(types.LandlockBestEffort)
 
   profiles_sources
   |> should.equal([types.ProfileSourceDir(path: ".")])

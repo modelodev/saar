@@ -42,3 +42,12 @@ pub fn jsonl_unknown_t_rejected_test() {
     Error(_) -> Nil
   }
 }
+
+pub fn jsonl_invalid_json_rejected_test() {
+  let line = "{\"t\":\"result\","
+
+  case runner_contract_min.decode_runner_event(line) {
+    Ok(_) -> panic as "Expected error for invalid json"
+    Error(_) -> Nil
+  }
+}

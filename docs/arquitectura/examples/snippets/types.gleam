@@ -1450,6 +1450,12 @@ pub type ProfileSource {
   ProfileSourceGit(url: String, ref: Option(String))
 }
 
+pub type LandlockMode {
+  LandlockBestEffort
+  LandlockEnforced
+  LandlockOff
+}
+
 pub type SadConfig {
   SadConfig(
     // --- Server ---
@@ -1460,7 +1466,7 @@ pub type SadConfig {
     
     // --- Auth ---
     /// API key para autenticación (Bearer token)
-    api_key: String,
+    api_key: SecretValue,
     
     // --- Timeouts ---
     /// Timeout hard para interacciones (ms).
@@ -1516,6 +1522,10 @@ pub type SadConfig {
     // --- Network ---
     /// Host inyectado para managed_port
     managed_port_host: String,
+
+    // --- Security ---
+    /// Modo de Landlock (best_effort|enforced|off)
+    landlock_mode: LandlockMode,
   )
 }
 
@@ -1525,7 +1535,7 @@ pub fn default_sad_config() -> SadConfig {
   SadConfig(
     server_host: "0.0.0.0",
     server_port: 8080,
-    api_key: "",  // Debe sobrescribirse
+    api_key: secret_value(""),  // Debe sobrescribirse
     call_timeout_ms: 30_000,
     status_timeout_ms: 5_000,
     registry_timeout_ms: 5_000,
@@ -1554,6 +1564,7 @@ pub fn default_sad_config() -> SadConfig {
       push_timeout_ms: 250,
     ),
     managed_port_host: "127.0.0.1",
+    landlock_mode: LandlockBestEffort,
   )
 }
 

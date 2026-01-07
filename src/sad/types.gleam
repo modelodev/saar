@@ -102,6 +102,34 @@ pub fn secret_is_empty(secret: SecretValue) -> Bool {
   string.is_empty(inner)
 }
 
+pub type LandlockMode {
+  LandlockBestEffort
+  LandlockEnforced
+  LandlockOff
+}
+
+pub fn landlock_mode_from_string(s: String) -> Result(LandlockMode, String) {
+  case s {
+    "best_effort" -> Ok(LandlockBestEffort)
+    "enforced" -> Ok(LandlockEnforced)
+    "off" -> Ok(LandlockOff)
+    other ->
+      Error(
+        "Unknown landlock mode: '"
+        <> other
+        <> "'. Valid: best_effort, enforced, off",
+      )
+  }
+}
+
+pub fn landlock_mode_to_string(mode: LandlockMode) -> String {
+  case mode {
+    LandlockBestEffort -> "best_effort"
+    LandlockEnforced -> "enforced"
+    LandlockOff -> "off"
+  }
+}
+
 pub type Lifecycle {
   Transient
   Continuous
@@ -207,7 +235,7 @@ pub type SadConfig {
   SadConfig(
     server_host: String,
     server_port: Int,
-    api_key: String,
+    api_key: SecretValue,
     call_timeout_ms: Int,
     status_timeout_ms: Int,
     registry_timeout_ms: Int,
@@ -229,6 +257,7 @@ pub type SadConfig {
     log_stream: LogStreamConfig,
     interaction_stream: InteractionStreamConfig,
     managed_port_host: String,
+    landlock_mode: LandlockMode,
   )
 }
 
@@ -236,7 +265,7 @@ pub fn default_sad_config() -> SadConfig {
   SadConfig(
     server_host: "0.0.0.0",
     server_port: 8080,
-    api_key: "",
+    api_key: secret_value(""),
     call_timeout_ms: 30_000,
     status_timeout_ms: 5000,
     registry_timeout_ms: 5000,
@@ -262,5 +291,6 @@ pub fn default_sad_config() -> SadConfig {
       push_timeout_ms: 250,
     ),
     managed_port_host: "127.0.0.1",
+    landlock_mode: LandlockBestEffort,
   )
 }

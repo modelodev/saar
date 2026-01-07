@@ -5,15 +5,15 @@ Plan version: v2.1
 Esta carpeta define el plan de ejecucion auditable (inputs -> outputs -> evidencia), alineado con SSOT.
 
 ## Jerarquia SSOT
-- sad/arquitectura/tipos.md (tipos e invariantes)
-- sad/arquitectura/protocolos_runner.md (runner JSONL, stop, limites)
-- sad/arquitectura/bridge.md (port_process, interpolacion, SSE upstream)
-- sad/arquitectura/gateway.md (auth, ProblemDetails, SSE, UI proxy, artifacts)
-- sad/arquitectura/protocolos.md (HTTP/A2A/AG-UI/A2UI)
-- sad/arquitectura/config.md (perfiles, params, profiles.sources)
-- sad/arquitectura/operaciones.md (CLI, daemon, env vars)
-- sad/arquitectura/integracion.md (file delivery, streaming)
-- sad/arquitectura/examples/snippets/* (referencias canonicas)
+- docs/arquitectura/tipos.md (tipos e invariantes)
+- docs/arquitectura/protocolos_runner.md (runner JSONL, stop, limites)
+- docs/arquitectura/bridge.md (port_process, interpolacion, SSE upstream)
+- docs/arquitectura/gateway.md (auth, ProblemDetails, SSE, UI proxy, artifacts)
+- docs/arquitectura/protocolos.md (HTTP/A2A/AG-UI/A2UI)
+- docs/arquitectura/config.md (perfiles, params, profiles.sources)
+- docs/arquitectura/operaciones.md (CLI, daemon, env vars)
+- docs/arquitectura/integracion.md (file delivery, streaming)
+- docs/arquitectura/examples/snippets/* (referencias canonicas)
 
 ## Definition of Done (global)
 - gleam format --check src test

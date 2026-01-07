@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -95,6 +96,54 @@ static void close_child_stdin(int *child_stdin_fd) {
     close(*child_stdin_fd);
     *child_stdin_fd = -1;
   }
+}
+
+static bool write_file(const char *path, const char *value, bool allow_missing) {
+  int fd = open(path, O_WRONLY);
+  if (fd < 0) {
+    if (allow_missing && errno == ENOENT) {
+      return true;
+    }
+    return false;
+  }
+
+  size_t len = strlen(value);
+  ssize_t written = write(fd, value, len);
+  close(fd);
+  return written == (ssize_t)len;
+}
+
+static bool apply_user_ns_mappings(pid_t pid) {
+  char path[64];
+  char map[64];
+  uid_t uid = getuid();
+  gid_t gid = getgid();
+
+  snprintf(path, sizeof(path), "/proc/%d/setgroups", pid);
+  if (!write_file(path, "deny\n", true)) {
+    return false;
+  }
+
+  snprintf(path, sizeof(path), "/proc/%d/uid_map", pid);
+  snprintf(map, sizeof(map), "0 %d 1\n", uid);
+  if (!write_file(path, map, false)) {
+    return false;
+  }
+
+  snprintf(path, sizeof(path), "/proc/%d/gid_map", pid);
+  snprintf(map, sizeof(map), "0 %d 1\n", gid);
+  if (!write_file(path, map, false)) {
+    return false;
+  }
+
+  return true;
+}
+
+static void wait_for_parent_ready(int sync_fd) {
+  char buf[1];
+  while (read(sync_fd, buf, sizeof(buf)) > 0) {
+  }
+  close(sync_fd);
 }
 
 static bool wait_for_child_exit(pid_t child_pid, int timeout_ms) {
@@ -220,11 +269,19 @@ static int fallback_main(char **argv) {
 }
 
 #ifdef __linux__
+struct NamespaceArgs {
+  char **argv;
+  int sync_fd;
+};
+
 static int ns_init_main(void *arg) {
   prctl(PR_SET_PDEATHSIG, SIGKILL);
   setup_signals();
 
-  char **argv = (char **)arg;
+  struct NamespaceArgs *args = (struct NamespaceArgs *)arg;
+  char **argv = args->argv;
+  wait_for_parent_ready(args->sync_fd);
+
   int stdin_pipe[2];
   if (pipe(stdin_pipe) != 0) {
     perror("pipe");
@@ -285,13 +342,40 @@ int main(int argc, char **argv) {
   }
   void *stack_top = (char *)stack + stack_size;
 
-  int flags = CLONE_NEWPID | CLONE_NEWUSER | SIGCHLD;
-  pid_t pid = clone(ns_init_main, stack_top, flags, child_argv);
-  if (pid < 0) {
-    debug_log("clone failed, falling back: %s", strerror(errno));
+  int sync_pipe[2];
+  if (pipe(sync_pipe) != 0) {
+    perror("pipe");
     free(stack);
     return fallback_main(child_argv);
   }
+
+  struct NamespaceArgs args = {
+      .argv = child_argv,
+      .sync_fd = sync_pipe[0],
+  };
+
+  int flags = CLONE_NEWPID | CLONE_NEWUSER | SIGCHLD;
+  pid_t pid = clone(ns_init_main, stack_top, flags, &args);
+  if (pid < 0) {
+    debug_log("clone failed, falling back: %s", strerror(errno));
+    close(sync_pipe[0]);
+    close(sync_pipe[1]);
+    free(stack);
+    return fallback_main(child_argv);
+  }
+
+  close(sync_pipe[0]);
+
+  if (!apply_user_ns_mappings(pid)) {
+    debug_log("user namespace mapping failed, falling back");
+    kill(pid, SIGKILL);
+    close(sync_pipe[1]);
+    waitpid(pid, NULL, 0);
+    free(stack);
+    return fallback_main(child_argv);
+  }
+
+  close(sync_pipe[1]);
 
   int status = 0;
   waitpid(pid, &status, 0);
