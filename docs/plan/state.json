@@ -7,7 +7,7 @@
       "branch": "sprint/s01-scaffolding-ci-zoo",
       "started_at": "2026-01-07T16:40:59Z",
       "completed_at": "2026-01-07T17:23:58Z",
-      "current_story": "S04-T04",
+      "current_story": null,
       "stories": {
         "S01-T01": {
           "status": "completed",
@@ -127,8 +127,9 @@
           "commit": "584bbb318892c19c5b930de7768cbe040c305f2b"
         },
         "S04-T04": {
-          "status": "in_progress",
-          "branch": "feat/s04-t04-bridge-transient"
+          "status": "completed",
+          "branch": "feat/s04-t04-bridge-transient",
+          "commit": "e40090f795e1027b046573c471b37132fb95e533"
         },
         "S04-T05": {
           "status": "pending"
