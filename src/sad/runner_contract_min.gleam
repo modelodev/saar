@@ -14,8 +14,13 @@ pub type JsonlError {
 pub fn decode_runner_event(
   line: String,
 ) -> Result(types.RunnerEvent, JsonlError) {
+  let tag_decoder = {
+    use tag <- decode.field("t", decode.string)
+    decode.success(tag)
+  }
+
   use tag <- result.try(
-    json.parse(line, decode.field("t", decode.string))
+    json.parse(line, tag_decoder)
     |> result.map_error(fn(err) { InvalidJson(string.inspect(err)) }),
   )
 
