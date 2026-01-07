@@ -1,0 +1,11 @@
+name = "sad"
+version = "0.1.0"
+target = "erlang"
+
+authors = ["SAD"]
+
+[dependencies]
+gleam_stdlib = "~> 0.67"
+
+[dev-dependencies]
+gleeunit = "~> 1.2"
