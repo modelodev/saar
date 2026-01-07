@@ -95,12 +95,9 @@ pub fn provision_requires_single_result_test() {
 pub fn artifact_collection_respects_globs_test() {
   ensure_wrapper_path()
   let workspace = "./build/test-workspaces/artifacts"
-  ensure_workspace(workspace)
+  let _ = ensure_workspace(workspace)
 
-  let include_only = types.ArtifactConfig(
-    include: ["outputs/**"],
-    exclude: [],
-  )
+  let include_only = types.ArtifactConfig(include: ["outputs/**"], exclude: [])
 
   let input = base_input(include_only)
   let env = env_with_workspace(500, workspace)
@@ -119,10 +116,8 @@ pub fn artifact_collection_respects_globs_test() {
   let assert Ok(types.InteractionResult(artifacts: artifacts, ..)) = result
   list.length(artifacts) |> should.equal(1)
 
-  let exclude_pdf = types.ArtifactConfig(
-    include: ["outputs/**"],
-    exclude: ["**/*.pdf"],
-  )
+  let exclude_pdf =
+    types.ArtifactConfig(include: ["outputs/**"], exclude: ["**/*.pdf"])
 
   let input = base_input(exclude_pdf)
   let result =
@@ -143,12 +138,9 @@ pub fn artifact_collection_respects_globs_test() {
 pub fn artifact_id_is_uuid_v7_test() {
   ensure_wrapper_path()
   let workspace = "./build/test-workspaces/artifacts-uuid"
-  ensure_workspace(workspace)
+  let _ = ensure_workspace(workspace)
 
-  let config = types.ArtifactConfig(
-    include: ["outputs/**"],
-    exclude: [],
-  )
+  let config = types.ArtifactConfig(include: ["outputs/**"], exclude: [])
 
   let input = base_input(config)
   let env = env_with_workspace(500, workspace)
@@ -228,7 +220,10 @@ fn base_env(shutdown_ms: Int) -> List(#(String, String)) {
   ])
 }
 
-fn env_with_workspace(shutdown_ms: Int, workspace: String) -> List(#(String, String)) {
+fn env_with_workspace(
+  shutdown_ms: Int,
+  workspace: String,
+) -> List(#(String, String)) {
   list.append(base_env(shutdown_ms), [#("SAD_WORKSPACE", workspace)])
 }
 
