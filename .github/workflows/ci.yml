@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read tool versions
+        id: tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          gleam_version=$(awk '$1 == "gleam" { print $2 }' .tool-versions)
+          erlang_version=$(awk '$1 == "erlang" { print $2 }' .tool-versions)
+          if [ -z "$gleam_version" ] || [ -z "$erlang_version" ]; then
+            echo "Missing gleam or erlang version in .tool-versions" >&2
+            exit 1
+          fi
+          echo "gleam=$gleam_version" >> "$GITHUB_OUTPUT"
+          echo "erlang=$erlang_version" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Erlang/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ steps.tools.outputs.erlang }}
+
+      - name: Setup Gleam
+        uses: gleam-lang/setup-gleam@v1
+        with:
+          gleam-version: ${{ steps.tools.outputs.gleam }}
+
+      - name: Run CI
+        run: make ci

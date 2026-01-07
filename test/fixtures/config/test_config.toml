@@ -1,0 +1,24 @@
+[server]
+host = "127.0.0.1"
+port = 0
+
+[auth]
+api_key = "test-api-key"
+
+[limits]
+call_timeout_ms = 5000
+status_timeout_ms = 1000
+shutdown_timeout_ms = 2000
+health_check_timeout_ms = 1000
+
+[profiles]
+sources = [
+  {type = "dir", path = "./test/fixtures/source_local"}
+]
+git_cache_dir = "./test/fixtures/.cache/git"
+
+[runners]
+python_bin = "python3"
+
+[workspaces]
+directory = "./test-workspaces"

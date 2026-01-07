@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "current_sprint": null,
+  "sprints": {
+    "S01": {
+      "status": "completed",
+      "branch": "sprint/s01-scaffolding-ci-zoo",
+      "started_at": "2026-01-07T16:40:59Z",
+      "completed_at": "2026-01-07T17:23:58Z",
+      "current_story": null,
+      "stories": {
+        "S01-T01": {
+          "status": "completed",
+          "branch": "feat/s01-t01-repo-skeleton",
+          "commit": "496c605b092a45154dd9483a25699cea3f565aee"
+        },
+        "S01-T02": {
+          "status": "completed",
+          "branch": "feat/s01-t02-gleam-deps",
+          "commit": "b3566147b5c72c18a0015f61065efe5397497194"
+        },
+        "S01-T03": {
+          "status": "completed",
+          "branch": "feat/s01-t03-ci-make",
+          "commit": "276e34dbe1b0f277cca844267020a5329512a3bb"
+        },
+        "S01-T04": {
+          "status": "completed",
+          "branch": "feat/s01-t04-fixtures-tree",
+          "commit": "97b44c10132a082da5f678df450056e0fa965c47"
+        },
+        "S01-T05": {
+          "status": "completed",
+          "branch": "feat/s01-t05-zoo",
+          "commit": "9f507456a46bb35c37ebf475a0ca86642a94f1ac"
+        },
+        "S01-T06": {
+          "status": "completed",
+          "branch": "feat/s01-t06-doc-lint",
+          "commit": "8606382b6350e832a1eb980afa74f090aa91f6a8"
+        }
+      }
+    }
+  }
+}

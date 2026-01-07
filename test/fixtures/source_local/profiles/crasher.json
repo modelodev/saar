@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "id": "crasher",
+    "lifecycle": "continuous",
+    "description": "Server that crashes after first request"
+  },
+  "parameters": {},
+  "runner": {
+    "type": "crasher",
+    "tool_config": {"script": "crasher.py"}
+  },
+  "interface": {
+    "protocol": "http",
+    "base_url": "http://{{runner.host}}:{{runner.port}}",
+    "health_check": {"path": "/health", "method": "GET", "expect_statuses": [200]},
+    "capabilities": {
+      "echo": {"path": "/echo", "method": "POST", "streaming": false}
+    }
+  }
+}

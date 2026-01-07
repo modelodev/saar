@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "id": "streaming_echo",
+    "lifecycle": "transient",
+    "description": "Streaming echo runner"
+  },
+  "parameters": {},
+  "runner": {
+    "type": "streaming_echo",
+    "tool_config": {"script": "streaming_echo.py"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {
+      "echo": {"input_schema": "std:chat", "streaming": true}
+    }
+  }
+}
