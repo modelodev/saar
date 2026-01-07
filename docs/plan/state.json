@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": "S02",
+  "current_sprint": null,
   "sprints": {
     "S01": {
       "status": "completed",
@@ -42,10 +42,10 @@
       }
     },
     "S02": {
-      "status": "in_progress",
+      "status": "completed",
       "branch": "sprint/s02-tipos-base-errores-sadconfig",
       "started_at": "2026-01-07T17:35:35Z",
-      "completed_at": null,
+      "completed_at": "2026-01-07T17:59:51Z",
       "current_story": null,
       "stories": {
         "S02-T01": {
