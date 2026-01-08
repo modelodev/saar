@@ -1,0 +1,40 @@
+{
+  "version": "1.0",
+  "current_sprint": null,
+  "sprints": {
+    "S05": {
+      "status": "completed",
+      "branch": "sprint/s05-decoders-params-puro",
+      "started_at": "2026-01-08T15:38:07Z",
+      "completed_at": "2026-01-08T16:13:21Z",
+      "current_story": null,
+      "stories": {
+        "S05-T01": {
+          "status": "completed",
+          "branch": "feat/s05-t01-profile-decoders",
+          "commit": "5818e1efa4f0e15bce344baac29eb519a821cb2c"
+        },
+        "S05-T02": {
+          "status": "completed",
+          "branch": "feat/s05-t02-payload-decoders",
+          "commit": "280ab119fce8e8010ce6ac001a070a1cf5941db0"
+        },
+        "S05-T03": {
+          "status": "completed",
+          "branch": "sprint/s05-decoders-params-puro",
+          "commit": "3a29133979a6cbbc8c0caf52af4242825f782610"
+        },
+        "S05-T04": {
+          "status": "completed",
+          "branch": "sprint/s05-decoders-params-puro",
+          "commit": "051d815a778471a4dbe1ade871e873f3e0fa6cd7"
+        },
+        "S05-T05": {
+          "status": "completed",
+          "branch": "sprint/s05-decoders-params-puro",
+          "commit": "62c027f3a4fcddd7d2aad34a1b3c47719d2e8894"
+        }
+      }
+    }
+  }
+}
