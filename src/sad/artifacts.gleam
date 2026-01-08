@@ -1,6 +1,8 @@
 import gleam/list
+import gleam/option
 import gleam/result
 import gleam/string
+import sad/types/core
 import sad/types/output as types_output
 import sad/types/runner as types_runner
 import sad/workspace
@@ -13,9 +15,8 @@ pub type ArtifactError {
 pub fn collect(
   artifacts: List(types_runner.ArtifactRef),
   config: types_runner.ArtifactConfig,
-  base_path: String,
+  _base_path: String,
 ) -> Result(List(types_output.PublicArtifact), ArtifactError) {
-  let normalized_base = normalize_base_path(base_path)
   case config.include {
     [] -> Ok([])
     _ ->
@@ -25,15 +26,18 @@ pub fn collect(
         use normalized <- result.try(validate_path(artifact.path))
 
         case matches_globs(normalized, config.include, config.exclude) {
-          True ->
+          True -> {
+            let id = core.artifact_id(uuid.v7_string())
             Ok([
               types_output.PublicArtifact(
+                id: id,
                 name: artifact.name,
-                url: normalized_base <> uuid.v7_string(),
+                url: option.None,
                 mime: artifact.mime,
               ),
               ..collected
             ])
+          }
           False -> Ok(collected)
         }
       })
@@ -47,13 +51,6 @@ fn validate_path(path: String) -> Result(String, ArtifactError) {
   |> result.map_error(fn(err) {
     InvalidPath(workspace.path_error_to_string(err))
   })
-}
-
-fn normalize_base_path(base_path: String) -> String {
-  case string.ends_with(base_path, "/") {
-    True -> base_path
-    False -> base_path <> "/"
-  }
 }
 
 fn matches_globs(

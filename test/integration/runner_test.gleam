@@ -1,13 +1,13 @@
 import gleam/dict
 import gleam/list
 import gleam/option
-import gleam/string
 import gleeunit
 import gleeunit/should
 import port_helpers
 import runner_fixtures
 import sad/bridge/runner
 import sad/types/config as types_config
+import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/output as types_output
 import sad/types/runner as types_runner
@@ -297,9 +297,9 @@ pub fn artifact_id_is_uuid_v7_test() {
 
   case artifacts {
     [only] -> {
-      let types_output.PublicArtifact(url: url, ..) = only
-      let id = artifact_id_from_url(url)
-      let assert Ok(parsed) = uuid.from_string(id)
+      let types_output.PublicArtifact(id: id, url: url, ..) = only
+      url |> should.equal(option.None)
+      let assert Ok(parsed) = uuid.from_string(types_core.artifact_id_to_string(id))
       uuid.version(parsed) |> should.equal(uuid.V7)
     }
     _ -> panic as "Expected one artifact"
@@ -313,13 +313,4 @@ fn ensure_workspace(path: String) {
 
 fn default_config() -> types_config.SadConfig {
   types_config.default_sad_config()
-}
-
-fn artifact_id_from_url(url: String) -> String {
-  let prefix = "/artifacts/"
-
-  case string.starts_with(url, prefix) {
-    True -> string.drop_start(url, string.length(prefix))
-    False -> url
-  }
 }

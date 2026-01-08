@@ -75,7 +75,7 @@ Eventos mínimos:
 - Runners no necesitan implementar stop explícito; basta con manejar SIGTERM/SIGKILL correctamente.
 
 ### Artefactos
-- `artifacts` en `RunnerResponse` deben usar rutas relativas dentro del workspace. El decoder valida `WorkspacePath` y expone UUID público.
+- `artifacts` en `RunnerResponse` deben usar rutas relativas dentro del workspace. El decoder valida `WorkspacePath`, genera `id` y deja `url` vacío hasta que exista registro/almacenamiento público.
 
 ### Red
 - Solo `managed_port` o `no_network`.

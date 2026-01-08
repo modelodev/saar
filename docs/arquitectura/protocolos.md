@@ -84,8 +84,9 @@ Cuando la capability tiene `streaming: false`, el endpoint nativo devuelve JSON 
   },
   "artifacts": [
     {
+      "id": "01J...",
       "name": "report.pdf",
-      "url": "/artifacts/01J...",
+      "url": null,
       "mime": "application/pdf"
     }
   ],
@@ -97,7 +98,7 @@ Cuando la capability tiene `streaming: false`, el endpoint nativo devuelve JSON 
 - `InteractionResult.trace_id` → `trace_id`
 - `InteractionResult.data.content` → `data.content`
 - `InteractionResult.data.metadata` → `data.metadata`
-- `InteractionResult.artifacts[]` → `artifacts[]` (URLs públicas de SAD, no paths)
+- `InteractionResult.artifacts[]` → `artifacts[]` (id obligatorio; `url` solo cuando hay registro/almacenamiento público)
 
 ## 1. Runner Contract
 
@@ -447,8 +448,9 @@ data: {
   "status": { "state": "completed" },
   "artifacts": [
     {
+      "id": "01J...",
       "name": "report.pdf",
-      "uri": "http://sad.local/artifacts/01J...",
+      "uri": null,
       "mediaType": "application/pdf"
     }
   ]
@@ -541,8 +543,9 @@ Esto es transparente para el cliente A2A: SAD puede agrupar chunks, pero **no** 
     },
     "artifacts": [
       {
+        "id": "01J...",
         "name": "report.pdf",
-        "uri": "http://sad.local/artifacts/01J...",
+        "uri": null,
         "mediaType": "application/pdf"
       }
     ]
@@ -554,7 +557,7 @@ Esto es transparente para el cliente A2A: SAD puede agrupar chunks, pero **no** 
 - `InteractionResult.trace_id` → `result.id`
 - `contextId` → `result.contextId`
 - `InteractionResult.data.content` → `result.message.parts[TextPart]`
-- `InteractionResult.artifacts[]` → `result.artifacts[]` como `uri` (URL pública de SAD) + `name` + `mediaType`
+- `InteractionResult.artifacts[]` → `result.artifacts[]` (id obligatorio; `uri` solo cuando hay registro/almacenamiento público)
 
 ---
 
@@ -700,7 +703,7 @@ data: {
   "threadId": "trace-abc",
   "runId": "trace-abc",
   "artifacts": [
-    { "name": "report.pdf", "url": "/artifacts/01J...", "mime": "application/pdf" }
+    { "id": "01J...", "name": "report.pdf", "url": null, "mime": "application/pdf" }
   ]
 }
 ```

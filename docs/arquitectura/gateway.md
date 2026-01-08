@@ -588,8 +588,9 @@ SAD no interpreta ni valida el catálogo; solo aplica límites/backpressure y tr
   },
   "artifacts": [
     {
+      "id": "01J...",
       "name": "report.pdf",
-      "url": "/artifacts/01J...",
+      "url": null,
       "mime": "application/pdf"
     }
   ],
@@ -600,7 +601,7 @@ SAD no interpreta ni valida el catálogo; solo aplica límites/backpressure y tr
 **Respuesta streaming:** por defecto ver `protocolos.md` §3 (AG-UI). Para A2UI, ver `protocolos.md` §0.3 y el sitio oficial: https://a2ui.org/introduction/what-is-a2ui/
 
 **Nota (artefactos en streaming):** si la interacción genera artefactos, el evento terminal del stream incluye `artifacts`
-(IDs/URLs públicas). Ver `protocolos.md` §2.7.2 (A2A) y §3.4.1 (AG-UI).
+(IDs siempre; `url` solo si hay registro/almacenamiento público). Ver `protocolos.md` §2.7.2 (A2A) y §3.4.1 (AG-UI).
 
 **Cancelación (v0):**
 - No hay endpoint de cancelación dedicado ni cancelación implícita al cerrar SSE; si el cliente cierra, simplemente deja de recibir eventos. La interacción sigue hasta completar o timeout.
@@ -667,8 +668,9 @@ Authorization: Bearer <api_key>
     },
     "artifacts": [
       {
+        "id": "01J...",
         "name": "report.pdf",
-        "uri": "http://sad.local/artifacts/01J...",
+        "uri": null,
         "mediaType": "application/pdf"
       }
     ]
@@ -746,8 +748,8 @@ Sirve artefactos generados por runners con **seguridad path-traversal**.
 │                                                                     │
 │  artifact_ref_decoder   ArtifactRef →           GET /artifacts/:artifact_id  │
 │  (valida path dentro    PublicArtifact {        resuelve UUID →     │
-│   del workspace)        url: "/artifacts/       WorkspacePath       │
-│                         <uuid>"                                     │
+│   del workspace)        id: <uuid>,            WorkspacePath       │
+│                         url: (opcional)                             │
 │                         }                                           │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
@@ -780,8 +782,9 @@ fn register_artifacts(
     
     // Devolver artefacto público (solo UUID, no path)
     PublicArtifact(
+      id: artifact_id,
       name: ref.name,
-      url: "/artifacts/" <> artifact_id_to_string(artifact_id),
+      url: option.Some("/artifacts/" <> artifact_id_to_string(artifact_id)),
       mime: ref.mime,
     )
   })
@@ -861,7 +864,7 @@ artifact_ref_decoder valida path → WorkspacePath
 Bridge registra (ArtifactRegistry asigna ID)
        │
        ▼
-Cliente recibe PublicArtifact { url: "/artifacts/<uuid>" }
+Cliente recibe PublicArtifact { id: <uuid>, url: (opcional) }
        │
        ▼
 GET /artifacts/<uuid> → lookup → WorkspacePath → read_file

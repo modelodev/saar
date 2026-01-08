@@ -9,7 +9,12 @@ pub type ResponseData {
 }
 
 pub type PublicArtifact {
-  PublicArtifact(name: String, url: String, mime: String)
+  PublicArtifact(
+    id: core.ArtifactId,
+    name: String,
+    url: Option(String),
+    mime: String,
+  )
 }
 
 pub type InteractionResult {

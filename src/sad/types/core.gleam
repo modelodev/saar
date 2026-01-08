@@ -82,6 +82,19 @@ pub opaque type SecretValue {
   SecretValue(inner: String)
 }
 
+pub opaque type ArtifactId {
+  ArtifactId(String)
+}
+
+pub fn artifact_id(s: String) -> ArtifactId {
+  ArtifactId(s)
+}
+
+pub fn artifact_id_to_string(id: ArtifactId) -> String {
+  let ArtifactId(s) = id
+  s
+}
+
 pub fn secret_value(s: String) -> SecretValue {
   SecretValue(s)
 }
