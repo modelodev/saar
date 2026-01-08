@@ -93,7 +93,15 @@ pub fn start(app_state: AppState, names: RootNames) -> actor.StartResult(Supervi
     |> supervisor.add(port_pool_child_spec(port_pool_name, app_state.config.port_range_min, app_state.config.port_range_max))
     |> supervisor.add(profiles_child_spec(profiles_name, app_state.initial_profiles))
     |> supervisor.add(agent_manager_child_spec(app_state, deps, agent_manager_name))
-    |> supervisor.add(agent_factory_child_spec(app_state, artifact_registry_subject, port_pool_subject, agent_factory_name))
+    |> supervisor.add(
+      agent_factory_child_spec(
+        app_state,
+        artifact_registry_subject,
+        port_pool_subject,
+        registry_subject,
+        agent_factory_name,
+      )
+    )
     |> supervisor.add(http_server_child_spec(app_state, agent_manager_subject))
 
   supervisor.start(spec)
@@ -143,11 +151,13 @@ fn agent_factory_child_spec(
   app_state: AppState,
   artifact_registry: Subject(ArtifactRegistryMsg),
   port_pool: Subject(PortPoolMsg),
+  registry: Subject(RegistryMsg),
   name: Name(factory_supervisor.Message(StartArgs, agent.AgentRef)),
 ) -> supervision.ChildSpecification(factory_supervisor.Supervisor(StartArgs, agent.AgentRef)) {
   let agent_deps = agent.AgentDeps(
     artifact_registry: artifact_registry,
     port_pool: port_pool,
+    registry: registry,
     bridge: bridge.default_bridge(),
   )
 

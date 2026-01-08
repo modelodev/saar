@@ -268,6 +268,7 @@ pub type AgentDeps {
   AgentDeps(
     artifact_registry: Subject(ArtifactRegistryMsg),
     port_pool: Subject(PortPoolMsg),
+    registry: Subject(RegistryMsg),
     bridge: Bridge,
   )
 }
@@ -276,6 +277,8 @@ pub fn start_link(args: StartArgs, deps: AgentDeps, init_timeout_ms: Int) -> act
   ...
 }
 ```
+
+**Nota:** `registry` se usa para emitir `UpdateStatus` y mantener el summary cacheado.
 
 ### 5.1 Comportamiento ante fallo de inicialización
 
@@ -524,7 +527,7 @@ Los tipos conceptuales están en `tipos.md` §13.2.
 ```gleam
 import gleam/erlang/process.{type Pid}
 import sad/core/agent_internal
-import sad/types.{type InstanceId, type ProfileId}
+import sad/types.{type InstanceId, type ProfileId, type AgentStatusView, type InstanceSummary}
 
 pub type RegistryState {
   RegistryState(
@@ -542,13 +545,16 @@ pub type RegistryEntry {
   RegistryEntry(
     instance_id: InstanceId,
     profile_id: ProfileId,
+    summary: InstanceSummary,
     agent: AgentRef,
     pid: Pid,
     monitor: Monitor,
-    registered_at: Int,  // Timestamp en milliseconds
   )
 }
 ```
+
+**Nota v0:** `summary` es el cache de estado usado por `/sys/agents` (evita N+1). Se actualiza con `UpdateStatus`.
+El `AgentActor` debe emitir `UpdateStatus` en cada transición de fase/modo relevante.
 
 ### 15.1 Flujo de Registro
 
@@ -566,7 +572,7 @@ El registro de un agente sigue este flujo:
          │                       │                       │                       │
          │ Ok(agent_ref)         │                       │                       │
          │<──────────────────────│                       │                       │
-         │ Register(key, agent_ref)                      │                       │
+         │ Register(status, agent_ref)                  │                       │
          │──────────────────────────────────────────────>│                       │
          │                       │                       │  monitor(agent_pid)   │
          │                       │                       │───────┐               │
@@ -592,12 +598,12 @@ El registro de un agente sigue este flujo:
 ```gleam
 fn handle_register(
   state: RegistryState,
-  key: InstanceKey,
+  status: AgentStatusView,
   agent: AgentRef,
   reply_to: Subject(Result(Nil, RegistryError)),
 ) -> actor.Next(RegistryState, RegistryMsg) {
   // Verificar unicidad global por instance_id
-  let InstanceKey(profile_id, iid) = key
+  let AgentStatusView(profile_id, iid, _lifecycle, _phase, _mode, _port, _reason) = status
   case dict.has_key(state.by_instance, iid) {
     True -> {
       process.send(reply_to, Error(AlreadyExists))
@@ -610,13 +616,19 @@ fn handle_register(
       let new_selector = state.selector
         |> process.select_specific_monitor(monitor, AgentDown)
       
+      let now = now_ms()
+      let summary = InstanceSummary(
+        status: status,
+        registered_at: now,
+        status_updated_at: now,
+      )
       let entry = RegistryEntry(
         instance_id: iid,
         profile_id: profile_id,
+        summary: summary,
         agent: agent,
         pid: agent_pid,
         monitor: monitor,
-        registered_at: now_ms(),
       )
       
       let new_by_instance = dict.insert(state.by_instance, iid, entry)
@@ -689,7 +701,7 @@ SAD usa un Registry custom en lugar de `process.Name` por:
 
 1. **Unicidad por instance_id:** indice directo `InstanceId -> RegistryEntry` y limpieza O(1) con `Pid -> InstanceId`
 2. **Listado por perfil:** necesitamos listar todas las instancias de un perfil
-3. **Metadatos:** el registry almacena timestamp y monitor
+3. **Metadatos:** el registry almacena resumen cacheado de estado + monitor
 4. **Cleanup automático:** monitoreo integrado para limpieza
 5. **Control explícito:** podemos rechazar registros duplicados
 
@@ -749,6 +761,41 @@ fn handle_list_by_profile(
   process.send(reply_to, instances)
   actor.continue(state)
 }
+
+/// Lista resúmenes de todas las instancias.
+fn handle_list_all(
+  state: RegistryState,
+  reply_to: Subject(List(InstanceSummary)),
+) -> actor.Next(RegistryState, RegistryMsg) {
+  let summaries =
+    state.by_instance
+    |> dict.values
+    |> list.map(fn(entry) { entry.summary })
+  
+  process.send(reply_to, summaries)
+  actor.continue(state)
+}
+
+/// Actualiza el status cacheado de una instancia (sin IO).
+fn handle_update_status(
+  state: RegistryState,
+  instance_id: InstanceId,
+  status: AgentStatusView,
+) -> actor.Next(RegistryState, RegistryMsg) {
+  case dict.get(state.by_instance, instance_id) {
+    None -> actor.continue(state)
+    Some(entry) -> {
+      let updated = InstanceSummary(
+        status: status,
+        registered_at: entry.summary.registered_at,
+        status_updated_at: now_ms(),
+      )
+      let new_entry = RegistryEntry(..entry, summary: updated)
+      let new_by_instance = dict.insert(state.by_instance, instance_id, new_entry)
+      actor.continue(RegistryState(..state, by_instance: new_by_instance))
+    }
+  }
+}
 ```
 
 **Nota v0:** `ListByProfile` es O(n) (filtra `dict.values`). Si se vuelve un hot path, agregar un `profile_index: Dict(ProfileId, Set(InstanceId))`.
@@ -762,7 +809,7 @@ Referencia completa (v0): `arquitectura/examples/snippets/registry_api_public.gl
 Extracto (v0):
 
 ```gleam
-pub fn register(registry: Subject(RegistryMsg), key: InstanceKey, agent: AgentRef, timeout_ms: Int) -> Result(Nil, ApiCallError(RegistryError)) {
+pub fn register(registry: Subject(RegistryMsg), status: AgentStatusView, agent: AgentRef, timeout_ms: Int) -> Result(Nil, ApiCallError(RegistryError)) {
   ...
 }
 
@@ -775,6 +822,14 @@ pub fn lookup_by_instance_id(registry: Subject(RegistryMsg), instance_id: Instan
 }
 
 pub fn unregister_by_instance_id(registry: Subject(RegistryMsg), instance_id: InstanceId) -> Nil {
+  ...
+}
+
+pub fn list_all(registry: Subject(RegistryMsg), timeout_ms: Int) -> Result(List(InstanceSummary), CallError) {
+  ...
+}
+
+pub fn update_status(registry: Subject(RegistryMsg), instance_id: InstanceId, status: AgentStatusView) -> Nil {
   ...
 }
 ```
@@ -955,7 +1010,7 @@ pub fn delete_agent(
 pub fn list_agents(
   manager: Subject(AgentManagerMsg),
   timeout_ms: Int,
-) -> Result(List(InstanceKey), CallError) {
+) -> Result(List(InstanceSummary), CallError) {
   safe_call.call_within(manager, timeout_ms, fn(reply_to) { ListAgents(reply_to) })
 }
 ```
@@ -980,32 +1035,34 @@ pub fn list_agents(
 pub fn shutdown_all(supervisor: SupervisorRef, timeout: Int) -> Nil {
   let agents =
     case agent_manager_api.list_agents(supervisor.agent_manager, timeout) {
-      Ok(keys) -> keys
+      Ok(summaries) -> summaries
       Error(_) -> []
     }
   
   // Terminar a todos en paralelo
-  list.each(agents, fn(key) {
-    case registry_api.lookup(supervisor.registry, key, timeout) {
+  list.each(agents, fn(summary) {
+    let instance_id = summary.status.instance_id
+    case registry_api.lookup_by_instance_id(supervisor.registry, instance_id, timeout) {
       Ok(Some(agent)) -> agent.terminate(agent, NodeShuttingDown)
       _ -> Nil
     }
   })
   
   // Esperar a que terminen (con timeout)
-  wait_for_agents_to_stop(agents, supervisor.registry, timeout)
+  let instance_ids = list.map(agents, fn(summary) { summary.status.instance_id })
+  wait_for_agents_to_stop(instance_ids, supervisor.registry, timeout)
 }
 
 fn wait_for_agents_to_stop(
-  keys: List(InstanceKey),
+  instance_ids: List(InstanceId),
   registry: Subject(RegistryMsg),
   remaining_ms: Int,
 ) -> Nil {
   case remaining_ms <= 0 {
     True -> Nil  // Timeout, continuar con shutdown forzado
     False -> {
-      let still_alive = list.filter(keys, fn(k) {
-        case registry_api.lookup(registry, k, remaining_ms) {
+      let still_alive = list.filter(instance_ids, fn(iid) {
+        case registry_api.lookup_by_instance_id(registry, iid, remaining_ms) {
           Ok(Some(_)) -> True
           _ -> False
         }
@@ -1040,7 +1097,7 @@ fn wait_for_agents_to_stop(
          │                       │                       │                       │<──────┘               │
          │                       │  Ok(agent_ref)        │                       │                       │
          │                       │<──────────────────────│                       │                       │
-         │                       │  Register(key, agent_ref)                     │                       │
+         │                       │  Register(status, agent_ref)                  │                       │
          │                       │──────────────────────────────────────────────────────────────────────>│
          │                       │                       │                       │                       │  monitor(pid)
          │                       │                       │                       │                       │───────┐
@@ -1129,7 +1186,12 @@ pub fn interact_when_idle_test() {
 	    cancel_interaction: fn(_handle) { Nil },
 	    stop_server: fn(_resource) { Nil },
 	  )
-  let deps = AgentDeps(test_artifact_registry_subject(), test_port_pool_subject(), bridge)
+  let deps = AgentDeps(
+    test_artifact_registry_subject(),
+    test_port_pool_subject(),
+    test_registry_subject(),
+    bridge,
+  )
   let assert Ok(actor.Started(_pid, agent)) = agent.start_link(args, deps, 10_000)
   
 	  // Act

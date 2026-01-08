@@ -39,7 +39,7 @@ fn handle_server_died(
           // Libera el puerto reservado (idempotente) si existía.
           case state.assigned_port {
             Some(_) -> {
-              let AgentDeps(_artifact_registry, port_pool, _bridge) = state.deps
+              let AgentDeps(_artifact_registry, port_pool, _registry, _bridge) = state.deps
               port_pool_api.release(port_pool, state.instance_id, state.config.call_timeout_ms)
             }
             None -> Nil
@@ -52,6 +52,8 @@ fn handle_server_died(
             state: agent_failed(reason),
             assigned_port: None,
           )
+          let AgentDeps(_artifact_registry, _port_pool, registry, _bridge) = state.deps
+          registry_api.update_status(registry, state.instance_id, to_status_view(new_state))
           
           actor.continue(new_state)
           |> actor.with_selector(selector)

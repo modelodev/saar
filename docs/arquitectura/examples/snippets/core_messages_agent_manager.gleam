@@ -5,6 +5,7 @@
 // Ubicación: sad/core/messages.gleam
 import gleam/otp/actor
 import sad/core/agent as agent
+import sad/types.{type InstanceSummary}
 
 /// Argumentos para crear un agente.
 pub type StartArgs {
@@ -33,7 +34,7 @@ pub type AgentManagerMsg {
   DeleteWorkerDone(InstanceId, Result(Nil, DeleteError))
   /// Down del worker de delete (internal).
   DeleteWorkerDown(Down)
-  ListAgents(Subject(List(InstanceKey)))
+  ListAgents(Subject(List(InstanceSummary)))
 }
 
 /// Errores al crear un agente.

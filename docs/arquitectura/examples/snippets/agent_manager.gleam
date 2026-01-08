@@ -5,6 +5,7 @@
 import gleam/dict
 import gleam/dict.{type Dict}
 import gleam/list
+import gleam/option.{type Option}
 import gleam/otp/actor
 import gleam/otp/factory_supervisor
 import gleam/erlang/process.{type Name, type Subject, type Monitor, type Pid, type Down, type Selector} as process
@@ -14,11 +15,17 @@ import sad/core/artifact_registry_api
 import sad/workspace
 import sad/core/messages.{
   type AgentMsg, type RegistryMsg, type ArtifactRegistryMsg,
-  type InstanceKey, InstanceKey, type InstanceId,
+  type InstanceId,
   type AgentManagerMsg, StartAgent, StopAgent, DeleteAgent, DeleteWorkerDone, DeleteWorkerDown, ListAgents,
   type StartArgs, type StartError, type StopError, type DeleteError,
 }
-import sad/types.{type SadConfig, Stopped}
+import sad/types.{
+  type SadConfig,
+  type AgentStatusView,
+  type AgentPhase, Provisioning,
+  type AgentRunMode, RunIdle,
+  Stopped,
+}
 import sad/app_state.{type AppState}
 import sad/bridge/bridge.{type Bridge, default_bridge}
 
@@ -137,8 +144,6 @@ fn handle_start_agent(
   args: StartArgs,
   reply_to: Subject(Result(agent.AgentRef, StartError)),
 ) -> actor.Next(State, AgentManagerMsg) {
-  let key = InstanceKey(args.profile.meta.id, args.instance_id)
-  
   // Nota de concurrencia (importante):
   // `AgentManagerActor` es un actor: procesa 1 mensaje a la vez. Por tanto, un `ListAgents`
   // no puede “colarse” entre “crear actor” y “registrar”: quedará en el mailbox y se
@@ -155,17 +160,27 @@ fn handle_start_agent(
       actor.continue(state)
     }
     Ok(actor.Started(_pid, agent_ref)) ->
-      register_agent_or_rollback(state, key, agent_ref, reply_to)
+      register_agent_or_rollback(state, args, agent_ref, reply_to)
   }
 }
 
 fn register_agent_or_rollback(
   state: State,
-  key: InstanceKey,
+  args: StartArgs,
   agent_ref: agent.AgentRef,
   reply_to: Subject(Result(agent.AgentRef, StartError)),
 ) -> actor.Next(State, AgentManagerMsg) {
-  case registry_api.register(state.registry, key, agent_ref, state.config.registry_timeout_ms) {
+  let StartArgs(profile, instance_id, _params, _workspace, _config) = args
+  let status = AgentStatusView(
+    profile_id: profile.meta.id,
+    instance_id: instance_id,
+    lifecycle: profile.meta.lifecycle,
+    phase: Provisioning,
+    mode: RunIdle,
+    assigned_port: None,
+    failure_reason: None,
+  )
+  case registry_api.register(state.registry, status, agent_ref, state.config.registry_timeout_ms) {
     Ok(_) -> {
       process.send(reply_to, Ok(agent_ref))
       actor.continue(state)

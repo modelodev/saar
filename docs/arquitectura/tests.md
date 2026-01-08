@@ -377,12 +377,15 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 | Test | Descripción |
 |------|-------------|
-| `register_new_instance` | Registro vacío → `Register` → aparece en mapa |
+| `register_new_instance` | Registro vacío → `Register(status, agent)` → aparece en mapa con summary |
 | `register_duplicate_fails` | Misma clave dos veces → error |
 | `register_is_atomic_for_uniqueness` | No depende de `lookup` previo: `Register` es la fuente de unicidad (evita TOCTOU) |
 | `unregister_removes` | `Unregister` → `Lookup` devuelve `None` |
+| `unregister_by_instance_id_removes` | `UnregisterByInstanceId` → `LookupByInstanceId` devuelve `None` |
 | `list_by_profile_filters` | Solo devuelve instancias del perfil pedido |
+| `list_all_returns_summaries` | `ListAll` devuelve `InstanceSummary` con status cacheado |
 | `lookup_by_ids_uses_key` | Construye `InstanceKey` correctamente |
+| `update_status_updates_summary` | `UpdateStatus` refresca status y `status_updated_at` |
 | `agent_down_removes_entry` | Proceso monitoreado muere → entrada eliminada automáticamente |
 | `monitor_established_on_register` | Al registrar se establece monitor del proceso |
 
@@ -401,8 +404,9 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `deps_discovered_by_name_not_passed_by_hand` | Root usa `Name` + `get_by_name` (sin “returning chain” ni subjects inventados) |
 | `agent_crash_does_not_crash_manager` | Caída de un agente no tumba al manager (no están linkados) |
 | `agent_crash_does_not_restart_automatically` | Si un agente cae, SAD no lo reinicia; SAM decide recreación |
-| `start_agent_same_key_one_wins` | Dos `StartAgent` concurrentes con misma `InstanceKey` → exactamente uno Ok; el otro `RegistrationFailed(AlreadyExists)` sin leaks |
+| `start_agent_same_key_one_wins` | Dos `StartAgent` concurrentes con misma `instance_id` → exactamente uno Ok; el otro `RegistrationFailed(AlreadyExists)` sin leaks |
 | `start_agent_registration_failed_rolls_back` | Si `registry.register` falla, el agente arrancado se termina (`Terminate(SupervisorCleanup)`) |
+| `list_agents_returns_summaries` | `ListAgents` devuelve summaries cacheados (sin N+1) |
 | `reload_does_not_affect_running_agents` | Agentes existentes mantienen su perfil original (snapshot en StartArgs) |
 
 ---
@@ -637,6 +641,8 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | Test | Descripción |
 |------|-------------|
 | `post_sys_agents_creates_instance` | Responde 201 + `state=provisioning` (no espera provisioning); registra actor y arranca worker asíncrono |
+| `get_sys_agents_lists_cached` | `/sys/agents` devuelve `InstanceSummary` con status cacheado (sin N+1) |
+| `get_sys_agents_lists_live_true` | `/sys/agents?live=true` refresca status live (opt-in) |
 | `get_sys_agents_status` | Devuelve `AgentStatusView` |
 | `get_sys_agents_status_does_not_expose_params` | `AgentStatusView`/`AgentInfoView` no incluye `ResolvedParams` ni secretos (solo vista pública) |
 | `get_sys_agents_logs_stream` | SSE de `LogEvent` |

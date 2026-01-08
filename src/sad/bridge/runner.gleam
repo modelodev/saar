@@ -8,15 +8,12 @@ import sad/artifacts
 import sad/bridge/port_process
 import sad/bridge/serialization
 import sad/runner_contract
+import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input
 import sad/types/output as types_output
 import sad/types/runner as types_runner
-
-const read_timeout_ms = 200
-
-const max_read_attempts = 200
 
 type ReadState {
   ReadState(
@@ -33,10 +30,18 @@ pub fn execute_transient(
   env: List(#(String, String)),
   cwd: String,
   input: types_input.SadInput,
-  max_runner_event_bytes: Int,
-  max_stdout_bytes: Int,
+  config: types_config.SadConfig,
   streaming: Bool,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
+  let #(
+    max_runner_event_bytes,
+    max_stdout_bytes,
+    read_timeout_ms,
+    max_read_attempts,
+    wrapper,
+    artifact_base_path,
+  ) = runner_settings(config)
+
   use events <- result.try(run_and_collect_events(
     runner_path,
     runner_args,
@@ -45,6 +50,9 @@ pub fn execute_transient(
     input,
     max_runner_event_bytes,
     max_stdout_bytes,
+    read_timeout_ms,
+    max_read_attempts,
+    wrapper,
     True,
   ))
 
@@ -63,6 +71,7 @@ pub fn execute_transient(
       runner_response_to_interaction_result(
         response,
         input.runner_def.artifact_config,
+        artifact_base_path,
         input.context.trace_id,
       )
     Error(error) -> Error(error)
@@ -75,9 +84,16 @@ pub fn run_provision(
   env: List(#(String, String)),
   cwd: String,
   input: types_input.SadInput,
-  max_runner_event_bytes: Int,
-  max_stdout_bytes: Int,
+  config: types_config.SadConfig,
 ) -> Result(types_runner.RunnerProvisionResult, types_output.InteractionError) {
+  let #(
+    max_runner_event_bytes,
+    max_stdout_bytes,
+    read_timeout_ms,
+    max_read_attempts,
+    wrapper,
+    _,
+  ) = runner_settings(config)
   let args = list.append(runner_args, ["--provision"])
 
   use events <- result.try(run_and_collect_events(
@@ -88,6 +104,9 @@ pub fn run_provision(
     input,
     max_runner_event_bytes,
     max_stdout_bytes,
+    read_timeout_ms,
+    max_read_attempts,
+    wrapper,
     True,
   ))
 
@@ -136,8 +155,12 @@ fn run_and_collect_events(
   input: types_input.SadInput,
   max_runner_event_bytes: Int,
   max_stdout_bytes: Int,
+  read_timeout_ms: Int,
+  max_read_attempts: Int,
+  wrapper: types_config.WrapperConfig,
   close_on_timeout: Bool,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
+  let env = append_wrapper_env(env, wrapper)
   use process <- result.try(start_process(
     runner_path,
     runner_args,
@@ -155,6 +178,8 @@ fn run_and_collect_events(
     max_stdout_bytes,
     input.context.trace_id,
     close_on_timeout,
+    read_timeout_ms,
+    max_read_attempts,
   )
 }
 
@@ -163,6 +188,8 @@ fn read_events(
   max_stdout_bytes: Int,
   trace_id: types_core.TraceId,
   close_on_timeout: Bool,
+  read_timeout_ms: Int,
+  max_read_attempts: Int,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   read_events_loop(
     process,
@@ -175,6 +202,7 @@ fn read_events(
       attempts: max_read_attempts,
       stdin_closed: False,
     ),
+    read_timeout_ms,
   )
 }
 
@@ -184,6 +212,7 @@ fn read_events_loop(
   trace_id: types_core.TraceId,
   close_on_timeout: Bool,
   state: ReadState,
+  read_timeout_ms: Int,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let ReadState(
     total_bytes: total_bytes,
@@ -225,6 +254,7 @@ fn read_events_loop(
                   attempts: attempts,
                   stdin_closed: stdin_closed,
                 ),
+                read_timeout_ms,
               )
             Error(error) ->
               Error(interaction_error(
@@ -249,6 +279,7 @@ fn read_events_loop(
                   attempts: attempts,
                   stdin_closed: True,
                 ),
+                read_timeout_ms,
               )
             }
             False ->
@@ -263,6 +294,7 @@ fn read_events_loop(
                   attempts: attempts - 1,
                   stdin_closed: stdin_closed,
                 ),
+                read_timeout_ms,
               )
           }
         Error(port_process.NoeolFragment(fragment)) ->
@@ -321,6 +353,7 @@ fn provision_result_from_events(
 fn runner_response_to_interaction_result(
   response: types_runner.RunnerResponse,
   artifact_config: types_runner.ArtifactConfig,
+  artifact_base_path: String,
   trace_id: types_core.TraceId,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   case response.status {
@@ -342,7 +375,11 @@ fn runner_response_to_interaction_result(
     types_runner.StatusSuccess -> {
       let data = response_data_from_runner(response.data)
       let artifacts =
-        artifacts.collect(response.artifacts, artifact_config)
+        artifacts.collect(
+          response.artifacts,
+          artifact_config,
+          artifact_base_path,
+        )
         |> result.map_error(fn(err) {
           interaction_error(
             trace_id,
@@ -384,6 +421,52 @@ fn interaction_error(
     message: message,
     trace_id: trace_id,
   )
+}
+
+fn runner_settings(
+  config: types_config.SadConfig,
+) -> #(Int, Int, Int, Int, types_config.WrapperConfig, String) {
+  let types_config.SadConfig(
+    max_runner_event_bytes: max_runner_event_bytes,
+    max_stdout_bytes: max_stdout_bytes,
+    runner_io: runner_io,
+    wrapper: wrapper,
+    artifacts: artifacts,
+    ..,
+  ) = config
+
+  let types_config.RunnerIoConfig(
+    read_timeout_ms: read_timeout_ms,
+    max_read_attempts: max_read_attempts,
+  ) = runner_io
+
+  let types_config.ArtifactStoreConfig(base_path: base_path) = artifacts
+
+  #(
+    max_runner_event_bytes,
+    max_stdout_bytes,
+    read_timeout_ms,
+    max_read_attempts,
+    wrapper,
+    base_path,
+  )
+}
+
+fn append_wrapper_env(
+  env: List(#(String, String)),
+  wrapper: types_config.WrapperConfig,
+) -> List(#(String, String)) {
+  let types_config.WrapperConfig(
+    read_buffer_bytes: read_buffer_bytes,
+    poll_interval_ms: poll_interval_ms,
+    post_kill_wait_ms: post_kill_wait_ms,
+  ) = wrapper
+
+  list.append(env, [
+    #("SAD_WRAPPER_READ_BUFFER_BYTES", int.to_string(read_buffer_bytes)),
+    #("SAD_WRAPPER_POLL_MS", int.to_string(poll_interval_ms)),
+    #("SAD_WRAPPER_POST_KILL_WAIT_MS", int.to_string(post_kill_wait_ms)),
+  ])
 }
 
 fn contract_error_to_string(error: runner_contract.ContractError) -> String {

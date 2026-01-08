@@ -66,7 +66,7 @@ fn start_interaction(
   // Construir contexto mínimo para el bridge (sin `Bridge` para evitar tipos recursivos).
   let params = get_params(state.state)
     |> option.unwrap(dict.new())
-  let AgentDeps(artifact_registry, _port_pool, bridge) = state.deps
+  let AgentDeps(artifact_registry, _port_pool, registry, bridge) = state.deps
   let ctx = BridgeCtx(
     profile: state.profile,
     instance_id: state.instance_id,
@@ -95,7 +95,10 @@ fn start_interaction(
     mode: Busy(in_flight),
     selector: new_selector,
   )
-  
+
+  // Actualizar cache de status (mode -> RunBusy)
+  registry_api.update_status(registry, state.instance_id, to_status_view(new_state))
+
   actor.continue(new_state)
   |> actor.with_selector(new_selector)
 }

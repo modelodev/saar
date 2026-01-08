@@ -1284,6 +1284,15 @@ pub type AgentStatusView {
   )
 }
 
+/// Resumen cacheado de una instancia (para listados).
+pub type InstanceSummary {
+  InstanceSummary(
+    status: AgentStatusView,
+    registered_at: Int,
+    status_updated_at: Int,
+  )
+}
+
 /// Info pública de una instancia para listados/diagnóstico.
 pub type AgentInfoView {
   AgentInfoView(

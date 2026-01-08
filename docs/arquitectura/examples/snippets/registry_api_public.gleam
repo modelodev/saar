@@ -9,19 +9,25 @@ import gleam/option.{type Option}
 import gleam/list
 import sad/otp/safe_call
 import sad/otp/safe_call.{type CallError, type ApiCallError}
-import sad/core/messages.{type RegistryMsg, Register, Unregister, UnregisterByInstanceId, Lookup, ListByProfile, ListAll, type RegistryError}
+import sad/core/messages.{
+  type RegistryMsg, Register, Unregister, UnregisterByInstanceId, UpdateStatus,
+  Lookup, ListByProfile, ListAll, type RegistryError,
+}
 import sad/core/agent.{type AgentRef}
-import sad/types.{type InstanceKey, InstanceKey, type ProfileId, type InstanceId}
+import sad/types.{
+  type InstanceKey, InstanceKey, type ProfileId, type InstanceId,
+  type AgentStatusView, type InstanceSummary,
+}
 
-/// Registra un agente en el registry.
+/// Registra un agente en el registry con status inicial.
 /// Falla si ya existe una entrada con la misma clave.
 pub fn register(
   registry: Subject(RegistryMsg),
-  key: InstanceKey,
+  status: AgentStatusView,
   agent: AgentRef,
   timeout_ms: Int,
 ) -> Result(Nil, ApiCallError(RegistryError)) {
-  safe_call.call_result_within(registry, timeout_ms, fn(reply_to) { Register(key, agent, reply_to) })
+  safe_call.call_result_within(registry, timeout_ms, fn(reply_to) { Register(status, agent, reply_to) })
 }
 
 /// Elimina un agente del registry.
@@ -75,8 +81,18 @@ pub fn list_by_profile(
 pub fn list_all(
   registry: Subject(RegistryMsg),
   timeout_ms: Int,
-) -> Result(List(InstanceKey), CallError) {
+) -> Result(List(InstanceSummary), CallError) {
   safe_call.call_within(registry, timeout_ms, fn(reply_to) { ListAll(reply_to) })
+}
+
+/// Actualiza el status cacheado de una instancia.
+/// Fire-and-forget: no espera confirmación.
+pub fn update_status(
+  registry: Subject(RegistryMsg),
+  instance_id: InstanceId,
+  status: AgentStatusView,
+) -> Nil {
+  actor.send(registry, UpdateStatus(instance_id, status))
 }
 
 /// Cuenta el número de instancias registradas.

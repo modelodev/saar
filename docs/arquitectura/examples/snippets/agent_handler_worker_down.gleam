@@ -33,6 +33,8 @@ fn handle_worker_down(
             mode: Idle,
             selector: new_selector,
           )
+          let AgentDeps(_artifact_registry, _port_pool, registry, _bridge) = state.deps
+          registry_api.update_status(registry, state.instance_id, to_status_view(new_state))
           
           actor.continue(new_state)
           |> actor.with_selector(new_selector)

@@ -173,7 +173,7 @@ Describen el agente: metadata, parámetros, runner, capabilities.
 - **AgentActor**: FSM por instancia con protocolo de mensajes unificado
 - **ProfilesActor**: SSOT de perfiles en memoria (ProfileId → Profile) para reload sin reiniciar SAD
 - **AgentManagerActor**: actor “manager” que crea agentes vía `AgentFactorySupervisor` (children `Temporary`, sin auto-restart)
-- **Registry**: mapea `instance_id` → PID (unicidad global) y mantiene `InstanceKey(profile_id, instance_id)`
+- **Registry**: mapea `instance_id` → `RegistryEntry` (PID + `profile_id` + `InstanceSummary` cacheado)
 
 ### Bridge
 - Spawna workers para ejecutar runners (ports)

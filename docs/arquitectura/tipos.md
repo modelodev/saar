@@ -21,6 +21,22 @@ Este documento mantiene el **contrato** y extractos clave (regla: evitar bloques
 **Nota sobre FFI:** La función `now_ms()` está implementada en `sad/ffi.gleam`.
 Ver `bridge.md` §FFI para detalles de la implementación.
 
+## 12. Vistas de instancia (wire)
+
+```gleam
+/// Resumen de instancia para listados (cacheado).
+pub type InstanceSummary {
+  InstanceSummary(
+    status: AgentStatusView,
+    registered_at: Int,
+    status_updated_at: Int,
+  )
+}
+```
+
+**Nota v0:** `status` es cacheado y puede estar levemente desfasado; el endpoint de estado expone la vista live.
+`registered_at` y `status_updated_at` están en milliseconds (`now_ms()`).
+
 ## 13. Protocolos de mensajes (OTP internos)
 
 Define protocolos internos de actores (solo tipos, sin lógica).
@@ -126,20 +142,21 @@ import sad/core/agent.{type AgentRef}
 /// Clave compuesta para identificar una instancia.
 /// Nota v0: `instance_id` es unico globalmente (independiente de `profile_id`).
 /// El Registry indexa por `instance_id` y mantiene `profile_id` en la entrada; `InstanceKey`
-/// se conserva por compatibilidad del protocolo y para listados.
+/// se conserva por compatibilidad del protocolo y listados legacy.
 pub type InstanceKey {
   InstanceKey(profile_id: ProfileId, instance_id: InstanceId)
 }
 
 /// Protocolo de mensajes del Registry.
 pub type RegistryMsg {
-  Register(InstanceKey, AgentRef, Subject(Result(Nil, RegistryError)))
+  Register(AgentStatusView, AgentRef, Subject(Result(Nil, RegistryError)))
   Unregister(InstanceKey)
   UnregisterByInstanceId(InstanceId)
   Lookup(InstanceKey, Subject(Option(AgentRef)))
   LookupByInstanceId(InstanceId, Subject(Option(AgentRef)))
   ListByProfile(ProfileId, Subject(List(InstanceId)))
-  ListAll(Subject(List(InstanceKey)))
+  ListAll(Subject(List(InstanceSummary)))
+  UpdateStatus(InstanceId, AgentStatusView)
   AgentDown(Down)
 }
 
@@ -185,7 +202,7 @@ pub type AgentManagerMsg {
   DeleteAgent(InstanceId, Subject(Result(Nil, DeleteError)))
   DeleteWorkerDone(InstanceId, Result(Nil, DeleteError))
   DeleteWorkerDown(Down)
-  ListAgents(Subject(List(InstanceKey)))
+  ListAgents(Subject(List(InstanceSummary)))
 }
 ```
 

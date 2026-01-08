@@ -13,7 +13,9 @@ pub type ArtifactError {
 pub fn collect(
   artifacts: List(types_runner.ArtifactRef),
   config: types_runner.ArtifactConfig,
+  base_path: String,
 ) -> Result(List(types_output.PublicArtifact), ArtifactError) {
+  let normalized_base = normalize_base_path(base_path)
   case config.include {
     [] -> Ok([])
     _ ->
@@ -27,7 +29,7 @@ pub fn collect(
             Ok([
               types_output.PublicArtifact(
                 name: artifact.name,
-                url: "/artifacts/" <> uuid.v7_string(),
+                url: normalized_base <> uuid.v7_string(),
                 mime: artifact.mime,
               ),
               ..collected
@@ -45,6 +47,13 @@ fn validate_path(path: String) -> Result(String, ArtifactError) {
   |> result.map_error(fn(err) {
     InvalidPath(workspace.path_error_to_string(err))
   })
+}
+
+fn normalize_base_path(base_path: String) -> String {
+  case string.ends_with(base_path, "/") {
+    True -> base_path
+    False -> base_path <> "/"
+  }
 }
 
 fn matches_globs(

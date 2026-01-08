@@ -7,15 +7,12 @@ import gleeunit/should
 import port_helpers
 import runner_fixtures
 import sad/bridge/runner
+import sad/types/config as types_config
 import sad/types/enums as types_enums
 import sad/types/output as types_output
 import sad/types/runner as types_runner
 import simplifile
 import youid/uuid
-
-const max_event_bytes = 262_144
-
-const max_stdout_bytes = 10_485_760
 
 pub fn main() {
   gleeunit.main()
@@ -36,8 +33,7 @@ pub fn transient_echo_happy_test() {
       port_helpers.base_env(500, []),
       ".",
       input,
-      max_event_bytes,
-      max_stdout_bytes,
+      default_config(),
       False,
     )
 
@@ -72,8 +68,7 @@ pub fn transient_invalid_json_fails_test() {
       port_helpers.base_env(500, []),
       ".",
       input,
-      max_event_bytes,
-      max_stdout_bytes,
+      default_config(),
       False,
     )
 
@@ -99,8 +94,7 @@ pub fn provision_requires_single_result_test() {
       port_helpers.base_env(500, []),
       ".",
       input,
-      max_event_bytes,
-      max_stdout_bytes,
+      default_config(),
     )
 
   let assert Error(err) = result
@@ -123,8 +117,7 @@ pub fn streaming_chunks_ok_test() {
       port_helpers.base_env(500, []),
       ".",
       input,
-      max_event_bytes,
-      max_stdout_bytes,
+      default_config(),
       True,
     )
 
@@ -137,8 +130,7 @@ pub fn streaming_chunks_ok_test() {
       port_helpers.base_env(500, []),
       ".",
       input,
-      max_event_bytes,
-      max_stdout_bytes,
+      default_config(),
       False,
     )
 
@@ -162,8 +154,7 @@ pub fn runner_crash_returns_infra_error_test() {
       port_helpers.base_env(500, []),
       ".",
       input,
-      max_event_bytes,
-      max_stdout_bytes,
+      default_config(),
       False,
     )
 
@@ -194,8 +185,7 @@ pub fn artifact_collection_respects_globs_test() {
       env,
       ".",
       input,
-      max_event_bytes,
-      max_stdout_bytes,
+      default_config(),
       False,
     )
 
@@ -218,8 +208,7 @@ pub fn artifact_collection_respects_globs_test() {
       env,
       ".",
       input,
-      max_event_bytes,
-      max_stdout_bytes,
+      default_config(),
       False,
     )
 
@@ -246,8 +235,7 @@ pub fn artifact_id_is_uuid_v7_test() {
       env,
       ".",
       input,
-      max_event_bytes,
-      max_stdout_bytes,
+      default_config(),
       False,
     )
 
@@ -268,6 +256,10 @@ pub fn artifact_id_is_uuid_v7_test() {
 fn ensure_workspace(path: String) {
   let _ = simplifile.delete(file_or_dir_at: path)
   let assert Ok(_) = simplifile.create_directory_all(path)
+}
+
+fn default_config() -> types_config.SadConfig {
+  types_config.default_sad_config()
 }
 
 fn artifact_id_from_url(url: String) -> String {

@@ -80,6 +80,9 @@ pub fn default_config_invariants_test() {
     sse_keep_alive_interval_ms: sse_keep_alive_interval_ms,
     log_stream: log_stream,
     interaction_stream: interaction_stream,
+    runner_io: runner_io,
+    wrapper: wrapper,
+    artifacts: artifacts,
     managed_port_host: managed_port_host,
     landlock_mode: landlock_mode,
   ) = types_config.default_sad_config()
@@ -127,6 +130,27 @@ pub fn default_config_invariants_test() {
   interaction_batch_byte_size |> should.equal(4096)
   interaction_flush_interval_ms |> should.equal(25)
   interaction_push_timeout_ms |> should.equal(250)
+
+  let types_config.RunnerIoConfig(
+    read_timeout_ms: read_timeout_ms,
+    max_read_attempts: max_read_attempts,
+  ) = runner_io
+
+  read_timeout_ms |> should.equal(200)
+  max_read_attempts |> should.equal(200)
+
+  let types_config.WrapperConfig(
+    read_buffer_bytes: read_buffer_bytes,
+    poll_interval_ms: poll_interval_ms,
+    post_kill_wait_ms: post_kill_wait_ms,
+  ) = wrapper
+
+  read_buffer_bytes |> should.equal(4096)
+  poll_interval_ms |> should.equal(50)
+  post_kill_wait_ms |> should.equal(200)
+
+  let types_config.ArtifactStoreConfig(base_path: base_path) = artifacts
+  base_path |> should.equal("/artifacts/")
 }
 
 pub fn runner_event_variants_test() {

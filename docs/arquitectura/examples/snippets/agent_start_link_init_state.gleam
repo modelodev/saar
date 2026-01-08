@@ -1,13 +1,14 @@
 import gleam/otp/actor
-import sad/core/messages.{type StartArgs, type PortPoolMsg, type ArtifactRegistryMsg}
+import sad/core/messages.{type StartArgs, type PortPoolMsg, type ArtifactRegistryMsg, type RegistryMsg}
 import sad/bridge/bridge.{type Bridge, type BridgeCtx, BridgeCtx}
 
 /// Dependencias internas del agente.
-/// v0: solo lo que necesitan workers del bridge (registro de artefactos + Bridge inyectable).
+/// v0: bridge + registry status cache + artefactos + port_pool.
 pub type AgentDeps {
   AgentDeps(
     artifact_registry: Subject(ArtifactRegistryMsg),
     port_pool: Subject(PortPoolMsg),
+    registry: Subject(RegistryMsg),
     bridge: Bridge,
   )
 }

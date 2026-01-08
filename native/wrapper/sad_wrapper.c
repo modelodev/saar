@@ -45,16 +45,20 @@ static void setup_signals(void) {
   signal(SIGTERM, SIG_IGN);
 }
 
-static int read_shutdown_ms(void) {
-  const char *value = getenv("SAD_SHUTDOWN_MS");
+static int read_env_int(const char *name, int default_value) {
+  const char *value = getenv(name);
   if (!value) {
-    return 10000;
+    return default_value;
   }
-  int ms = atoi(value);
-  if (ms <= 0) {
-    return 10000;
+  int parsed = atoi(value);
+  if (parsed <= 0) {
+    return default_value;
   }
-  return ms;
+  return parsed;
+}
+
+static int read_shutdown_ms(void) {
+  return read_env_int("SAD_SHUTDOWN_MS", 10000);
 }
 
 static bool is_stop_message(const char *buf) {
@@ -146,7 +150,7 @@ static void wait_for_parent_ready(int sync_fd) {
   close(sync_fd);
 }
 
-static bool wait_for_child_exit(pid_t child_pid, int timeout_ms) {
+static bool wait_for_child_exit(pid_t child_pid, int timeout_ms, int poll_ms) {
   int waited = 0;
   int status = 0;
   while (waited < timeout_ms) {
@@ -154,14 +158,16 @@ static bool wait_for_child_exit(pid_t child_pid, int timeout_ms) {
     if (result == child_pid) {
       return true;
     }
-    usleep(50 * 1000);
-    waited += 50;
+    usleep((useconds_t)poll_ms * 1000);
+    waited += poll_ms;
   }
   return false;
 }
 
 static void stop_sequence(pid_t child_pid, int shutdown_ms, bool in_namespace) {
-  if (wait_for_child_exit(child_pid, shutdown_ms)) {
+  int poll_ms = read_env_int("SAD_WRAPPER_POLL_MS", 50);
+  int post_kill_wait_ms = read_env_int("SAD_WRAPPER_POST_KILL_WAIT_MS", 200);
+  if (wait_for_child_exit(child_pid, shutdown_ms, poll_ms)) {
     _exit(0);
   }
   if (in_namespace) {
@@ -182,7 +188,7 @@ static void stop_sequence(pid_t child_pid, int shutdown_ms, bool in_namespace) {
     kill_process_group(child_pid, SIGKILL);
   }
 
-  usleep(200 * 1000);
+  usleep((useconds_t)post_kill_wait_ms * 1000);
 
   int status;
   waitpid(child_pid, &status, 0);
@@ -195,7 +201,12 @@ static int run_child(char **argv) {
 }
 
 static int main_loop(pid_t child_pid, bool in_namespace, int child_stdin_fd) {
-  char buf[4096];
+  int buffer_bytes = read_env_int("SAD_WRAPPER_READ_BUFFER_BYTES", 4096);
+  char *buf = malloc((size_t)buffer_bytes + 1);
+  if (!buf) {
+    perror("malloc");
+    return 1;
+  }
   const int shutdown_ms = read_shutdown_ms();
 
   while (1) {
@@ -204,12 +215,13 @@ static int main_loop(pid_t child_pid, bool in_namespace, int child_stdin_fd) {
       pid_t waited = waitpid(child_pid, &status, WNOHANG);
       if (waited == child_pid) {
         close_child_stdin(&child_stdin_fd);
+        free(buf);
         return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
       }
       child_exited = 0;
     }
 
-    ssize_t n = read(STDIN_FILENO, buf, sizeof(buf) - 1);
+    ssize_t n = read(STDIN_FILENO, buf, (size_t)buffer_bytes);
     if (n == 0) {
       debug_log("wrapper stop: stdin EOF");
       close_child_stdin(&child_stdin_fd);

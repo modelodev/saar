@@ -17,7 +17,7 @@ fn handle_stop_instance(
         |> process.deselect_specific_monitor(monitor)
       
       // Cancelar el worker
-      let AgentDeps(_artifact_registry, _port_pool, bridge) = state.deps
+      let AgentDeps(_artifact_registry, _port_pool, _registry, bridge) = state.deps
       bridge.cancel_interaction(handle)
       
       // Responder error al cliente (ReplyChannel es alias de Subject)
@@ -31,7 +31,7 @@ fn handle_stop_instance(
   // 2. Detener servidor continuous si existe
   case state.state {
     ReadyContinuous(_, resource) -> {
-      let AgentDeps(_artifact_registry, _port_pool, bridge) = state.deps
+      let AgentDeps(_artifact_registry, _port_pool, _registry, bridge) = state.deps
       bridge.stop_server(resource)
     }
     _ -> Nil
@@ -41,7 +41,7 @@ fn handle_stop_instance(
   // En v0, el `managed_port` se reasigna al hacer StartInstance.
   case state.assigned_port {
     Some(_) -> {
-      let AgentDeps(_artifact_registry, port_pool, _bridge) = state.deps
+      let AgentDeps(_artifact_registry, port_pool, _registry, _bridge) = state.deps
       port_pool_api.release(port_pool, state.instance_id, state.config.call_timeout_ms)
     }
     None -> Nil
@@ -59,6 +59,8 @@ fn handle_stop_instance(
       assigned_port: None,
       selector: selector,
     )
+  let AgentDeps(_artifact_registry, _port_pool, registry, _bridge) = state.deps
+  registry_api.update_status(registry, state.instance_id, to_status_view(new_state))
   actor.continue(new_state)
   |> actor.with_selector(selector)
 }

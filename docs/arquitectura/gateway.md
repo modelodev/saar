@@ -200,6 +200,7 @@ Un ejemplo típico de fallo asíncrono es `PORT_POOL_EXHAUSTED` (continuous con 
 ```http
 GET /sys/agents
 GET /sys/agents?profile_id=vanna
+GET /sys/agents?live=true
 Authorization: Bearer <api_key>
 ```
 
@@ -213,22 +214,31 @@ Authorization: Bearer <api_key>
       "profile_id": "vanna",
       "a2a_base_url": "https://sad.example/instances/vanna-prod-1/",
       "lifecycle": "continuous",
-      "state": "ready",
-      "created_at": "2025-01-15T10:00:00Z"
+      "phase": "ready_continuous",
+      "mode": "run_idle",
+      "assigned_port": 9001,
+      "failure_reason": null,
+      "registered_at": 1736935200000,
+      "status_updated_at": 1736935212345
     },
     {
       "instance_id": "aider-dev-1",
       "profile_id": "aider",
       "a2a_base_url": "https://sad.example/instances/aider-dev-1/",
       "lifecycle": "transient",
-      "state": "ready",
-      "created_at": "2025-01-15T09:30:00Z"
+      "phase": "ready_transient",
+      "mode": "run_idle",
+      "assigned_port": null,
+      "failure_reason": null,
+      "registered_at": 1736933400000,
+      "status_updated_at": 1736933412345
     }
   ]
 }
 ```
 
-**Nota:** Devuelve resumen (identidad + metadatos), no snapshot completo.
+**Nota:** Devuelve `InstanceSummary` (status cacheado + timestamps en ms). Para status live, usar
+`GET /sys/agents/:instance_id/status` o `?live=true` (opt-in, puede implicar N+1).
 Para vista detallada (perfil asociado, capabilities, `ui_hint`, etc.), usar `GET /agents/:instance_id`.
 No existe `GET /sys/agents/:instance_id`.
 

@@ -19,6 +19,22 @@ pub type InteractionStreamConfig {
   )
 }
 
+pub type RunnerIoConfig {
+  RunnerIoConfig(read_timeout_ms: Int, max_read_attempts: Int)
+}
+
+pub type WrapperConfig {
+  WrapperConfig(
+    read_buffer_bytes: Int,
+    poll_interval_ms: Int,
+    post_kill_wait_ms: Int,
+  )
+}
+
+pub type ArtifactStoreConfig {
+  ArtifactStoreConfig(base_path: String)
+}
+
 pub type SadConfig {
   SadConfig(
     server_host: String,
@@ -44,6 +60,9 @@ pub type SadConfig {
     sse_keep_alive_interval_ms: Int,
     log_stream: LogStreamConfig,
     interaction_stream: InteractionStreamConfig,
+    runner_io: RunnerIoConfig,
+    wrapper: WrapperConfig,
+    artifacts: ArtifactStoreConfig,
     managed_port_host: String,
     landlock_mode: enums.LandlockMode,
   )
@@ -78,6 +97,13 @@ pub fn default_sad_config() -> SadConfig {
       flush_interval_ms: 25,
       push_timeout_ms: 250,
     ),
+    runner_io: RunnerIoConfig(read_timeout_ms: 200, max_read_attempts: 200),
+    wrapper: WrapperConfig(
+      read_buffer_bytes: 4096,
+      poll_interval_ms: 50,
+      post_kill_wait_ms: 200,
+    ),
+    artifacts: ArtifactStoreConfig(base_path: "/artifacts/"),
     managed_port_host: "127.0.0.1",
     landlock_mode: enums.LandlockBestEffort,
   )
