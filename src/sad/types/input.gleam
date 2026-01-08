@@ -1,5 +1,6 @@
 import gleam/dict.{type Dict}
-import gleam/option.{type Option}
+import gleam/list
+import gleam/option.{type Option, None, Some}
 import sad/types
 import sad/types/core
 import sad/types/enums
@@ -31,6 +32,41 @@ pub type InputPayload {
 
 pub type SadHelpers {
   SadHelpers(last_user_content: Option(String), last_user_files: List(FileRef))
+}
+
+pub fn derive_helpers(payload: InputPayload) -> SadHelpers {
+  case payload {
+    PayloadChat(messages, _) -> {
+      let last_user_content =
+        messages
+        |> list.reverse
+        |> list.find(fn(message) { message.role == "user" })
+        |> fn(found) {
+          case found {
+            Ok(message) -> Some(message.content)
+            Error(_) -> None
+          }
+        }
+
+      SadHelpers(last_user_content: last_user_content, last_user_files: [])
+    }
+    PayloadFiles(files) ->
+      SadHelpers(last_user_content: None, last_user_files: files)
+    PayloadMixed(messages, files, _) -> {
+      let last_user_content =
+        messages
+        |> list.reverse
+        |> list.find(fn(message) { message.role == "user" })
+        |> fn(found) {
+          case found {
+            Ok(message) -> Some(message.content)
+            Error(_) -> None
+          }
+        }
+
+      SadHelpers(last_user_content: last_user_content, last_user_files: files)
+    }
+  }
 }
 
 pub type RequestContext {

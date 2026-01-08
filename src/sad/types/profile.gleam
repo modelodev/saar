@@ -71,11 +71,19 @@ pub type RunnerCapability {
   )
 }
 
+pub type ResponseMapping {
+  ResponseMapping(
+    text_pointer: Option(String),
+    artifacts_pointer: Option(String),
+  )
+}
+
 pub type HttpCapability {
   HttpCapability(
     path: String,
     method: HttpMethod,
     input_schema: Option(InputSchema),
+    response: Option(ResponseMapping),
     description: Option(String),
     streaming: Bool,
     limits: Option(CapabilityLimits),
