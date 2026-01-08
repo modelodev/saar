@@ -14,7 +14,15 @@
     "base_url": "http://{{runner.host}}:{{runner.port}}",
     "health_check": {"path": "/health", "method": "GET", "expect_statuses": [200]},
     "capabilities": {
-      "echo": {"path": "/echo", "method": "POST", "streaming": false}
+      "echo": {
+        "path": "/echo",
+        "method": "POST",
+        "streaming": false,
+        "response": {
+          "text_pointer": "/answer",
+          "artifacts_pointer": "/files"
+        }
+      }
     }
   }
 }
