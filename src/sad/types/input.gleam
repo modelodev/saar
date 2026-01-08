@@ -1,5 +1,6 @@
 import gleam/dict.{type Dict}
 import gleam/option.{type Option}
+import sad/types
 import sad/types/core
 import sad/types/enums
 import sad/types/runner
@@ -46,7 +47,7 @@ pub type SadInputMeta {
 }
 
 pub type ResolvedParams =
-  Dict(String, String)
+  types.ResolvedParams
 
 pub type SadInput {
   SadInput(

@@ -1,5 +1,6 @@
 import gleam/dict
 import gleam/option
+import sad/types
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input
@@ -16,7 +17,9 @@ pub fn base_input(
       instance_id: option.Some(types_core.instance_id("inst-1")),
       mode: types_enums.Transient,
     ),
-    params: dict.from_list([#("model", "gpt-4")]),
+    params: dict.from_list([
+      #("model", types.NormalValue(types_core.StringVal("gpt-4"))),
+    ]),
     input: payload,
     context: types_input.RequestContext(
       trace_id: types_core.trace_id("trace-1"),
@@ -25,7 +28,7 @@ pub fn base_input(
     helpers: option.None,
     runner_def: types_runner.Runner(
       type_: "generic_uvx",
-      tool_config: types_runner.ToolConfig(
+      tool_config: types_runner.ToolConfigPackage(
         package: "aider-chat",
         command: "aider",
         with_packages: [],

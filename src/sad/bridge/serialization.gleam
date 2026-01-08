@@ -2,6 +2,7 @@ import gleam/dict
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option
+import sad/types
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input
@@ -42,7 +43,9 @@ fn sad_input_meta_to_json(meta: types_input.SadInputMeta) -> Json {
 fn params_to_json(params: types_input.ResolvedParams) -> Json {
   params
   |> dict.to_list
-  |> list.map(fn(pair) { #(pair.0, json.string(pair.1)) })
+  |> list.map(fn(pair) {
+    #(pair.0, json.string(types.resolved_value_to_env(pair.1)))
+  })
   |> json.object
 }
 
@@ -130,11 +133,16 @@ fn runner_to_json(runner: types_runner.Runner) -> Json {
 }
 
 fn tool_config_to_json(config: types_runner.ToolConfig) -> Json {
-  json.object([
-    #("package", json.string(config.package)),
-    #("command", json.string(config.command)),
-    #("with_packages", json.array(config.with_packages, json.string)),
-  ])
+  case config {
+    types_runner.ToolConfigPackage(package, command, with_packages) ->
+      json.object([
+        #("package", json.string(package)),
+        #("command", json.string(command)),
+        #("with_packages", json.array(with_packages, json.string)),
+      ])
+    types_runner.ToolConfigScript(script) ->
+      json.object([#("script", json.string(script))])
+  }
 }
 
 fn runtime_config_to_json(config: types_runner.RuntimeConfig) -> Json {

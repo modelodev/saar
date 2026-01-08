@@ -60,13 +60,7 @@ pub fn start_process_with_env(
   process.trap_exits(True)
   ensure_wrapper_path()
 
-  port_process.start(
-    runner_path,
-    runner_args,
-    env,
-    cwd,
-    max_event_bytes,
-  )
+  port_process.start(runner_path, runner_args, env, cwd, max_event_bytes)
   |> test_assertions.assert_ok
 }
 
