@@ -2,6 +2,7 @@ import gleam/list
 import gleam/option.{None}
 import gleeunit
 import gleeunit/should
+import sad/types as types
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
@@ -39,6 +40,22 @@ pub fn secret_redaction_test() {
   types_core.secret_value("super-secret")
   |> types_core.secret_inspect
   |> should.equal("***REDACTED***")
+}
+
+pub fn resolved_value_redacts_secrets_test() {
+  types.SecretVal(types_core.secret_value("super-secret"))
+  |> types.resolved_value_inspect
+  |> should.equal("***REDACTED***")
+}
+
+pub fn resolved_value_to_env_unwraps_test() {
+  types.NormalValue(types_core.StringVal("hi"))
+  |> types.resolved_value_to_env
+  |> should.equal("hi")
+
+  types.SecretVal(types_core.secret_value("top-secret"))
+  |> types.resolved_value_to_env
+  |> should.equal("top-secret")
 }
 
 pub fn id_roundtrip_test() {

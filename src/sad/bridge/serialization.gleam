@@ -6,6 +6,7 @@ import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input
 import sad/types/runner as types_runner
+import sad/types as types
 
 pub fn sad_input_to_json(input: types_input.SadInput) -> Json {
   json.object([
@@ -42,7 +43,9 @@ fn sad_input_meta_to_json(meta: types_input.SadInputMeta) -> Json {
 fn params_to_json(params: types_input.ResolvedParams) -> Json {
   params
   |> dict.to_list
-  |> list.map(fn(pair) { #(pair.0, json.string(pair.1)) })
+  |> list.map(fn(pair) {
+    #(pair.0, json.string(types.resolved_value_to_env(pair.1)))
+  })
   |> json.object
 }
 

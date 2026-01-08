@@ -3,7 +3,9 @@ import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/result
 import gleam/string
+import sad/types as types
 import sad/types/core as types_core
 import sad/types/profile as types_profile
 
@@ -23,7 +25,7 @@ pub fn resolve_params(
   config_values: dict.Dict(String, types_core.Value),
   env_lookup: fn(String) -> Result(String, Nil),
   init_params: dict.Dict(String, types_core.Value),
-) -> Result(dict.Dict(String, types_core.Value), List(ParamResolutionError)) {
+) -> Result(types.ResolvedParams, List(ParamResolutionError)) {
   let entries =
     parameters
     |> dict.to_list
@@ -58,9 +60,9 @@ fn resolve_param(
   config_values config_values: dict.Dict(String, types_core.Value),
   env_lookup env_lookup: fn(String) -> Result(String, Nil),
   init_params init_params: dict.Dict(String, types_core.Value),
-) -> Result(types_core.Value, ParamResolutionError) {
+) -> Result(types.ResolvedValue, ParamResolutionError) {
   case param {
-    types_profile.FixedParam(value) -> Ok(value)
+    types_profile.FixedParam(value) -> Ok(types.NormalValue(value))
 
     types_profile.ConfigParam(key, default, expected_type) ->
       resolve_from_dict(
@@ -84,7 +86,11 @@ fn resolve_param(
 
     types_profile.SecretParam(key, expected_type) ->
       case env_lookup(key) {
-        Ok(raw) -> parse_env_value(param_name, expected_type, raw)
+        Ok(raw) ->
+          case parse_env_value(param_name, expected_type, raw) {
+            Ok(_) -> Ok(types.SecretVal(types_core.secret_value(raw)))
+            Error(err) -> Error(err)
+          }
         Error(_) -> Error(MissingSecret(param_name, key))
       }
   }
@@ -97,12 +103,18 @@ fn resolve_from_dict(
   values values: dict.Dict(String, types_core.Value),
   default default: Option(types_core.Value),
   on_missing on_missing: fn() -> ParamResolutionError,
-) -> Result(types_core.Value, ParamResolutionError) {
+) -> Result(types.ResolvedValue, ParamResolutionError) {
   case dict.get(values, source_key) {
-    Ok(value) -> ensure_type(param_name, expected_type, value)
+    Ok(value) -> {
+      use checked <- result.try(ensure_type(param_name, expected_type, value))
+      Ok(types.NormalValue(checked))
+    }
     Error(_) ->
       case default {
-        Some(value) -> ensure_type(param_name, expected_type, value)
+        Some(value) -> {
+          use checked <- result.try(ensure_type(param_name, expected_type, value))
+          Ok(types.NormalValue(checked))
+        }
         None -> Error(on_missing())
       }
   }
