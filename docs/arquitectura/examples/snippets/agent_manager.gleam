@@ -2,20 +2,23 @@
 // Source: arquitectura/actores.md:1305
 // Purpose: documentation-only; may not compile as-is.
 
+import gleam/dict
+import gleam/dict.{type Dict}
+import gleam/list
 import gleam/otp/actor
 import gleam/otp/factory_supervisor
-import gleam/erlang/process.{type Name, type Subject} as process
+import gleam/erlang/process.{type Name, type Subject, type Monitor, type Pid, type Down, type Selector} as process
 import sad/core/agent
 import sad/core/registry_api
 import sad/core/artifact_registry_api
 import sad/workspace
 import sad/core/messages.{
   type AgentMsg, type RegistryMsg, type ArtifactRegistryMsg,
-  type InstanceKey, InstanceKey,
-  type AgentManagerMsg, StartAgent, StopAgent, DeleteAgent, ListAgents,
+  type InstanceKey, InstanceKey, type InstanceId,
+  type AgentManagerMsg, StartAgent, StopAgent, DeleteAgent, DeleteWorkerDone, DeleteWorkerDown, ListAgents,
   type StartArgs, type StartError, type StopError, type DeleteError,
 }
-import sad/types.{type SadConfig}
+import sad/types.{type SadConfig, Stopped}
 import sad/app_state.{type AppState}
 import sad/bridge/bridge.{type Bridge, default_bridge}
 
@@ -45,6 +48,18 @@ type State {
     bridge: Bridge,
     /// Supervisor dinámico para crear agentes (children) bajo demanda.
     agent_factory: factory_supervisor.Supervisor(StartArgs, agent.AgentRef),
+    /// Selector para monitorear workers internos (delete).
+    selector: Selector(AgentManagerMsg),
+    /// Deletes en progreso (instance_id -> monitor + reply_to).
+    delete_in_flight: Dict(InstanceId, DeleteInFlight),
+  )
+}
+
+type DeleteInFlight {
+  DeleteInFlight(
+    reply_to: Subject(Result(Nil, DeleteError)),
+    monitor: Monitor,
+    worker_pid: Pid,
   )
 }
 
@@ -73,15 +88,19 @@ pub fn start(
   let init = fn(self) {
     let ManagerDeps(registry, artifact_registry, bridge, agent_factory) = deps
 
+    let selector = process.new_selector()
     let state = State(
       config: config,
       registry: registry,
       artifact_registry: artifact_registry,
       bridge: bridge,
       agent_factory: agent_factory,
+      selector: selector,
+      delete_in_flight: dict.new(),
     )
     
     actor.initialised(state)
+    |> actor.with_selector(selector)
     |> actor.returning(self)
   }
   
@@ -100,8 +119,10 @@ fn handle_message(
   case msg {
     // Gestión de instancias
     StartAgent(args, reply_to) -> handle_start_agent(state, args, reply_to)
-    StopAgent(key, reply_to) -> handle_stop_agent(state, key, reply_to)
-    DeleteAgent(key, reply_to) -> handle_delete_agent(state, key, reply_to)
+    StopAgent(instance_id, reply_to) -> handle_stop_agent(state, instance_id, reply_to)
+    DeleteAgent(instance_id, reply_to) -> handle_delete_agent(state, instance_id, reply_to)
+    DeleteWorkerDone(instance_id, result) -> handle_delete_worker_done(state, instance_id, result)
+    DeleteWorkerDown(down) -> handle_delete_worker_down(state, down)
     ListAgents(reply_to) -> {
       // Delegar al Registry (SSOT de instancias activas)
       let agents = registry_api.list_all(state.registry, state.config.registry_timeout_ms)
@@ -160,77 +181,229 @@ fn register_agent_or_rollback(
 
 fn handle_stop_agent(
   state: State,
-  key: InstanceKey,
+  instance_id: InstanceId,
   reply_to: Subject(Result(Nil, StopError)),
 ) -> actor.Next(State, AgentManagerMsg) {
   // Stop es idempotente y NO limpia workspace/artefactos; delete encadena cleanup.
   // Consultar Registry (SSOT) para obtener el agente
-  let assert Ok(found) =
-    registry_api.lookup(state.registry, key, state.config.registry_timeout_ms)
-
-  case found {
-    None -> {
-      process.send(reply_to, Error(AgentNotFound))
+  case registry_api.lookup_by_instance_id(
+    state.registry,
+    instance_id,
+    state.config.registry_timeout_ms,
+  ) {
+    Error(_) -> {
+      process.send(reply_to, Error(StopTimeout))
       actor.continue(state)
     }
-    Some(agent) -> {
-      // 1. Detener la instancia (la instancia permanece registrada en estado Stopped)
-      agent.stop_instance(agent, UserRequested)
-      process.send(reply_to, Ok(Nil))
-      actor.continue(state)
-    }
+    Ok(found) ->
+      case found {
+        None -> {
+          process.send(reply_to, Error(AgentNotFound))
+          actor.continue(state)
+        }
+        Some(agent_ref) -> {
+          // 1. Detener la instancia (la instancia permanece registrada en estado Stopped)
+          agent.stop_instance(agent_ref, UserRequested)
+          process.send(reply_to, Ok(Nil))
+          actor.continue(state)
+        }
+      }
   }
 }
 
 fn handle_delete_agent(
   state: State,
-  key: InstanceKey,
+  instance_id: InstanceId,
   reply_to: Subject(Result(Nil, DeleteError)),
 ) -> actor.Next(State, AgentManagerMsg) {
   // Delete es idempotente solo para "no existe": si no existe, responder Ok(Nil).
   // Si existe y el cleanup falla, devolver `DeleteError` y NO dejar el sistema en un estado medio-borrado.
-  // Secuencia: stop (si existe) → cleanup workspace → purge artefactos → release port → unregister → terminate.
-  let assert Ok(found) =
-    registry_api.lookup(state.registry, key, state.config.registry_timeout_ms)
-
-  case found {
-    None -> {
-      process.send(reply_to, Ok(Nil))
+  // Secuencia: stop (si existe) → esperar Stopped → cleanup workspace → purge artefactos → unregister → terminate.
+  // Nota: release de port ocurre dentro de StopInstance (idempotente).
+  case registry_api.lookup_by_instance_id(
+    state.registry,
+    instance_id,
+    state.config.registry_timeout_ms,
+  ) {
+    Error(_) -> {
+      process.send(reply_to, Error(DeleteTimeout))
       actor.continue(state)
     }
-    Some(agent_ref) -> {
-      let InstanceKey(_profile_id, instance_id) = key
-      // Delete no debe bloquear el mailbox: hacer cleanup en un worker corto (IO).
-      // Worker BEAM de IO: usar unlinked para que fallos externos no tumben al supervisor.
-      process.spawn_unlinked(fn() {
-        // 1) StopInstance: pasa a estado Stopped sin limpiar.
-        agent.stop_instance(agent_ref, UserRequested)
+    Ok(found) ->
+      case found {
+        None -> {
+          process.send(reply_to, Ok(Nil))
+          actor.continue(state)
+        }
+        Some(agent_ref) -> {
+          let self = process.self()
+          // Delete no debe bloquear el mailbox: hacer cleanup en un worker corto (IO).
+          // Worker BEAM de IO: usar unlinked para que fallos externos no tumben al supervisor.
+          let worker_pid =
+            process.spawn_unlinked(fn() {
+              // 1) StopInstance: pasa a estado Stopped sin limpiar.
+              agent.stop_instance(agent_ref, UserRequested)
 
-        // 2) Cleanup de filesystem (IO). Si falla, devolver error explícito y mantener la instancia.
-        case workspace.cleanup(state.config.workspaces_directory, instance_id) {
-          Ok(_) -> {
-            // 3) Purge de artefactos (SSOT en BEAM).
-            artifact_registry_api.purge_by_instance(state.artifact_registry, instance_id)
+              // 1.1) Esperar confirmación de estado Stopped (timeout duro).
+              let stop_result =
+                wait_for_stopped(
+                  agent_ref,
+                  state.config.shutdown_timeout_ms,
+                  state.config.status_timeout_ms,
+                )
 
-            // 4) Release del puerto reservado (solo aplica a continuous con managed_port).
-            // 5) Unregister de la instancia (ya no existe).
-            registry_api.unregister(state.registry, key)
+              case stop_result {
+                Error(e) -> process.send(self, DeleteWorkerDone(instance_id, Error(e)))
+                Ok(_) -> {
+                  // 2) Cleanup de filesystem (IO). Si falla, devolver error explícito y mantener la instancia.
+                  let result = case workspace.cleanup(state.config.workspaces_directory, instance_id) {
+                    Ok(_) -> {
+                      // 3) Purge de artefactos (SSOT en BEAM).
+                      let _ =
+                        artifact_registry_api.purge_by_instance(
+                          state.artifact_registry,
+                          instance_id,
+                          state.config.registry_timeout_ms,
+                        )
 
-            // 6) Terminar el proceso BEAM del agente (delete = instancia desaparece).
-            agent.terminate(agent_ref, Deleted)
+                      // 4) Unregister de la instancia (ya no existe).
+                      registry_api.unregister_by_instance_id(state.registry, instance_id)
 
-            process.send(reply_to, Ok(Nil))
-          }
-          Error(e) -> {
-            // Rollback de seguridad (v0): aunque el filesystem no se pueda limpiar,
-            // dejamos de servir artefactos (los ArtifactIds dejan de resolverse).
-            artifact_registry_api.purge_by_instance(state.artifact_registry, instance_id)
-            process.send(reply_to, Error(CleanupFailed(e)))
+                      // 5) Terminar el proceso BEAM del agente (delete = instancia desaparece).
+                      agent.terminate(agent_ref, Deleted)
+
+                      Ok(Nil)
+                    }
+                    Error(e) -> {
+                      // Rollback de seguridad (v0): aunque el filesystem no se pueda limpiar,
+                      // dejamos de servir artefactos (los ArtifactIds dejan de resolverse).
+                      let _ =
+                        artifact_registry_api.purge_by_instance(
+                          state.artifact_registry,
+                          instance_id,
+                          state.config.registry_timeout_ms,
+                        )
+                      Error(CleanupFailed(e))
+                    }
+                  }
+
+                  process.send(self, DeleteWorkerDone(instance_id, result))
+                }
+              }
+            })
+
+          let monitor = process.monitor(worker_pid)
+          let new_selector = state.selector
+            |> process.select_specific_monitor(monitor, DeleteWorkerDown)
+          let new_state = State(
+            ..state,
+            selector: new_selector,
+            delete_in_flight: dict.insert(
+              state.delete_in_flight,
+              instance_id,
+              DeleteInFlight(reply_to, monitor, worker_pid),
+            ),
+          )
+
+          actor.continue(new_state)
+          |> actor.with_selector(new_selector)
+        }
+      }
+  }
+}
+
+fn handle_delete_worker_done(
+  state: State,
+  instance_id: InstanceId,
+  result: Result(Nil, DeleteError),
+) -> actor.Next(State, AgentManagerMsg) {
+  case dict.get(state.delete_in_flight, instance_id) {
+    None -> actor.continue(state)
+    Some(DeleteInFlight(reply_to, monitor, _pid)) -> {
+      process.demonitor_process(monitor)
+      let new_selector = state.selector
+        |> process.deselect_specific_monitor(monitor)
+      let new_state =
+        State(
+          ..state,
+          selector: new_selector,
+          delete_in_flight: dict.delete(state.delete_in_flight, instance_id),
+        )
+      process.send(reply_to, result)
+      actor.continue(new_state)
+      |> actor.with_selector(new_selector)
+    }
+  }
+}
+
+fn handle_delete_worker_down(
+  state: State,
+  down: Down,
+) -> actor.Next(State, AgentManagerMsg) {
+  case down {
+    process.ProcessDown(pid: down_pid, ..) ->
+      case find_delete_in_flight_by_pid(state.delete_in_flight, down_pid) {
+        None -> actor.continue(state)
+        Some(#(instance_id, DeleteInFlight(reply_to, monitor, _pid))) -> {
+          process.demonitor_process(monitor)
+          let new_selector = state.selector
+            |> process.deselect_specific_monitor(monitor)
+          let new_state =
+            State(
+              ..state,
+              selector: new_selector,
+              delete_in_flight: dict.delete(state.delete_in_flight, instance_id),
+            )
+          process.send(reply_to, Error(DeleteWorkerCrashed))
+          actor.continue(new_state)
+          |> actor.with_selector(new_selector)
+        }
+      }
+  }
+}
+
+fn find_delete_in_flight_by_pid(
+  delete_in_flight: Dict(InstanceId, DeleteInFlight),
+  pid: Pid,
+) -> Option(#(InstanceId, DeleteInFlight)) {
+  delete_in_flight
+  |> dict.to_list
+  |> list.find(fn(entry) {
+    let #(_instance_id, DeleteInFlight(_reply_to, _monitor, worker_pid)) = entry
+    worker_pid == pid
+  })
+}
+
+fn wait_for_stopped(
+  agent_ref: agent.AgentRef,
+  timeout_ms: Int,
+  status_timeout_ms: Int,
+) -> Result(Nil, DeleteError) {
+  wait_for_stopped_loop(agent_ref, timeout_ms, status_timeout_ms)
+}
+
+fn wait_for_stopped_loop(
+  agent_ref: agent.AgentRef,
+  remaining_ms: Int,
+  status_timeout_ms: Int,
+) -> Result(Nil, DeleteError) {
+  if remaining_ms <= 0 {
+    Error(DeleteTimeout)
+  } else {
+    case agent.status(agent_ref, status_timeout_ms) {
+      Error(_) -> Error(DeleteTimeout)
+      Ok(status) ->
+        case status.phase {
+          Stopped -> Ok(Nil)
+          _ -> {
+            let sleep_ms = case remaining_ms < 100 {
+              True -> remaining_ms
+              False -> 100
+            }
+            process.sleep(sleep_ms)
+            wait_for_stopped_loop(agent_ref, remaining_ms - sleep_ms, status_timeout_ms)
           }
         }
-      })
-
-      actor.continue(state)
     }
   }
 }

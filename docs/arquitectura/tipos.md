@@ -125,6 +125,8 @@ import sad/core/agent.{type AgentRef}
 
 /// Clave compuesta para identificar una instancia.
 /// Nota v0: `instance_id` es unico globalmente (independiente de `profile_id`).
+/// El Registry indexa por `instance_id` y mantiene `profile_id` en la entrada; `InstanceKey`
+/// se conserva por compatibilidad del protocolo y para listados.
 pub type InstanceKey {
   InstanceKey(profile_id: ProfileId, instance_id: InstanceId)
 }
@@ -133,6 +135,7 @@ pub type InstanceKey {
 pub type RegistryMsg {
   Register(InstanceKey, AgentRef, Subject(Result(Nil, RegistryError)))
   Unregister(InstanceKey)
+  UnregisterByInstanceId(InstanceId)
   Lookup(InstanceKey, Subject(Option(AgentRef)))
   LookupByInstanceId(InstanceId, Subject(Option(AgentRef)))
   ListByProfile(ProfileId, Subject(List(InstanceId)))
@@ -178,11 +181,15 @@ pub type StartArgs {
 ```gleam
 pub type AgentManagerMsg {
   StartAgent(StartArgs, Subject(Result(agent.AgentRef, StartError)))
-  StopAgent(InstanceKey, Subject(Result(Nil, StopError)))
-  DeleteAgent(InstanceKey, Subject(Result(Nil, DeleteError)))
+  StopAgent(InstanceId, Subject(Result(Nil, StopError)))
+  DeleteAgent(InstanceId, Subject(Result(Nil, DeleteError)))
+  DeleteWorkerDone(InstanceId, Result(Nil, DeleteError))
+  DeleteWorkerDown(Down)
   ListAgents(Subject(List(InstanceKey)))
 }
 ```
+
+**Nota v0:** `StopAgent` y `DeleteAgent` usan `InstanceId` (unico globalmente).
 
 ## 13.4 ArtifactRegistryMsg - Protocolo del Registro de Artefactos
 

@@ -8,6 +8,7 @@ Este documento describe la implementación OTP, referenciando los tipos definido
 - Efectos en bordes (`bridge`), actor puro
 - `ActorMode` como ADT explícito (no flags `Option`)
 - Selector dinámico para monitoreo de workers
+- Si se customiza un selector, incluir siempre el `default_subject`
 - El actor **nunca resuelve parámetros**; recibe `ResolvedParams` ya resueltos
 
 **Nomenclatura:** `AgentState` es el ADT interno del agente (incluye `ResolvedParams` y recursos BEAM como `Port` vía `AgentResource`); el record `AgentRuntimeState` es el estado runtime completo del actor. La API expone `AgentStatusView`/`AgentInfoView` (wire/diagnóstico) con `phase` + `mode` (`AgentRunMode`), sin secretos ni handles OTP.
@@ -264,7 +265,11 @@ Extracto (v0):
 
 ```gleam
 pub type AgentDeps {
-  AgentDeps(artifact_registry: Subject(ArtifactRegistryMsg), bridge: Bridge)
+  AgentDeps(
+    artifact_registry: Subject(ArtifactRegistryMsg),
+    port_pool: Subject(PortPoolMsg),
+    bridge: Bridge,
+  )
 }
 
 pub fn start_link(args: StartArgs, deps: AgentDeps, init_timeout_ms: Int) -> actor.StartResult(AgentRef) {
@@ -499,11 +504,15 @@ fn truncate_oldest(
 
 Al servir logs (por ejemplo, en `AttachLogs`), convertir con `deque.to_list(buffer.lines)`.
 
+**Regla v0:** `AttachLogs` mantiene un solo subscriber activo; una nueva conexión reemplaza la anterior.
+
 **Características del algoritmo:**
 - **Operaciones O(1) amortizado** con `deque` (`push_back`/`pop_front`)
 - **Política drop-oldest**: se conservan los logs más recientes
 - El límite se configura en `config.toml` con `log_buffer_bytes`
 - En v0, SAD no persiste logs a disco (si se requiere histórico, delegar a capas superiores).
+
+**Mejora futura (no v0):** agrupar logs en el bridge y enviar `IngestLogs(List(LogEvent))` en lugar de un mensaje por línea para reducir presión del mailbox del `AgentActor`.
 
 ## 15. Registry
 
@@ -515,11 +524,14 @@ Los tipos conceptuales están en `tipos.md` §13.2.
 ```gleam
 import gleam/erlang/process.{type Pid}
 import sad/core/agent_internal
+import sad/types.{type InstanceId, type ProfileId}
 
 pub type RegistryState {
   RegistryState(
-    instances: Dict(InstanceKey, RegistryEntry),
-    instance_index: Dict(InstanceId, InstanceKey),
+    /// Indice primario: instance_id -> entry.
+    by_instance: Dict(InstanceId, RegistryEntry),
+    /// Indice secundario: pid -> instance_id (limpieza O(1) en AgentDown).
+    by_pid: Dict(Pid, InstanceId),
     /// Selector dinámico para monitores de agentes.
     selector: Selector(RegistryMsg),
   )
@@ -528,6 +540,8 @@ pub type RegistryState {
 /// Entrada en el registry con metadatos adicionales.
 pub type RegistryEntry {
   RegistryEntry(
+    instance_id: InstanceId,
+    profile_id: ProfileId,
     agent: AgentRef,
     pid: Pid,
     monitor: Monitor,
@@ -583,8 +597,8 @@ fn handle_register(
   reply_to: Subject(Result(Nil, RegistryError)),
 ) -> actor.Next(RegistryState, RegistryMsg) {
   // Verificar unicidad global por instance_id
-  let InstanceKey(_pid, iid) = key
-  case dict.has_key(state.instance_index, iid) {
+  let InstanceKey(profile_id, iid) = key
+  case dict.has_key(state.by_instance, iid) {
     True -> {
       process.send(reply_to, Error(AlreadyExists))
       actor.continue(state)
@@ -597,17 +611,19 @@ fn handle_register(
         |> process.select_specific_monitor(monitor, AgentDown)
       
       let entry = RegistryEntry(
+        instance_id: iid,
+        profile_id: profile_id,
         agent: agent,
         pid: agent_pid,
         monitor: monitor,
         registered_at: now_ms(),
       )
       
-      let new_instances = dict.insert(state.instances, key, entry)
-      let new_index = dict.insert(state.instance_index, iid, key)
+      let new_by_instance = dict.insert(state.by_instance, iid, entry)
+      let new_by_pid = dict.insert(state.by_pid, agent_pid, iid)
       let new_state = RegistryState(
-        instances: new_instances,
-        instance_index: new_index,
+        by_instance: new_by_instance,
+        by_pid: new_by_pid,
         selector: new_selector,
       )
       
@@ -635,35 +651,32 @@ fn handle_agent_down(
     _ -> process.self()  // Fallback, no debería ocurrir
   }
   
-  // Buscar qué entrada corresponde a este PID
-  let maybe_entry = state.instances
-    |> dict.to_list
-    |> list.find(fn(item) {
-      let #(_key, registry_entry) = item
-      registry_entry.pid == down_pid
-    })
-  
-  case maybe_entry {
-    Some(#(key, entry)) -> {
-      let InstanceKey(_pid, iid) = key
-      // Limpiar monitor
-      process.demonitor_process(entry.monitor)
-      
-      // Actualizar selector para dejar de escuchar el monitor
-      let new_selector = state.selector
-        |> process.deselect_specific_monitor(entry.monitor)
-      
-      // Eliminar entrada
-      let new_instances = dict.delete(state.instances, key)
-      let new_index = dict.delete(state.instance_index, iid)
-      let new_state = RegistryState(
-        instances: new_instances,
-        instance_index: new_index,
-        selector: new_selector,
-      )
-      
-      actor.continue(new_state)
-      |> actor.with_selector(new_selector)
+  // Buscar instance_id en indice pid -> instance_id
+  case dict.get(state.by_pid, down_pid) {
+    Some(iid) -> {
+      case dict.get(state.by_instance, iid) {
+        Some(entry) -> {
+          // Limpiar monitor
+          process.demonitor_process(entry.monitor)
+          
+          // Actualizar selector para dejar de escuchar el monitor
+          let new_selector = state.selector
+            |> process.deselect_specific_monitor(entry.monitor)
+          
+          // Eliminar entrada
+          let new_by_instance = dict.delete(state.by_instance, iid)
+          let new_by_pid = dict.delete(state.by_pid, down_pid)
+          let new_state = RegistryState(
+            by_instance: new_by_instance,
+            by_pid: new_by_pid,
+            selector: new_selector,
+          )
+          
+          actor.continue(new_state)
+          |> actor.with_selector(new_selector)
+        }
+        None -> actor.continue(state)
+      }
     }
     None -> actor.continue(state)
   }
@@ -674,7 +687,7 @@ fn handle_agent_down(
 
 SAD usa un Registry custom en lugar de `process.Name` por:
 
-1. **Unicidad por instance_id:** indice directo `InstanceId -> InstanceKey` para routing HTTP
+1. **Unicidad por instance_id:** indice directo `InstanceId -> RegistryEntry` y limpieza O(1) con `Pid -> InstanceId`
 2. **Listado por perfil:** necesitamos listar todas las instancias de un perfil
 3. **Metadatos:** el registry almacena timestamp y monitor
 4. **Cleanup automático:** monitoreo integrado para limpieza
@@ -691,8 +704,15 @@ fn handle_lookup(
   key: InstanceKey,
   reply_to: Subject(Option(AgentRef)),
 ) -> actor.Next(RegistryState, RegistryMsg) {
-  let result = dict.get(state.instances, key)
-    |> option.map(fn(entry) { entry.agent })
+  let InstanceKey(profile_id, iid) = key
+  let result = case dict.get(state.by_instance, iid) {
+    Some(entry) ->
+      case entry.profile_id == profile_id {
+        True -> Some(entry.agent)
+        False -> None
+      }
+    None -> None
+  }
   
   process.send(reply_to, result)
   actor.continue(state)
@@ -704,12 +724,8 @@ fn handle_lookup_by_instance_id(
   instance_id: InstanceId,
   reply_to: Subject(Option(AgentRef)),
 ) -> actor.Next(RegistryState, RegistryMsg) {
-  let result = case dict.get(state.instance_index, instance_id) {
-    Some(key) ->
-      dict.get(state.instances, key)
-      |> option.map(fn(entry) { entry.agent })
-    None -> None
-  }
+  let result = dict.get(state.by_instance, instance_id)
+    |> option.map(fn(entry) { entry.agent })
 
   process.send(reply_to, result)
   actor.continue(state)
@@ -721,12 +737,11 @@ fn handle_list_by_profile(
   profile_id: ProfileId,
   reply_to: Subject(List(InstanceId)),
 ) -> actor.Next(RegistryState, RegistryMsg) {
-  let instances = state.instances
-    |> dict.keys
-    |> list.filter_map(fn(key) {
-      let InstanceKey(pid, iid) = key
-      case pid == profile_id {
-        True -> Some(iid)
+  let instances = state.by_instance
+    |> dict.values
+    |> list.filter_map(fn(entry) {
+      case entry.profile_id == profile_id {
+        True -> Some(entry.instance_id)
         False -> None
       }
     })
@@ -735,6 +750,8 @@ fn handle_list_by_profile(
   actor.continue(state)
 }
 ```
+
+**Nota v0:** `ListByProfile` es O(n) (filtra `dict.values`). Si se vuelve un hot path, agregar un `profile_index: Dict(ProfileId, Set(InstanceId))`.
 
 ### 15.5 API Pública del Registry
 
@@ -745,15 +762,19 @@ Referencia completa (v0): `arquitectura/examples/snippets/registry_api_public.gl
 Extracto (v0):
 
 ```gleam
-pub fn register(registry: Subject(RegistryMsg), key: InstanceKey, agent: AgentRef, timeout_ms: Int) -> Result(Nil, RegistryError) {
+pub fn register(registry: Subject(RegistryMsg), key: InstanceKey, agent: AgentRef, timeout_ms: Int) -> Result(Nil, ApiCallError(RegistryError)) {
   ...
 }
 
-pub fn lookup(registry: Subject(RegistryMsg), key: InstanceKey, timeout_ms: Int) -> Option(AgentRef) {
+pub fn lookup(registry: Subject(RegistryMsg), key: InstanceKey, timeout_ms: Int) -> Result(Option(AgentRef), CallError) {
   ...
 }
 
-pub fn lookup_by_instance_id(registry: Subject(RegistryMsg), instance_id: InstanceId, timeout_ms: Int) -> Option(AgentRef) {
+pub fn lookup_by_instance_id(registry: Subject(RegistryMsg), instance_id: InstanceId, timeout_ms: Int) -> Result(Option(AgentRef), CallError) {
+  ...
+}
+
+pub fn unregister_by_instance_id(registry: Subject(RegistryMsg), instance_id: InstanceId) -> Nil {
   ...
 }
 ```
@@ -852,6 +873,8 @@ En SAD v0 se elige:
   monitorea agentes y es el SSOT de instancias activas.
 - Agentes bajo el factory supervisor con `restart_strategy=Temporary` (sin auto-restart): si un agente cae, SAM decide recrearlo.
 
+**Nota v0:** setear explícitamente `restart_strategy=Temporary` en el child spec del factory supervisor; el default de `factory_supervisor` es `Transient` y reinicia en fallos anormales.
+
 **Por qué (valor vs complejidad):**
 - En nuestro modelo, “un agente” corresponde principalmente a **1 proceso de sistema operativo** (y su subtree),
   cuyo ciclo de vida lo gestiona el **wrapper** (SIGTERM→SIGKILL). Esto no exige un sub-árbol BEAM por agente.
@@ -913,19 +936,19 @@ pub fn start_agent(
 /// Detiene una instancia de agente.
 pub fn stop_agent(
   manager: Subject(AgentManagerMsg),
-  key: InstanceKey,
+  instance_id: InstanceId,
   timeout_ms: Int,
 ) -> Result(Nil, ApiCallError(StopError)) {
-  safe_call.call_result_within(manager, timeout_ms, fn(reply_to) { StopAgent(key, reply_to) })
+  safe_call.call_result_within(manager, timeout_ms, fn(reply_to) { StopAgent(instance_id, reply_to) })
 }
 
 /// Elimina una instancia de agente (stop + cleanup).
 pub fn delete_agent(
   manager: Subject(AgentManagerMsg),
-  key: InstanceKey,
+  instance_id: InstanceId,
   timeout_ms: Int,
 ) -> Result(Nil, ApiCallError(DeleteError)) {
-  safe_call.call_result_within(manager, timeout_ms, fn(reply_to) { DeleteAgent(key, reply_to) })
+  safe_call.call_result_within(manager, timeout_ms, fn(reply_to) { DeleteAgent(instance_id, reply_to) })
 }
 
 /// Lista todas las instancias activas.
@@ -936,6 +959,8 @@ pub fn list_agents(
   safe_call.call_within(manager, timeout_ms, fn(reply_to) { ListAgents(reply_to) })
 }
 ```
+
+**Nota v0:** `DeleteAgent` espera a `Stopped` antes de limpiar workspace. Si el worker de delete muere, responde `DeleteWorkerCrashed`.
 
 ### 16.4 Políticas de Reinicio
 
@@ -1104,7 +1129,7 @@ pub fn interact_when_idle_test() {
 	    cancel_interaction: fn(_handle) { Nil },
 	    stop_server: fn(_resource) { Nil },
 	  )
-  let deps = AgentDeps(test_artifact_registry_subject(), bridge)
+  let deps = AgentDeps(test_artifact_registry_subject(), test_port_pool_subject(), bridge)
   let assert Ok(actor.Started(_pid, agent)) = agent.start_link(args, deps, 10_000)
   
 	  // Act

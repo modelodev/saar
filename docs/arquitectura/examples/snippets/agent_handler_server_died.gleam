@@ -10,13 +10,16 @@ fn handle_server_died(
     }
     Continuous -> {
       // Si hay interacción en curso, responder error
-      let state = case state.mode {
-        Idle -> state
+      let #(state, selector) = case state.mode {
+        Idle -> #(state, state.selector)
         Busy(in_flight) -> {
           let InFlight(req, reply_channel, handle) = in_flight
+          let monitor = interaction_handle_monitor(handle)
           
-          // Limpiar monitor del worker
-          process.demonitor_process(interaction_handle_monitor(handle))
+          // Limpiar monitor y selector
+          process.demonitor_process(monitor)
+          let new_selector = state.selector
+            |> process.deselect_specific_monitor(monitor)
           
           // Responder error al cliente (ReplyChannel es alias de Subject)
           let err = InteractionError(
@@ -26,18 +29,38 @@ fn handle_server_died(
           )
           process.send(reply_channel, Error(err))
           
-          AgentRuntimeState(..state, mode: Idle)
+          #(AgentRuntimeState(..state, mode: Idle, selector: new_selector), new_selector)
         }
       }
       
-      // Transitar a Failed (estado unificado)
-      let reason = "Server exited with code " <> int.to_string(exit_code)
-      let new_state = AgentRuntimeState(
-        ..state,
-        state: agent_failed(reason),
-      )
-      
-      actor.continue(new_state)
+      // Solo marcar Failed si estaba ReadyContinuous
+      case state.state {
+        ReadyContinuous(_, _resource) -> {
+          // Libera el puerto reservado (idempotente) si existía.
+          case state.assigned_port {
+            Some(_) -> {
+              let AgentDeps(_artifact_registry, port_pool, _bridge) = state.deps
+              port_pool_api.release(port_pool, state.instance_id, state.config.call_timeout_ms)
+            }
+            None -> Nil
+          }
+          
+          // Transitar a Failed (estado unificado)
+          let reason = "Server exited with code " <> int.to_string(exit_code)
+          let new_state = AgentRuntimeState(
+            ..state,
+            state: agent_failed(reason),
+            assigned_port: None,
+          )
+          
+          actor.continue(new_state)
+          |> actor.with_selector(selector)
+        }
+        _ -> {
+          actor.continue(state)
+          |> actor.with_selector(selector)
+        }
+      }
     }
   }
 }

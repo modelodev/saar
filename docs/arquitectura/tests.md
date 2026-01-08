@@ -1052,7 +1052,7 @@ Los casos “agresivos” de traversal (Windows separators, `%2e%2e`, null bytes
 
 **Framework:** gleeunit (integración)
 
-**Nota:** estos casos están planificados post-v0 (S19) salvo que se prioricen antes.
+**Nota:** estos casos están planificados para S19 (v0) salvo que se prioricen antes.
 
 | Test | Descripción |
 |------|-------------|

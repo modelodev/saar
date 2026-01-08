@@ -5,15 +5,15 @@ Plan version: v2.1
 Esta carpeta define el plan de ejecucion auditable (inputs -> outputs -> evidencia), alineado con SSOT.
 
 ## Jerarquia SSOT
-- docs/arquitectura/tipos.md (tipos e invariantes)
-- docs/arquitectura/protocolos_runner.md (runner JSONL, stop, limites)
-- docs/arquitectura/bridge.md (port_process, interpolacion, SSE upstream)
-- docs/arquitectura/gateway.md (auth, ProblemDetails, SSE, UI proxy, artifacts)
-- docs/arquitectura/protocolos.md (HTTP/A2A/AG-UI/A2UI)
-- docs/arquitectura/config.md (perfiles, params, profiles.sources)
-- docs/arquitectura/operaciones.md (CLI, daemon, env vars)
-- docs/arquitectura/integracion.md (file delivery, streaming)
-- docs/arquitectura/examples/snippets/* (referencias canonicas)
+- arquitectura/tipos.md (tipos e invariantes)
+- arquitectura/protocolos_runner.md (runner JSONL, stop, limites)
+- arquitectura/bridge.md (port_process, interpolacion, SSE upstream)
+- arquitectura/gateway.md (auth, ProblemDetails, SSE, UI proxy, artifacts)
+- arquitectura/protocolos.md (HTTP/A2A/AG-UI/A2UI)
+- arquitectura/config.md (perfiles, params, profiles.sources)
+- arquitectura/operaciones.md (CLI, daemon, env vars)
+- arquitectura/integracion.md (file delivery, streaming)
+- arquitectura/examples/snippets/* (referencias canonicas)
 
 ## Definition of Done (global)
 - gleam format --check src test
@@ -36,5 +36,5 @@ Esta carpeta define el plan de ejecucion auditable (inputs -> outputs -> evidenc
 - Si el gate principal falla a mitad de sprint, se congela scope nuevo y se prioriza pasar el gate.
 
 ## v0 vs post-v0
-- v0 freeze: S01-S16 (core + bridge + gateway + protocolos)
-- post-v0: S17-S20 (CLI/daemon, shutdown, hardening, landlock)
+- v0 freeze: S01-S20 (core + bridge + gateway + protocolos + CLI/daemon + shutdown + hardening + landlock)
+- post-v0: TBD (sin sprints definidos)

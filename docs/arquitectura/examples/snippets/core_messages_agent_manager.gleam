@@ -25,10 +25,14 @@ pub type AgentManagerMsg {
   StartAgent(StartArgs, Subject(Result(agent.AgentRef, StartError)))
   /// Detiene una instancia sin eliminarla: para proceso y transita a `AgentState.Stopped`.
   /// No limpia workspace ni purga artefactos; la instancia sigue existiendo.
-  StopAgent(InstanceKey, Subject(Result(Nil, StopError)))
+  StopAgent(InstanceId, Subject(Result(Nil, StopError)))
   /// Elimina una instancia: stop + cleanup de workspace + purge artefactos + release port + unregister + terminate.
   /// Semántica: idempotente solo para "no existe" (Ok). Si existe y el cleanup falla, responde `DeleteError`.
-  DeleteAgent(InstanceKey, Subject(Result(Nil, DeleteError)))
+  DeleteAgent(InstanceId, Subject(Result(Nil, DeleteError)))
+  /// Resultado del worker de delete (internal).
+  DeleteWorkerDone(InstanceId, Result(Nil, DeleteError))
+  /// Down del worker de delete (internal).
+  DeleteWorkerDown(Down)
   ListAgents(Subject(List(InstanceKey)))
 }
 
@@ -52,4 +56,5 @@ pub type StopError {
 pub type DeleteError {
   DeleteTimeout
   CleanupFailed(String)
+  DeleteWorkerCrashed
 }

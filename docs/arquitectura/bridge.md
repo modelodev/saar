@@ -320,6 +320,8 @@ El bridge spawna un worker que ejecuta el runner y envía mensajes tipados al ac
 El worker captura timestamp y trace_id para cada línea de log.
 Si `streaming` es true, emite eventos genéricos (que los adapters traducen a AG-UI, A2A, etc.).
 
+**Mejora futura (no v0):** agrupar logs en ventanas cortas y enviar batches (`IngestLogs(List(LogEvent))`) para reducir presión de mailbox en el `AgentActor`.
+
 Referencia completa (v0): `arquitectura/examples/snippets/bridge_runner_transient.gleam`.
 
 Extracto (v0):
@@ -436,7 +438,7 @@ pub fn get_runner_network(
 ) -> #(Option(String), Option(Int)) {
   case ctx.assigned_port {
     None -> #(None, None)
-    Some(port) -> #(Some(ctx.managed_port_host), Some(port))
+    Some(port) -> #(Some(ctx.config.managed_port_host), Some(port))
   }
 }
 

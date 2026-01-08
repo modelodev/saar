@@ -19,11 +19,11 @@ Plan version: v2.1
 | S13 | S12 | gateway /sys + auth + sources | S14-S16 |
 | S14 | S13+S09 | interact nativo usable | release interna |
 | S15 | S14 | artifacts + ui_proxy + regresion | S16 |
-| S16 | S15 | AG-UI/A2UI/A2A completo | v0 freeze |
+| S16 | S15 | AG-UI/A2UI/A2A completo | S17-S20 |
 | S17 | S16 | CLI+daemon | S18 |
 | S18 | S17 | graceful shutdown | S19 |
 | S19 | S16 | hardening + git robust | S20 |
-| S20 | S19 | landlock best-effort | cierre |
+| S20 | S19 | landlock best-effort | v0 freeze |
 
 ```mermaid
 graph TD

@@ -3,7 +3,7 @@ import gleam/erlang/process.{type Subject, type Pid}
 import gleam/option.{type Option}
 import sad/streams/sink.{type StreamSink}
 import sad/core/agent.{type AgentRef}
-import sad/core/messages.{type InteractionHandle, type ArtifactRegistryMsg, type PortPoolMsg}
+import sad/core/messages.{type InteractionHandle, type ArtifactRegistryMsg}
 import sad/types.{
   type Profile,
   type InstanceId,
@@ -24,7 +24,6 @@ pub type BridgeCtx {
     assigned_port: Option(Int),
     config: SadConfig,
     artifact_registry: Subject(ArtifactRegistryMsg),
-    port_pool: Subject(PortPoolMsg),
   )
 }
 

@@ -9,7 +9,7 @@ import gleam/option.{type Option}
 import gleam/list
 import sad/otp/safe_call
 import sad/otp/safe_call.{type CallError, type ApiCallError}
-import sad/core/messages.{type RegistryMsg, Register, Unregister, Lookup, ListByProfile, ListAll, type RegistryError}
+import sad/core/messages.{type RegistryMsg, Register, Unregister, UnregisterByInstanceId, Lookup, ListByProfile, ListAll, type RegistryError}
 import sad/core/agent.{type AgentRef}
 import sad/types.{type InstanceKey, InstanceKey, type ProfileId, type InstanceId}
 
@@ -31,6 +31,15 @@ pub fn unregister(
   key: InstanceKey,
 ) -> Nil {
   actor.send(registry, Unregister(key))
+}
+
+/// Elimina un agente del registry por instance_id.
+/// Fire-and-forget: no espera confirmación.
+pub fn unregister_by_instance_id(
+  registry: Subject(RegistryMsg),
+  instance_id: InstanceId,
+) -> Nil {
+  actor.send(registry, UnregisterByInstanceId(instance_id))
 }
 
 /// Busca un agente por clave.
