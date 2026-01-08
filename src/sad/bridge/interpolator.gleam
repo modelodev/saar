@@ -70,6 +70,23 @@ pub fn interpolate_string_strict(
   }
 }
 
+pub fn build_context(
+  params: types.ResolvedParams,
+  input: types_input.InputPayload,
+  context: types_input.RequestContext,
+  runner_host: Option(String),
+  runner_port: Option(Int),
+) -> InterpContext {
+  InterpContext(
+    params: params,
+    input: input,
+    context: context,
+    helpers: Some(types_input.derive_helpers(input)),
+    runner_host: runner_host,
+    runner_port: runner_port,
+  )
+}
+
 pub fn interpolate_dict(
   templates: Dict(String, String),
   ctx: InterpContext,
@@ -110,13 +127,17 @@ pub fn resolve_json_pointer(
   Ok(dynamic_to_json(resolved))
 }
 
-fn resolve_placeholder(
+pub fn resolve_placeholder(
   namespace: String,
   key: String,
   ctx: InterpContext,
 ) -> Result(String, InterpolationError) {
   case namespace {
     "params" -> resolve_params(key, ctx.params)
+    "helpers" -> resolve_helpers(key, ctx.helpers)
+    "context" -> resolve_context(key, ctx.context)
+    "runner" -> resolve_runner(key, ctx.runner_host, ctx.runner_port)
+    "input" -> resolve_input(key, ctx.input)
     _ -> Error(UnknownNamespace(namespace, key))
   }
 }
@@ -128,6 +149,76 @@ fn resolve_params(
   case dict.get(params, key) {
     Ok(value) -> Ok(types.resolved_value_to_env(value))
     Error(_) -> Error(UnknownKey("params", key))
+  }
+}
+
+fn resolve_helpers(
+  key: String,
+  helpers: Option(types_input.SadHelpers),
+) -> Result(String, InterpolationError) {
+  case helpers {
+    None -> Error(UnknownKey("helpers", key))
+    Some(types_input.SadHelpers(last_user_content, _)) ->
+      case key {
+        "last_user_content" -> case last_user_content {
+          Some(content) -> Ok(content)
+          None -> Ok("")
+        }
+        "last_user_files" -> Error(ValueNotScalar("helpers.last_user_files"))
+        _ -> Error(UnknownKey("helpers", key))
+      }
+  }
+}
+
+fn resolve_context(
+  key: String,
+  ctx: types_input.RequestContext,
+) -> Result(String, InterpolationError) {
+  case key {
+    "trace_id" -> Ok(types_core.trace_id_to_string(ctx.trace_id))
+    _ -> Error(UnknownKey("context", key))
+  }
+}
+
+fn resolve_runner(
+  key: String,
+  host: Option(String),
+  port: Option(Int),
+) -> Result(String, InterpolationError) {
+  case key {
+    "host" -> case host {
+      Some(value) -> Ok(value)
+      None -> Error(UnknownKey("runner", "host"))
+    }
+    "port" -> case port {
+      Some(value) -> Ok(int.to_string(value))
+      None -> Error(UnknownKey("runner", "port"))
+    }
+    _ -> Error(UnknownKey("runner", key))
+  }
+}
+
+fn resolve_input(
+  key: String,
+  input: types_input.InputPayload,
+) -> Result(String, InterpolationError) {
+  case input {
+    types_input.PayloadChat(_, extra) | types_input.PayloadMixed(_, _, extra) ->
+      case dict.get(extra, key) {
+        Ok(value) -> case is_scalar_value(value) {
+          True -> Ok(types_core.value_to_string(value))
+          False -> Error(ValueNotScalar("input." <> key))
+        }
+        Error(_) -> Error(UnknownKey("input", key))
+      }
+    types_input.PayloadFiles(_) -> Error(UnknownKey("input", key))
+  }
+}
+
+fn is_scalar_value(value: types_input.InputValue) -> Bool {
+  case value {
+    types_core.ListVal(_) -> False
+    _ -> True
   }
 }
 

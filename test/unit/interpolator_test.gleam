@@ -2,7 +2,7 @@ import gleam/dict
 import gleam/dynamic as dynamic
 import gleam/dynamic/decode
 import gleam/json
-import gleam/option.{None}
+import gleam/option.{type Option, None, Some}
 import gleeunit
 import gleeunit/should
 import sad/bridge/interpolator
@@ -15,23 +15,36 @@ pub fn main() {
 }
 
 fn base_context(params: types.ResolvedParams) -> interpolator.InterpContext {
-  context_with_input(params, types_input.PayloadChat([], dict.new()))
+  context_with_runner(
+    params,
+    types_input.PayloadChat([], dict.new()),
+    None,
+    None,
+  )
 }
 
 fn context_with_input(
   params: types.ResolvedParams,
   input: types_input.InputPayload,
 ) -> interpolator.InterpContext {
-  interpolator.InterpContext(
-    params: params,
-    input: input,
-    context: types_input.RequestContext(
+  context_with_runner(params, input, None, None)
+}
+
+fn context_with_runner(
+  params: types.ResolvedParams,
+  input: types_input.InputPayload,
+  runner_host: Option(String),
+  runner_port: Option(Int),
+) -> interpolator.InterpContext {
+  interpolator.build_context(
+    params,
+    input,
+    types_input.RequestContext(
       trace_id: types_core.trace_id("trace-1"),
       extra: dict.new(),
     ),
-    helpers: None,
-    runner_host: None,
-    runner_port: None,
+    runner_host,
+    runner_port,
   )
 }
 
@@ -280,4 +293,82 @@ pub fn interpolate_json_from_pointer_invalid_test() {
 
   interpolator.interpolate_json(template, ctx)
   |> should.equal(Error(interpolator.InvalidPointer("/input/missing")))
+}
+
+pub fn interpolate_helpers_test() {
+  let input =
+    types_input.PayloadChat(
+      [types_input.ChatMessage(role: "assistant", content: "hi")],
+      dict.new(),
+    )
+
+  let ctx = context_with_input(dict.new(), input)
+
+  interpolator.interpolate_string_strict("{{helpers.last_user_content}}", ctx)
+  |> should.equal(Ok(""))
+}
+
+pub fn interpolate_context_test() {
+  let ctx = base_context(dict.new())
+
+  interpolator.interpolate_string_strict("{{context.trace_id}}", ctx)
+  |> should.equal(Ok("trace-1"))
+}
+
+pub fn interpolate_runner_test() {
+  let ctx =
+    context_with_runner(
+      dict.new(),
+      types_input.PayloadChat([], dict.new()),
+      Some("127.0.0.1"),
+      Some(8080),
+    )
+
+  interpolator.interpolate_string_strict(
+    "{{runner.host}}:{{runner.port}}",
+    ctx,
+  )
+  |> should.equal(Ok("127.0.0.1:8080"))
+
+  let transient_ctx = base_context(dict.new())
+
+  interpolator.interpolate_string_strict("{{runner.host}}", transient_ctx)
+  |> should.equal(Error(interpolator.UnknownKey("runner", "host")))
+}
+
+pub fn interpolate_input_extra_params_test() {
+  let extra =
+    dict.from_list([#("mode", types_core.StringVal("fast"))])
+
+  let input = types_input.PayloadChat([], extra)
+  let ctx = context_with_input(dict.new(), input)
+
+  interpolator.interpolate_string_strict("{{input.mode}}", ctx)
+  |> should.equal(Ok("fast"))
+}
+
+pub fn interpolate_value_not_scalar_test() {
+  let extra =
+    dict.from_list([#("files", types_core.ListVal(["a", "b"]))])
+
+  let input = types_input.PayloadChat([], extra)
+  let ctx = context_with_input(dict.new(), input)
+
+  interpolator.interpolate_string_strict("{{input.files}}", ctx)
+  |> should.equal(Error(interpolator.ValueNotScalar("input.files")))
+
+  let files_input =
+    types_input.PayloadFiles([
+      types_input.FileRef(
+        url: "https://example.com/file.txt",
+        mime: "text/plain",
+        name: "file.txt",
+        context: None,
+      ),
+    ])
+
+  let files_ctx = context_with_input(dict.new(), files_input)
+
+  interpolator.interpolate_string_strict("{{helpers.last_user_files}}", files_ctx)
+  |> should.equal(Error(interpolator.ValueNotScalar("helpers.last_user_files")))
 }
