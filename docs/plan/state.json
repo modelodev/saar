@@ -2,6 +2,35 @@
   "version": "1.0",
   "current_sprint": null,
   "sprints": {
+    "S07": {
+      "status": "completed",
+      "branch": "sprint/s07-port-pool-managed-port",
+      "started_at": "2026-01-08T17:41:44Z",
+      "completed_at": "2026-01-08T18:03:04Z",
+      "current_story": null,
+      "stories": {
+        "S07-T01": {
+          "status": "completed",
+          "branch": "feat/s07-t01-port-pool",
+          "commit": "1d369ceefa1fed0e044c9429dab76f657e24401d"
+        },
+        "S07-T02": {
+          "status": "completed",
+          "branch": "feat/s07-t02-port-pool-exhausted",
+          "commit": "54f8ea3901380ae066cc6494f5076c1f94f77a79"
+        },
+        "S07-T03": {
+          "status": "completed",
+          "branch": "sprint/s07-port-pool-managed-port",
+          "commit": "1d369ceefa1fed0e044c9429dab76f657e24401d"
+        },
+        "S07-T04": {
+          "status": "completed",
+          "branch": "feat/s07-t04-port-pool-tests",
+          "commit": "1d369ceefa1fed0e044c9429dab76f657e24401d"
+        }
+      }
+    },
     "S01": {
       "status": "completed",
       "branch": "sprint/s01-scaffolding-ci-zoo",
