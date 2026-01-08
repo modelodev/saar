@@ -41,6 +41,35 @@
         }
       }
     },
+    "S02": {
+      "status": "completed",
+      "branch": "sprint/s02-tipos-base-errores-sadconfig",
+      "started_at": "2026-01-08T17:23:55Z",
+      "completed_at": "2026-01-08T17:23:55Z",
+      "current_story": null,
+      "stories": {
+        "S02-T01": {
+          "status": "completed",
+          "branch": "sprint/s02-tipos-base-errores-sadconfig",
+          "commit": "c76d750d96cf6f13b942df305eabc963b4c02c00"
+        },
+        "S02-T02": {
+          "status": "completed",
+          "branch": "sprint/s02-tipos-base-errores-sadconfig",
+          "commit": "c76d750d96cf6f13b942df305eabc963b4c02c00"
+        },
+        "S02-T03": {
+          "status": "completed",
+          "branch": "sprint/s02-tipos-base-errores-sadconfig",
+          "commit": "c76d750d96cf6f13b942df305eabc963b4c02c00"
+        },
+        "S02-T04": {
+          "status": "completed",
+          "branch": "sprint/s02-tipos-base-errores-sadconfig",
+          "commit": "c76d750d96cf6f13b942df305eabc963b4c02c00"
+        }
+      }
+    },
     "S06": {
       "status": "completed",
       "branch": "sprint/s06-interpolacion-strict-response",
