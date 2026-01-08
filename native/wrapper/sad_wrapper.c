@@ -18,6 +18,7 @@
 static volatile sig_atomic_t child_exited = 0;
 
 static void sigchld_handler(int _) {
+  (void)_;
   child_exited = 1;
 }
 
