@@ -1,6 +1,7 @@
 import gleeunit/should
 import qcheck
-import sad/types
+import sad/types/core as types_core
+import sad/types/enums as types_enums
 
 const test_count: Int = 200
 
@@ -8,14 +9,14 @@ pub fn prop_error_kind_roundtrip_test() {
   let config = qcheck.default_config() |> qcheck.with_test_count(test_count)
 
   let generator =
-    qcheck.from_generators(qcheck.return(types.AgentError), [
-      qcheck.return(types.InfraError),
-      qcheck.return(types.BadRequest),
+    qcheck.from_generators(qcheck.return(types_enums.AgentError), [
+      qcheck.return(types_enums.InfraError),
+      qcheck.return(types_enums.BadRequest),
     ])
 
   qcheck.run(config, generator, fn(kind) {
-    types.error_kind_to_string(kind)
-    |> types.error_kind_from_string
+    types_enums.error_kind_to_string(kind)
+    |> types_enums.error_kind_from_string
     |> should.equal(Ok(kind))
   })
 }
@@ -24,13 +25,13 @@ pub fn prop_lifecycle_roundtrip_test() {
   let config = qcheck.default_config() |> qcheck.with_test_count(test_count)
 
   let generator =
-    qcheck.from_generators(qcheck.return(types.Transient), [
-      qcheck.return(types.Continuous),
+    qcheck.from_generators(qcheck.return(types_enums.Transient), [
+      qcheck.return(types_enums.Continuous),
     ])
 
   qcheck.run(config, generator, fn(lifecycle) {
-    types.lifecycle_to_string(lifecycle)
-    |> types.lifecycle_from_string
+    types_enums.lifecycle_to_string(lifecycle)
+    |> types_enums.lifecycle_from_string
     |> should.equal(Ok(lifecycle))
   })
 }
@@ -39,16 +40,16 @@ pub fn prop_id_roundtrip_test() {
   let config = qcheck.default_config() |> qcheck.with_test_count(test_count)
 
   qcheck.run(config, qcheck.string(), fn(raw) {
-    let profile = types.profile_id(raw)
-    types.profile_id_to_string(profile)
+    let profile = types_core.profile_id(raw)
+    types_core.profile_id_to_string(profile)
     |> should.equal(raw)
 
-    let instance = types.instance_id(raw)
-    types.instance_id_to_string(instance)
+    let instance = types_core.instance_id(raw)
+    types_core.instance_id_to_string(instance)
     |> should.equal(raw)
 
-    let trace = types.trace_id(raw)
-    types.trace_id_to_string(trace)
+    let trace = types_core.trace_id(raw)
+    types_core.trace_id_to_string(trace)
     |> should.equal(raw)
   })
 }

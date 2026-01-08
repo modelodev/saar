@@ -2,58 +2,61 @@ import gleam/list
 import gleam/option.{None}
 import gleeunit
 import gleeunit/should
-import sad/types
+import sad/types/config as types_config
+import sad/types/core as types_core
+import sad/types/enums as types_enums
+import sad/types/runner as types_runner
 
 pub fn main() {
   gleeunit.main()
 }
 
 pub fn error_kind_roundtrip_test() {
-  types.error_kind_to_string(types.AgentError)
-  |> types.error_kind_from_string
-  |> should.equal(Ok(types.AgentError))
+  types_enums.error_kind_to_string(types_enums.AgentError)
+  |> types_enums.error_kind_from_string
+  |> should.equal(Ok(types_enums.AgentError))
 
-  types.error_kind_to_string(types.InfraError)
-  |> types.error_kind_from_string
-  |> should.equal(Ok(types.InfraError))
+  types_enums.error_kind_to_string(types_enums.InfraError)
+  |> types_enums.error_kind_from_string
+  |> should.equal(Ok(types_enums.InfraError))
 
-  types.error_kind_to_string(types.BadRequest)
-  |> types.error_kind_from_string
-  |> should.equal(Ok(types.BadRequest))
+  types_enums.error_kind_to_string(types_enums.BadRequest)
+  |> types_enums.error_kind_from_string
+  |> should.equal(Ok(types_enums.BadRequest))
 }
 
 pub fn lifecycle_roundtrip_test() {
-  types.lifecycle_to_string(types.Transient)
-  |> types.lifecycle_from_string
-  |> should.equal(Ok(types.Transient))
+  types_enums.lifecycle_to_string(types_enums.Transient)
+  |> types_enums.lifecycle_from_string
+  |> should.equal(Ok(types_enums.Transient))
 
-  types.lifecycle_to_string(types.Continuous)
-  |> types.lifecycle_from_string
-  |> should.equal(Ok(types.Continuous))
+  types_enums.lifecycle_to_string(types_enums.Continuous)
+  |> types_enums.lifecycle_from_string
+  |> should.equal(Ok(types_enums.Continuous))
 }
 
 pub fn secret_redaction_test() {
-  types.secret_value("super-secret")
-  |> types.secret_inspect
+  types_core.secret_value("super-secret")
+  |> types_core.secret_inspect
   |> should.equal("***REDACTED***")
 }
 
 pub fn id_roundtrip_test() {
-  let profile = types.profile_id("profile-1")
-  types.profile_id_to_string(profile)
+  let profile = types_core.profile_id("profile-1")
+  types_core.profile_id_to_string(profile)
   |> should.equal("profile-1")
 
-  let instance = types.instance_id("instance-1")
-  types.instance_id_to_string(instance)
+  let instance = types_core.instance_id("instance-1")
+  types_core.instance_id_to_string(instance)
   |> should.equal("instance-1")
 
-  let trace = types.trace_id("trace-1")
-  types.trace_id_to_string(trace)
+  let trace = types_core.trace_id("trace-1")
+  types_core.trace_id_to_string(trace)
   |> should.equal("trace-1")
 }
 
 pub fn default_config_invariants_test() {
-  let types.SadConfig(
+  let types_config.SadConfig(
     server_host: server_host,
     server_port: server_port,
     api_key: api_key,
@@ -79,11 +82,11 @@ pub fn default_config_invariants_test() {
     interaction_stream: interaction_stream,
     managed_port_host: managed_port_host,
     landlock_mode: landlock_mode,
-  ) = types.default_sad_config()
+  ) = types_config.default_sad_config()
 
   server_host |> should.equal("0.0.0.0")
   server_port |> should.equal(8080)
-  api_key |> types.secret_to_env_value |> should.equal("")
+  api_key |> types_core.secret_to_env_value |> should.equal("")
   call_timeout_ms |> should.equal(30_000)
   status_timeout_ms |> should.equal(5000)
   registry_timeout_ms |> should.equal(5000)
@@ -102,12 +105,12 @@ pub fn default_config_invariants_test() {
   port_range_max |> should.equal(9999)
   sse_keep_alive_interval_ms |> should.equal(15_000)
   managed_port_host |> should.equal("127.0.0.1")
-  landlock_mode |> should.equal(types.LandlockBestEffort)
+  landlock_mode |> should.equal(types_enums.LandlockBestEffort)
 
   profiles_sources
-  |> should.equal([types.ProfileSourceDir(path: ".")])
+  |> should.equal([types_config.ProfileSourceDir(path: ".")])
 
-  let types.LogStreamConfig(
+  let types_config.LogStreamConfig(
     batch_byte_size: log_batch_byte_size,
     flush_interval_ms: log_flush_interval_ms,
   ) = log_stream
@@ -115,7 +118,7 @@ pub fn default_config_invariants_test() {
   log_batch_byte_size |> should.equal(4096)
   log_flush_interval_ms |> should.equal(50)
 
-  let types.InteractionStreamConfig(
+  let types_config.InteractionStreamConfig(
     batch_byte_size: interaction_batch_byte_size,
     flush_interval_ms: interaction_flush_interval_ms,
     push_timeout_ms: interaction_push_timeout_ms,
@@ -128,20 +131,20 @@ pub fn default_config_invariants_test() {
 
 pub fn runner_event_variants_test() {
   let response =
-    types.RunnerResponse(
-      status: types.StatusSuccess,
+    types_runner.RunnerResponse(
+      status: types_runner.StatusSuccess,
       data: None,
       artifacts: [],
       error: None,
     )
 
   let events = [
-    types.RunnerEventLog(message: "ok", level: "info"),
-    types.RunnerEventChunk(delta: "hello"),
-    types.RunnerEventResult(response: response),
-    types.RunnerEventProvisionResult(
-      result: types.RunnerProvisionResult(
-        status: types.StatusSuccess,
+    types_runner.RunnerEventLog(message: "ok", level: "info"),
+    types_runner.RunnerEventChunk(delta: "hello"),
+    types_runner.RunnerEventResult(response: response),
+    types_runner.RunnerEventProvisionResult(
+      result: types_runner.RunnerProvisionResult(
+        status: types_runner.StatusSuccess,
         log_files: [],
       ),
     ),

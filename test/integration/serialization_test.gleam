@@ -4,8 +4,10 @@ import gleam/json
 import gleam/option
 import gleeunit
 import gleeunit/should
+import runner_fixtures
 import sad/bridge/serialization
-import sad/types
+import sad/types/input as types_input
+import sad/types/runner as types_runner
 import simplifile
 
 pub fn main() {
@@ -13,7 +15,11 @@ pub fn main() {
 }
 
 pub fn sad_input_contains_required_blocks_test() {
-  let input = base_input()
+  let input =
+    runner_fixtures.base_input(
+      load_chat_payload(),
+      types_runner.ArtifactConfig(include: [], exclude: []),
+    )
   let body = serialization.sad_input_to_string(input)
 
   let decoder = {
@@ -31,7 +37,11 @@ pub fn sad_input_contains_required_blocks_test() {
 }
 
 pub fn runner_def_always_present_test() {
-  let input = base_input()
+  let input =
+    runner_fixtures.base_input(
+      load_chat_payload(),
+      types_runner.ArtifactConfig(include: [], exclude: []),
+    )
   let body = serialization.sad_input_to_string(input)
 
   let decoder = decode.dict(decode.string, decode.dynamic)
@@ -45,7 +55,11 @@ pub fn runner_def_always_present_test() {
 }
 
 pub fn helpers_is_null_in_s04_test() {
-  let input = base_input()
+  let input =
+    runner_fixtures.base_input(
+      load_chat_payload(),
+      types_runner.ArtifactConfig(include: [], exclude: []),
+    )
   let body = serialization.sad_input_to_string(input)
 
   let decoder = {
@@ -57,37 +71,7 @@ pub fn helpers_is_null_in_s04_test() {
   |> should.equal(Ok(option.None))
 }
 
-fn base_input() -> types.SadInput {
-  types.SadInput(
-    meta: types.SadInputMeta(
-      spec_version: "v0",
-      profile_id: types.profile_id("profile-1"),
-      instance_id: option.Some(types.instance_id("inst-1")),
-      mode: types.Transient,
-    ),
-    params: dict.from_list([#("model", "gpt-4")]),
-    input: load_chat_payload(),
-    context: types.RequestContext(
-      trace_id: types.trace_id("trace-1"),
-      extra: dict.new(),
-    ),
-    helpers: option.None,
-    runner_def: types.Runner(
-      type_: "generic_uvx",
-      tool_config: types.ToolConfig(
-        package: "aider-chat",
-        command: "aider",
-        with_packages: [],
-      ),
-      runtime: types.default_runtime_config(),
-      env_map: dict.new(),
-      args: [],
-      artifact_config: types.ArtifactConfig(include: [], exclude: []),
-    ),
-  )
-}
-
-fn load_chat_payload() -> types.InputPayload {
+fn load_chat_payload() -> types_input.InputPayload {
   let assert Ok(contents) =
     simplifile.read(from: "test/fixtures/payloads/chat_simple.json")
 
@@ -100,14 +84,14 @@ fn load_chat_payload() -> types.InputPayload {
   }
 
   let assert Ok(messages) = json.parse(contents, decoder)
-  types.PayloadChat(messages, dict.new())
+  types_input.PayloadChat(messages, dict.new())
 }
 
-fn chat_message_decoder() -> decode.Decoder(types.ChatMessage) {
+fn chat_message_decoder() -> decode.Decoder(types_input.ChatMessage) {
   let decoder = {
     use role <- decode.field("role", decode.string)
     use content <- decode.field("content", decode.string)
-    decode.success(types.ChatMessage(role: role, content: content))
+    decode.success(types_input.ChatMessage(role: role, content: content))
   }
 
   decoder

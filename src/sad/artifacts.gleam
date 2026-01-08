@@ -1,7 +1,8 @@
 import gleam/list
 import gleam/result
 import gleam/string
-import sad/types
+import sad/types/output as types_output
+import sad/types/runner as types_runner
 import sad/workspace
 import youid/uuid
 
@@ -10,9 +11,9 @@ pub type ArtifactError {
 }
 
 pub fn collect(
-  artifacts: List(types.ArtifactRef),
-  config: types.ArtifactConfig,
-) -> Result(List(types.PublicArtifact), ArtifactError) {
+  artifacts: List(types_runner.ArtifactRef),
+  config: types_runner.ArtifactConfig,
+) -> Result(List(types_output.PublicArtifact), ArtifactError) {
   case config.include {
     [] -> Ok([])
     _ ->
@@ -24,7 +25,7 @@ pub fn collect(
         case matches_globs(normalized, config.include, config.exclude) {
           True ->
             Ok([
-              types.PublicArtifact(
+              types_output.PublicArtifact(
                 name: artifact.name,
                 url: "/artifacts/" <> uuid.v7_string(),
                 mime: artifact.mime,

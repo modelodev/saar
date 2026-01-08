@@ -239,8 +239,7 @@ static int main_loop(pid_t child_pid, bool in_namespace, int child_stdin_fd) {
   }
 }
 
-static int fallback_main(char **argv) {
-  setup_signals();
+static int spawn_and_run(char **argv, bool in_namespace, bool set_process_group) {
   int stdin_pipe[2];
   if (pipe(stdin_pipe) != 0) {
     perror("pipe");
@@ -254,7 +253,9 @@ static int fallback_main(char **argv) {
       _exit(127);
     }
     close(stdin_pipe[0]);
-    setpgid(0, 0);
+    if (set_process_group) {
+      setpgid(0, 0);
+    }
     return run_child(argv);
   }
   if (pid < 0) {
@@ -264,8 +265,15 @@ static int fallback_main(char **argv) {
     return 1;
   }
   close(stdin_pipe[0]);
-  setpgid(pid, pid);
-  return main_loop(pid, false, stdin_pipe[1]);
+  if (set_process_group) {
+    setpgid(pid, pid);
+  }
+  return main_loop(pid, in_namespace, stdin_pipe[1]);
+}
+
+static int fallback_main(char **argv) {
+  setup_signals();
+  return spawn_and_run(argv, false, true);
 }
 
 #ifdef __linux__
@@ -282,29 +290,7 @@ static int ns_init_main(void *arg) {
   char **argv = args->argv;
   wait_for_parent_ready(args->sync_fd);
 
-  int stdin_pipe[2];
-  if (pipe(stdin_pipe) != 0) {
-    perror("pipe");
-    return 1;
-  }
-  pid_t pid = fork();
-  if (pid == 0) {
-    close(stdin_pipe[1]);
-    if (dup2(stdin_pipe[0], STDIN_FILENO) < 0) {
-      perror("dup2");
-      _exit(127);
-    }
-    close(stdin_pipe[0]);
-    return run_child(argv);
-  }
-  if (pid < 0) {
-    perror("fork");
-    close(stdin_pipe[0]);
-    close(stdin_pipe[1]);
-    return 1;
-  }
-  close(stdin_pipe[0]);
-  return main_loop(pid, true, stdin_pipe[1]);
+  return spawn_and_run(argv, true, false);
 }
 #endif
 

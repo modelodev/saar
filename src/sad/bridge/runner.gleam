@@ -8,38 +8,43 @@ import sad/artifacts
 import sad/bridge/port_process
 import sad/bridge/serialization
 import sad/runner_contract
-import sad/types
+import sad/types/core as types_core
+import sad/types/enums as types_enums
+import sad/types/input as types_input
+import sad/types/output as types_output
+import sad/types/runner as types_runner
 
 const read_timeout_ms = 200
 
 const max_read_attempts = 200
+
+type ReadState {
+  ReadState(
+    total_bytes: Int,
+    events: List(types_runner.RunnerEvent),
+    attempts: Int,
+    stdin_closed: Bool,
+  )
+}
 
 pub fn execute_transient(
   runner_path: String,
   runner_args: List(String),
   env: List(#(String, String)),
   cwd: String,
-  input: types.SadInput,
+  input: types_input.SadInput,
   max_runner_event_bytes: Int,
   max_stdout_bytes: Int,
   streaming: Bool,
-) -> Result(types.InteractionResult, types.InteractionError) {
-  use process <- result.try(start_process(
+) -> Result(types_output.InteractionResult, types_output.InteractionError) {
+  use events <- result.try(run_and_collect_events(
     runner_path,
     runner_args,
     env,
     cwd,
+    input,
     max_runner_event_bytes,
-    input.context.trace_id,
-  ))
-
-  let payload = serialization.sad_input_to_string(input)
-  port_process.send(process, payload)
-
-  use events <- result.try(read_events(
-    process,
     max_stdout_bytes,
-    input.context.trace_id,
     True,
   ))
 
@@ -69,28 +74,20 @@ pub fn run_provision(
   runner_args: List(String),
   env: List(#(String, String)),
   cwd: String,
-  input: types.SadInput,
+  input: types_input.SadInput,
   max_runner_event_bytes: Int,
   max_stdout_bytes: Int,
-) -> Result(types.RunnerProvisionResult, types.InteractionError) {
+) -> Result(types_runner.RunnerProvisionResult, types_output.InteractionError) {
   let args = list.append(runner_args, ["--provision"])
 
-  use process <- result.try(start_process(
+  use events <- result.try(run_and_collect_events(
     runner_path,
     args,
     env,
     cwd,
+    input,
     max_runner_event_bytes,
-    input.context.trace_id,
-  ))
-
-  let payload = serialization.sad_input_to_string(input)
-  port_process.send(process, payload)
-
-  use events <- result.try(read_events(
-    process,
     max_stdout_bytes,
-    input.context.trace_id,
     True,
   ))
 
@@ -100,8 +97,8 @@ pub fn run_provision(
   ))
 
   case provision.status {
-    types.StatusSuccess -> Ok(provision)
-    types.StatusError ->
+    types_runner.StatusSuccess -> Ok(provision)
+    types_runner.StatusError ->
       Error(interaction_error(input.context.trace_id, "Provision failed"))
   }
 }
@@ -112,8 +109,8 @@ fn start_process(
   env: List(#(String, String)),
   cwd: String,
   max_runner_event_bytes: Int,
-  trace_id: types.TraceId,
-) -> Result(port_process.PortProcess, types.InteractionError) {
+  trace_id: types_core.TraceId,
+) -> Result(port_process.PortProcess, types_output.InteractionError) {
   case
     port_process.start(
       runner_path,
@@ -125,48 +122,76 @@ fn start_process(
   {
     Ok(process) -> Ok(process)
     Error(port_process.WrapperNotFound(name)) ->
-      Error(types.InteractionError(
-        kind: types.InfraError,
-        message: "Wrapper not found: " <> name,
-        trace_id: trace_id,
-      ))
+      Error(interaction_error(trace_id, "Wrapper not found: " <> name))
     Error(port_process.SpawnFailed(reason)) ->
-      Error(types.InteractionError(
-        kind: types.InfraError,
-        message: "Failed to start runner: " <> reason,
-        trace_id: trace_id,
-      ))
+      Error(interaction_error(trace_id, "Failed to start runner: " <> reason))
   }
+}
+
+fn run_and_collect_events(
+  runner_path: String,
+  runner_args: List(String),
+  env: List(#(String, String)),
+  cwd: String,
+  input: types_input.SadInput,
+  max_runner_event_bytes: Int,
+  max_stdout_bytes: Int,
+  close_on_timeout: Bool,
+) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
+  use process <- result.try(start_process(
+    runner_path,
+    runner_args,
+    env,
+    cwd,
+    max_runner_event_bytes,
+    input.context.trace_id,
+  ))
+
+  let payload = serialization.sad_input_to_string(input)
+  port_process.send(process, payload)
+
+  read_events(
+    process,
+    max_stdout_bytes,
+    input.context.trace_id,
+    close_on_timeout,
+  )
 }
 
 fn read_events(
   process: port_process.PortProcess,
   max_stdout_bytes: Int,
-  trace_id: types.TraceId,
+  trace_id: types_core.TraceId,
   close_on_timeout: Bool,
-) -> Result(List(types.RunnerEvent), types.InteractionError) {
+) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   read_events_loop(
     process,
     max_stdout_bytes,
     trace_id,
-    0,
-    [],
-    max_read_attempts,
     close_on_timeout,
-    False,
+    ReadState(
+      total_bytes: 0,
+      events: [],
+      attempts: max_read_attempts,
+      stdin_closed: False,
+    ),
   )
 }
 
 fn read_events_loop(
   process: port_process.PortProcess,
   max_stdout_bytes: Int,
-  trace_id: types.TraceId,
-  total_bytes: Int,
-  events: List(types.RunnerEvent),
-  attempts: Int,
+  trace_id: types_core.TraceId,
   close_on_timeout: Bool,
-  stdin_closed: Bool,
-) -> Result(List(types.RunnerEvent), types.InteractionError) {
+  state: ReadState,
+) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
+  let ReadState(
+    total_bytes: total_bytes,
+    events: events,
+    attempts: attempts,
+    stdin_closed: stdin_closed,
+  ) = state
+
   case attempts {
     0 -> Error(interaction_error(trace_id, "Runner read timeout"))
     _ ->
@@ -193,11 +218,13 @@ fn read_events_loop(
                 process,
                 max_stdout_bytes,
                 trace_id,
-                next_total,
-                [event, ..events],
-                attempts,
                 close_on_timeout,
-                stdin_closed,
+                ReadState(
+                  total_bytes: next_total,
+                  events: [event, ..events],
+                  attempts: attempts,
+                  stdin_closed: stdin_closed,
+                ),
               )
             Error(error) ->
               Error(interaction_error(
@@ -215,11 +242,13 @@ fn read_events_loop(
                 process,
                 max_stdout_bytes,
                 trace_id,
-                total_bytes,
-                events,
-                attempts,
                 close_on_timeout,
-                True,
+                ReadState(
+                  total_bytes: total_bytes,
+                  events: events,
+                  attempts: attempts,
+                  stdin_closed: True,
+                ),
               )
             }
             False ->
@@ -227,11 +256,13 @@ fn read_events_loop(
                 process,
                 max_stdout_bytes,
                 trace_id,
-                total_bytes,
-                events,
-                attempts - 1,
                 close_on_timeout,
-                stdin_closed,
+                ReadState(
+                  total_bytes: total_bytes,
+                  events: events,
+                  attempts: attempts - 1,
+                  stdin_closed: stdin_closed,
+                ),
               )
           }
         Error(port_process.NoeolFragment(fragment)) ->
@@ -240,10 +271,9 @@ fn read_events_loop(
           case code {
             0 -> Ok(list.reverse(events))
             _ ->
-              Error(types.InteractionError(
-                kind: types.InfraError,
-                message: "Runner exited with code " <> int.to_string(code),
-                trace_id: trace_id,
+              Error(interaction_error(
+                trace_id,
+                "Runner exited with code " <> int.to_string(code),
               ))
           }
       }
@@ -251,36 +281,32 @@ fn read_events_loop(
 }
 
 fn first_result(
-  events: List(types.RunnerEvent),
-  trace_id: types.TraceId,
-) -> Result(types.RunnerResponse, types.InteractionError) {
+  events: List(types_runner.RunnerEvent),
+  trace_id: types_core.TraceId,
+) -> Result(types_runner.RunnerResponse, types_output.InteractionError) {
   case
     list.find(events, fn(event) {
       case event {
-        types.RunnerEventResult(_) -> True
+        types_runner.RunnerEventResult(_) -> True
         _ -> False
       }
     })
   {
-    Ok(types.RunnerEventResult(response)) -> Ok(response)
+    Ok(types_runner.RunnerEventResult(response)) -> Ok(response)
     _ ->
-      Error(types.InteractionError(
-        kind: types.InfraError,
-        message: "Runner exited without result event",
-        trace_id: trace_id,
-      ))
+      Error(interaction_error(trace_id, "Runner exited without result event"))
   }
 }
 
 fn provision_result_from_events(
-  events: List(types.RunnerEvent),
-  trace_id: types.TraceId,
-) -> Result(types.RunnerProvisionResult, types.InteractionError) {
+  events: List(types_runner.RunnerEvent),
+  trace_id: types_core.TraceId,
+) -> Result(types_runner.RunnerProvisionResult, types_output.InteractionError) {
   let provision_events =
     events
     |> list.filter_map(fn(event) {
       case event {
-        types.RunnerEventProvisionResult(result) -> Ok(result)
+        types_runner.RunnerEventProvisionResult(result) -> Ok(result)
         _ -> Error(Nil)
       }
     })
@@ -293,27 +319,27 @@ fn provision_result_from_events(
 }
 
 fn runner_response_to_interaction_result(
-  response: types.RunnerResponse,
-  artifact_config: types.ArtifactConfig,
-  trace_id: types.TraceId,
-) -> Result(types.InteractionResult, types.InteractionError) {
+  response: types_runner.RunnerResponse,
+  artifact_config: types_runner.ArtifactConfig,
+  trace_id: types_core.TraceId,
+) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   case response.status {
-    types.StatusError -> {
+    types_runner.StatusError -> {
       let message = case response.error {
         option.Some(err) -> err.message
         option.None -> "Runner returned error"
       }
       let kind = case response.error {
         option.Some(err) -> err.kind
-        option.None -> types.InfraError
+        option.None -> types_enums.InfraError
       }
-      Error(types.InteractionError(
+      Error(types_output.InteractionError(
         kind: kind,
         message: message,
         trace_id: trace_id,
       ))
     }
-    types.StatusSuccess -> {
+    types_runner.StatusSuccess -> {
       let data = response_data_from_runner(response.data)
       let artifacts =
         artifacts.collect(response.artifacts, artifact_config)
@@ -326,7 +352,7 @@ fn runner_response_to_interaction_result(
 
       use public_artifacts <- result.try(artifacts)
 
-      Ok(types.InteractionResult(
+      Ok(types_output.InteractionResult(
         data: data,
         artifacts: public_artifacts,
         trace_id: trace_id,
@@ -335,12 +361,14 @@ fn runner_response_to_interaction_result(
   }
 }
 
-fn response_data_from_runner(data: option.Option(Json)) -> types.ResponseData {
+fn response_data_from_runner(
+  data: option.Option(Json),
+) -> types_output.ResponseData {
   case data {
     option.None ->
-      types.ResponseData(content: option.None, metadata: dict.new())
+      types_output.ResponseData(content: option.None, metadata: dict.new())
     option.Some(payload) ->
-      types.ResponseData(
+      types_output.ResponseData(
         content: option.None,
         metadata: dict.from_list([#("raw", payload)]),
       )
@@ -348,11 +376,11 @@ fn response_data_from_runner(data: option.Option(Json)) -> types.ResponseData {
 }
 
 fn interaction_error(
-  trace_id: types.TraceId,
+  trace_id: types_core.TraceId,
   message: String,
-) -> types.InteractionError {
-  types.InteractionError(
-    kind: types.InfraError,
+) -> types_output.InteractionError {
+  types_output.InteractionError(
+    kind: types_enums.InfraError,
     message: message,
     trace_id: trace_id,
   )

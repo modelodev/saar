@@ -5,7 +5,9 @@ import gleam/list
 import gleam/option
 import gleam/result
 import gleam/string
-import sad/types
+import sad/runner_contract_common as contract_common
+import sad/types/enums as types_enums
+import sad/types/runner as types_runner
 
 pub type ContractError {
   InvalidJson(String)
@@ -18,8 +20,10 @@ pub type ContractError {
   StdoutBytesExceeded(max: Int, total: Int)
 }
 
-pub fn decode_event(line: String) -> Result(types.RunnerEvent, ContractError) {
-  case decode_tag(line) {
+pub fn decode_event(
+  line: String,
+) -> Result(types_runner.RunnerEvent, ContractError) {
+  case contract_common.decode_tag(line, InvalidJson) {
     Ok("log") -> decode_log(line)
     Ok("chunk") -> decode_chunk(line)
     Ok("result") -> decode_result(line)
@@ -30,25 +34,16 @@ pub fn decode_event(line: String) -> Result(types.RunnerEvent, ContractError) {
 }
 
 pub fn validate_sequence(
-  events: List(types.RunnerEvent),
+  events: List(types_runner.RunnerEvent),
   streaming: Bool,
 ) -> Result(Nil, ContractError) {
-  let result_count =
-    events
-    |> list.filter(fn(event) {
+  let #(result_count, has_chunk) =
+    list.fold(events, #(0, False), fn(acc, event) {
+      let #(count, chunk_seen) = acc
       case event {
-        types.RunnerEventResult(_) -> True
-        _ -> False
-      }
-    })
-    |> list.length
-
-  let has_chunk =
-    events
-    |> list.any(fn(event) {
-      case event {
-        types.RunnerEventChunk(_) -> True
-        _ -> False
+        types_runner.RunnerEventResult(_) -> #(count + 1, chunk_seen)
+        types_runner.RunnerEventChunk(_) -> #(count, True)
+        _ -> acc
       }
     })
 
@@ -88,7 +83,7 @@ type RawResult {
   RawResult(
     status: String,
     data: option.Option(Json),
-    artifacts: List(types.ArtifactRef),
+    artifacts: List(types_runner.ArtifactRef),
     error: option.Option(RawRunnerError),
   )
 }
@@ -97,26 +92,28 @@ type RawProvisionResult {
   RawProvisionResult(status: String, log_files: List(String))
 }
 
-fn decode_log(line: String) -> Result(types.RunnerEvent, ContractError) {
+fn decode_log(line: String) -> Result(types_runner.RunnerEvent, ContractError) {
   let decoder = {
     use message <- decode.field("message", decode.string)
     use level <- decode.field("level", decode.string)
-    decode.success(types.RunnerEventLog(message: message, level: level))
+    decode.success(types_runner.RunnerEventLog(message: message, level: level))
   }
 
-  parse_json(line, decoder)
+  contract_common.parse_json(line, decoder, InvalidJson)
 }
 
-fn decode_chunk(line: String) -> Result(types.RunnerEvent, ContractError) {
+fn decode_chunk(line: String) -> Result(types_runner.RunnerEvent, ContractError) {
   let decoder = {
     use delta <- decode.field("delta", decode.string)
-    decode.success(types.RunnerEventChunk(delta: delta))
+    decode.success(types_runner.RunnerEventChunk(delta: delta))
   }
 
-  parse_json(line, decoder)
+  contract_common.parse_json(line, decoder, InvalidJson)
 }
 
-fn decode_result(line: String) -> Result(types.RunnerEvent, ContractError) {
+fn decode_result(
+  line: String,
+) -> Result(types_runner.RunnerEvent, ContractError) {
   let decoder = {
     use status <- decode.field("status", decode.string)
     use data <- decode.optional_field(
@@ -138,12 +135,15 @@ fn decode_result(line: String) -> Result(types.RunnerEvent, ContractError) {
     ))
   }
 
-  use raw <- result.try(parse_json(line, decoder))
-  use status <- result.try(parse_status(raw.status))
+  use raw <- result.try(contract_common.parse_json(line, decoder, InvalidJson))
+  use status <- result.try(contract_common.parse_status(
+    raw.status,
+    UnknownStatus,
+  ))
   use error <- result.try(parse_runner_error(raw.error))
 
   Ok(
-    types.RunnerEventResult(response: types.RunnerResponse(
+    types_runner.RunnerEventResult(response: types_runner.RunnerResponse(
       status: status,
       data: raw.data,
       artifacts: raw.artifacts,
@@ -154,7 +154,7 @@ fn decode_result(line: String) -> Result(types.RunnerEvent, ContractError) {
 
 fn decode_provision_result(
   line: String,
-) -> Result(types.RunnerEvent, ContractError) {
+) -> Result(types_runner.RunnerEvent, ContractError) {
   let decoder = {
     use status <- decode.field("status", decode.string)
     use log_files <- decode.optional_field(
@@ -165,23 +165,28 @@ fn decode_provision_result(
     decode.success(RawProvisionResult(status: status, log_files: log_files))
   }
 
-  use raw <- result.try(parse_json(line, decoder))
-  use status <- result.try(parse_status(raw.status))
+  use raw <- result.try(contract_common.parse_json(line, decoder, InvalidJson))
+  use status <- result.try(contract_common.parse_status(
+    raw.status,
+    UnknownStatus,
+  ))
 
   Ok(
-    types.RunnerEventProvisionResult(result: types.RunnerProvisionResult(
-      status: status,
-      log_files: raw.log_files,
-    )),
+    types_runner.RunnerEventProvisionResult(
+      result: types_runner.RunnerProvisionResult(
+        status: status,
+        log_files: raw.log_files,
+      ),
+    ),
   )
 }
 
-fn artifact_decoder() -> decode.Decoder(types.ArtifactRef) {
+fn artifact_decoder() -> decode.Decoder(types_runner.ArtifactRef) {
   let decoder = {
     use name <- decode.field("name", decode.string)
     use path <- decode.field("path", decode.string)
     use mime <- decode.field("mime", decode.string)
-    decode.success(types.ArtifactRef(name: name, path: path, mime: mime))
+    decode.success(types_runner.ArtifactRef(name: name, path: path, mime: mime))
   }
 
   decoder
@@ -206,46 +211,23 @@ fn json_option_decoder() -> decode.Decoder(option.Option(Json)) {
   |> decode.map(fn(value) { option.map(value, json_from_dynamic) })
 }
 
-fn parse_status(status: String) -> Result(types.RunnerStatus, ContractError) {
-  case status {
-    "success" -> Ok(types.StatusSuccess)
-    "error" -> Ok(types.StatusError)
-    other -> Error(UnknownStatus(other))
-  }
-}
-
 fn parse_runner_error(
   raw: option.Option(RawRunnerError),
-) -> Result(option.Option(types.RunnerError), ContractError) {
+) -> Result(option.Option(types_runner.RunnerError), ContractError) {
   case raw {
     option.None -> Ok(option.None)
     option.Some(RawRunnerError(kind: kind, message: message)) -> {
       use parsed <- result.try(parse_error_kind(kind))
-      Ok(option.Some(types.RunnerError(kind: parsed, message: message)))
+      Ok(option.Some(types_runner.RunnerError(kind: parsed, message: message)))
     }
   }
 }
 
-fn parse_error_kind(kind: String) -> Result(types.ErrorKind, ContractError) {
-  types.error_kind_from_string(kind)
+fn parse_error_kind(
+  kind: String,
+) -> Result(types_enums.ErrorKind, ContractError) {
+  types_enums.error_kind_from_string(kind)
   |> result.map_error(fn(_) { UnknownErrorKind(kind) })
-}
-
-fn decode_tag(line: String) -> Result(String, ContractError) {
-  let decoder = {
-    use tag <- decode.field("t", decode.string)
-    decode.success(tag)
-  }
-
-  parse_json(line, decoder)
-}
-
-fn parse_json(
-  line: String,
-  decoder: decode.Decoder(a),
-) -> Result(a, ContractError) {
-  json.parse(line, decoder)
-  |> result.map_error(fn(err) { InvalidJson(string.inspect(err)) })
 }
 
 @external(erlang, "gleam_stdlib", "identity")

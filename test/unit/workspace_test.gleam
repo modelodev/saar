@@ -1,7 +1,7 @@
 import filepath
 import gleeunit
 import gleeunit/should
-import sad/types
+import sad/types/core as types_core
 import sad/workspace
 import simplifile
 
@@ -52,7 +52,7 @@ pub fn rejects_null_byte_test() {
 }
 
 pub fn workspace_dir_name_format_test() {
-  types.instance_id("abc123")
+  types_core.instance_id("abc123")
   |> workspace.workspace_dir_name
   |> should.equal("workspace-abc123")
 }

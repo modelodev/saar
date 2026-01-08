@@ -2,7 +2,7 @@ import gleam/option
 import gleeunit
 import gleeunit/should
 import sad/runner_contract
-import sad/types
+import sad/types/runner as types_runner
 
 pub fn main() {
   gleeunit.main()
@@ -16,7 +16,10 @@ pub fn rejects_double_result_test() {
 }
 
 pub fn rejects_chunk_when_streaming_false_test() {
-  let events = [types.RunnerEventChunk(delta: "hi"), success_result()]
+  let events = [
+    types_runner.RunnerEventChunk(delta: "hi"),
+    success_result(),
+  ]
 
   runner_contract.validate_sequence(events, False)
   |> should.equal(Error(runner_contract.ChunkWithoutStreaming))
@@ -30,7 +33,7 @@ pub fn rejects_unknown_t_test() {
 pub fn allows_log_after_result_test() {
   let events = [
     success_result(),
-    types.RunnerEventLog(message: "late", level: "info"),
+    types_runner.RunnerEventLog(message: "late", level: "info"),
   ]
 
   runner_contract.validate_sequence(events, True)
@@ -40,16 +43,16 @@ pub fn allows_log_after_result_test() {
 pub fn allows_result_first_test() {
   let events = [
     success_result(),
-    types.RunnerEventLog(message: "later", level: "info"),
+    types_runner.RunnerEventLog(message: "later", level: "info"),
   ]
 
   runner_contract.validate_sequence(events, True)
   |> should.equal(Ok(Nil))
 }
 
-fn success_result() -> types.RunnerEvent {
-  types.RunnerEventResult(response: types.RunnerResponse(
-    status: types.StatusSuccess,
+fn success_result() -> types_runner.RunnerEvent {
+  types_runner.RunnerEventResult(response: types_runner.RunnerResponse(
+    status: types_runner.StatusSuccess,
     data: option.None,
     artifacts: [],
     error: option.None,

@@ -2,7 +2,7 @@ import filepath
 import gleam/list
 import gleam/result
 import gleam/string
-import sad/types
+import sad/types/core as types_core
 import simplifile
 
 /// Path seguro dentro del workspace.
@@ -140,13 +140,13 @@ fn check_path_segment(
   }
 }
 
-pub fn workspace_dir_name(instance_id: types.InstanceId) -> String {
-  "workspace-" <> types.instance_id_to_string(instance_id)
+pub fn workspace_dir_name(instance_id: types_core.InstanceId) -> String {
+  "workspace-" <> types_core.instance_id_to_string(instance_id)
 }
 
 pub fn workspace_for_instance(
   base_dir: String,
-  instance_id: types.InstanceId,
+  instance_id: types_core.InstanceId,
 ) -> String {
   filepath.join(base_dir, workspace_dir_name(instance_id))
 }
