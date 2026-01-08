@@ -25,7 +25,7 @@ pub fn base_input(
     helpers: option.None,
     runner_def: types_runner.Runner(
       type_: "generic_uvx",
-      tool_config: types_runner.ToolConfig(
+      tool_config: types_runner.ToolConfigPackage(
         package: "aider-chat",
         command: "aider",
         with_packages: [],

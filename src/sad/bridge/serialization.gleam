@@ -130,11 +130,16 @@ fn runner_to_json(runner: types_runner.Runner) -> Json {
 }
 
 fn tool_config_to_json(config: types_runner.ToolConfig) -> Json {
-  json.object([
-    #("package", json.string(config.package)),
-    #("command", json.string(config.command)),
-    #("with_packages", json.array(config.with_packages, json.string)),
-  ])
+  case config {
+    types_runner.ToolConfigPackage(package, command, with_packages) ->
+      json.object([
+        #("package", json.string(package)),
+        #("command", json.string(command)),
+        #("with_packages", json.array(with_packages, json.string)),
+      ])
+    types_runner.ToolConfigScript(script) ->
+      json.object([#("script", json.string(script))])
+  }
 }
 
 fn runtime_config_to_json(config: types_runner.RuntimeConfig) -> Json {

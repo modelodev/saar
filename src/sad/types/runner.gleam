@@ -37,12 +37,26 @@ pub type RunnerEvent {
 }
 
 pub type ToolConfig {
-  ToolConfig(package: String, command: String, with_packages: List(String))
+  ToolConfigPackage(package: String, command: String, with_packages: List(String))
+  ToolConfigScript(script: String)
 }
 
 pub type NetworkMode {
   ManagedPort
   NoNetwork
+}
+
+pub fn network_mode_from_string(s: String) -> Result(NetworkMode, String) {
+  case s {
+    "managed_port" -> Ok(ManagedPort)
+    "no_network" -> Ok(NoNetwork)
+    other ->
+      Error(
+        "Unknown network mode: '"
+        <> other
+        <> "'. Valid: managed_port, no_network",
+      )
+  }
 }
 
 pub fn network_mode_to_string(mode: NetworkMode) -> String {
@@ -66,6 +80,10 @@ pub fn default_runtime_config() -> RuntimeConfig {
 
 pub type ArtifactConfig {
   ArtifactConfig(include: List(String), exclude: List(String))
+}
+
+pub fn default_artifact_config() -> ArtifactConfig {
+  ArtifactConfig([], [])
 }
 
 pub type Runner {
