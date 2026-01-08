@@ -15,7 +15,9 @@ pub fn main() {
 
 pub fn response_mapping_profile_fixture_test() {
   let assert Ok(contents) =
-    simplifile.read(from: "test/fixtures/source_local/profiles/echo_server.json")
+    simplifile.read(
+      from: "test/fixtures/source_local/profiles/echo_server.json",
+    )
 
   let assert Ok(profile) = json.parse(contents, decoders.profile_decoder())
   let types_profile.Profile(interface: interface, ..) = profile

@@ -1,5 +1,5 @@
 import gleam/dict
-import gleam/dynamic as dynamic
+import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
@@ -11,27 +11,24 @@ import sad/types/enums as types_enums
 import sad/types/profile as types_profile
 
 pub type MappingResult {
-  MappingResult(
-    text: Option(String),
-    artifacts: Option(List(json.Json)),
-  )
+  MappingResult(text: Option(String), artifacts: Option(List(json.Json)))
 }
 
 pub type MappingError {
   MappingError(kind: types_enums.ErrorKind, message: String)
 }
 
-pub fn parse_json_pointer(
-  pointer: String,
-) -> Result(List(String), MappingError) {
+pub fn parse_json_pointer(pointer: String) -> Result(List(String), MappingError) {
   case pointer {
     "" -> Ok([])
-    _ -> case string.split(pointer, "/") {
-      ["", ..segments] -> list.try_map(segments, fn(segment) {
-        decode_pointer_segment(segment, pointer)
-      })
-      _ -> Error(invalid_pointer(pointer))
-    }
+    _ ->
+      case string.split(pointer, "/") {
+        ["", ..segments] ->
+          list.try_map(segments, fn(segment) {
+            decode_pointer_segment(segment, pointer)
+          })
+        _ -> Error(invalid_pointer(pointer))
+      }
   }
 }
 
@@ -40,18 +37,19 @@ pub fn apply_response_mapping(
   body: json.Json,
 ) -> Result(MappingResult, MappingError) {
   case mapping {
-    None ->
-      Ok(MappingResult(text: Some(json.to_string(body)), artifacts: None))
+    None -> Ok(MappingResult(text: Some(json.to_string(body)), artifacts: None))
     Some(types_profile.ResponseMapping(text_pointer, artifacts_pointer)) -> {
       use text_value <- result.try(resolve_pointer_option(text_pointer, body))
-      use artifacts_value <- result.try(
-        resolve_pointer_option(artifacts_pointer, body),
-      )
+      use artifacts_value <- result.try(resolve_pointer_option(
+        artifacts_pointer,
+        body,
+      ))
 
       use text <- result.try(text_from_value(text_value, text_pointer))
-      use artifacts <- result.try(
-        artifacts_from_value(artifacts_value, artifacts_pointer),
-      )
+      use artifacts <- result.try(artifacts_from_value(
+        artifacts_value,
+        artifacts_pointer,
+      ))
 
       Ok(MappingResult(text: text, artifacts: artifacts))
     }
@@ -86,10 +84,11 @@ fn text_from_value(
 ) -> Result(Option(String), MappingError) {
   case value {
     None -> Ok(None)
-    Some(payload) -> case decode.run(json_to_dynamic(payload), decode.string) {
-      Ok(text) -> Ok(Some(text))
-      Error(_) -> Error(wrong_type("string", pointer))
-    }
+    Some(payload) ->
+      case decode.run(json_to_dynamic(payload), decode.string) {
+        Ok(text) -> Ok(Some(text))
+        Error(_) -> Error(wrong_type("string", pointer))
+      }
   }
 }
 
@@ -99,13 +98,13 @@ fn artifacts_from_value(
 ) -> Result(Option(List(json.Json)), MappingError) {
   case value {
     None -> Ok(None)
-    Some(payload) -> case decode.run(
-      json_to_dynamic(payload),
-      decode.list(of: decode.dynamic),
-    ) {
-      Ok(items) -> Ok(Some(list.map(items, dynamic_to_json)))
-      Error(_) -> Error(wrong_type("array", pointer))
-    }
+    Some(payload) ->
+      case
+        decode.run(json_to_dynamic(payload), decode.list(of: decode.dynamic))
+      {
+        Ok(items) -> Ok(Some(list.map(items, dynamic_to_json)))
+        Error(_) -> Error(wrong_type("array", pointer))
+      }
   }
 }
 
@@ -116,15 +115,11 @@ fn invalid_pointer(pointer: String) -> MappingError {
   )
 }
 
-fn wrong_type(
-  expected: String,
-  pointer: Option(String),
-) -> MappingError {
-  let suffix =
-    case pointer {
-      Some(value) -> " at '" <> value <> "'"
-      None -> ""
-    }
+fn wrong_type(expected: String, pointer: Option(String)) -> MappingError {
+  let suffix = case pointer {
+    Some(value) -> " at '" <> value <> "'"
+    None -> ""
+  }
 
   MappingError(
     kind: types_enums.AgentError,
@@ -151,7 +146,7 @@ fn decode_pointer_chars(
     ["~"] -> Error(invalid_pointer(pointer))
     ["~", "0", ..rest] -> decode_pointer_chars(rest, pointer, ["~", ..acc])
     ["~", "1", ..rest] -> decode_pointer_chars(rest, pointer, ["/", ..acc])
-    ["~", _, .._] -> Error(invalid_pointer(pointer))
+    ["~", _, ..] -> Error(invalid_pointer(pointer))
     [char, ..rest] -> decode_pointer_chars(rest, pointer, [char, ..acc])
   }
 }
@@ -162,19 +157,19 @@ fn resolve_dynamic_pointer(
 ) -> Option(dynamic.Dynamic) {
   case segments {
     [] -> Some(current)
-    [segment, ..rest] -> case decode.run(
-      current,
-      decode.dict(decode.string, decode.dynamic),
-    ) {
-      Ok(fields) -> case dict.get(fields, segment) {
-        Ok(next) -> resolve_dynamic_pointer(rest, next)
-        Error(_) -> None
+    [segment, ..rest] ->
+      case decode.run(current, decode.dict(decode.string, decode.dynamic)) {
+        Ok(fields) ->
+          case dict.get(fields, segment) {
+            Ok(next) -> resolve_dynamic_pointer(rest, next)
+            Error(_) -> None
+          }
+        Error(_) ->
+          case decode.run(current, decode.list(of: decode.dynamic)) {
+            Ok(items) -> resolve_list_pointer(segment, rest, items)
+            Error(_) -> None
+          }
       }
-      Error(_) -> case decode.run(current, decode.list(of: decode.dynamic)) {
-        Ok(items) -> resolve_list_pointer(segment, rest, items)
-        Error(_) -> None
-      }
-    }
   }
 }
 
@@ -184,13 +179,15 @@ fn resolve_list_pointer(
   items: List(dynamic.Dynamic),
 ) -> Option(dynamic.Dynamic) {
   case int.parse(segment) {
-    Ok(index) -> case index < 0 {
-      True -> None
-      False -> case list.drop(items, index) |> list.first {
-        Ok(value) -> resolve_dynamic_pointer(rest, value)
-        Error(_) -> None
+    Ok(index) ->
+      case index < 0 {
+        True -> None
+        False ->
+          case list.drop(items, index) |> list.first {
+            Ok(value) -> resolve_dynamic_pointer(rest, value)
+            Error(_) -> None
+          }
       }
-    }
     Error(_) -> None
   }
 }
@@ -217,21 +214,26 @@ fn dynamic_to_json_non_null(value: dynamic.Dynamic) -> json.Json {
       |> dict.to_list
       |> list.map(fn(pair) { #(pair.0, dynamic_to_json(pair.1)) })
       |> json.object
-    Error(_) -> case decode.run(value, decode.list(of: decode.dynamic)) {
-      Ok(items) -> json.array(items, dynamic_to_json)
-      Error(_) -> case decode.run(value, decode.string) {
-        Ok(text) -> json.string(text)
-        Error(_) -> case decode.run(value, decode.bool) {
-          Ok(flag) -> json.bool(flag)
-          Error(_) -> case decode.run(value, decode.int) {
-            Ok(number) -> json.int(number)
-            Error(_) -> case decode.run(value, decode.float) {
-              Ok(number) -> json.float(number)
-              Error(_) -> json.null()
-            }
+    Error(_) ->
+      case decode.run(value, decode.list(of: decode.dynamic)) {
+        Ok(items) -> json.array(items, dynamic_to_json)
+        Error(_) ->
+          case decode.run(value, decode.string) {
+            Ok(text) -> json.string(text)
+            Error(_) ->
+              case decode.run(value, decode.bool) {
+                Ok(flag) -> json.bool(flag)
+                Error(_) ->
+                  case decode.run(value, decode.int) {
+                    Ok(number) -> json.int(number)
+                    Error(_) ->
+                      case decode.run(value, decode.float) {
+                        Ok(number) -> json.float(number)
+                        Error(_) -> json.null()
+                      }
+                  }
+              }
           }
-        }
       }
-    }
   }
 }

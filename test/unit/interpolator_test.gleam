@@ -1,5 +1,5 @@
 import gleam/dict
-import gleam/dynamic as dynamic
+import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/json
 import gleam/option.{type Option, None, Some}
@@ -130,10 +130,7 @@ pub fn interpolate_json_arrays_test() {
 
   let template =
     json.object([
-      #(
-        "items",
-        json.array(["{{params.a}}", "{{params.b}}"], json.string),
-      ),
+      #("items", json.array(["{{params.a}}", "{{params.b}}"], json.string)),
     ])
 
   let assert Ok(result) = interpolator.interpolate_json(template, ctx)
@@ -218,10 +215,7 @@ pub fn interpolate_json_deep_nesting_test() {
               #(
                 "c",
                 json.object([
-                  #(
-                    "d",
-                    json.object([#("e", json.string("{{params.deep}}"))]),
-                  ),
+                  #("d", json.object([#("e", json.string("{{params.deep}}"))])),
                 ]),
               ),
             ]),
@@ -253,20 +247,18 @@ pub fn interpolate_json_from_pointer_test() {
 
   let template =
     json.object([
-      #(
-        "messages",
-        json.object([#("$from", json.string("/input/messages"))]),
-      ),
+      #("messages", json.object([#("$from", json.string("/input/messages"))])),
     ])
 
   let assert Ok(result) = interpolator.interpolate_json(template, ctx)
 
   let object = result |> json_to_dynamic |> decode_object
   let assert Ok(messages_value) = dict.get(object, "messages")
-  let assert Ok(messages) = decode.run(messages_value, decode.list(of: decode.dynamic))
+  let assert Ok(messages) =
+    decode.run(messages_value, decode.list(of: decode.dynamic))
 
   case messages {
-    [first, .._] -> {
+    [first, ..] -> {
       let message_object = decode_object(first)
       let assert Ok(role_value) = dict.get(message_object, "role")
       let assert Ok(content_value) = dict.get(message_object, "content")
@@ -285,10 +277,7 @@ pub fn interpolate_json_from_pointer_invalid_test() {
 
   let template =
     json.object([
-      #(
-        "messages",
-        json.object([#("$from", json.string("/input/missing"))]),
-      ),
+      #("messages", json.object([#("$from", json.string("/input/missing"))])),
     ])
 
   interpolator.interpolate_json(template, ctx)
@@ -324,10 +313,7 @@ pub fn interpolate_runner_test() {
       Some(8080),
     )
 
-  interpolator.interpolate_string_strict(
-    "{{runner.host}}:{{runner.port}}",
-    ctx,
-  )
+  interpolator.interpolate_string_strict("{{runner.host}}:{{runner.port}}", ctx)
   |> should.equal(Ok("127.0.0.1:8080"))
 
   let transient_ctx = base_context(dict.new())
@@ -337,8 +323,7 @@ pub fn interpolate_runner_test() {
 }
 
 pub fn interpolate_input_extra_params_test() {
-  let extra =
-    dict.from_list([#("mode", types_core.StringVal("fast"))])
+  let extra = dict.from_list([#("mode", types_core.StringVal("fast"))])
 
   let input = types_input.PayloadChat([], extra)
   let ctx = context_with_input(dict.new(), input)
@@ -348,8 +333,7 @@ pub fn interpolate_input_extra_params_test() {
 }
 
 pub fn interpolate_value_not_scalar_test() {
-  let extra =
-    dict.from_list([#("files", types_core.ListVal(["a", "b"]))])
+  let extra = dict.from_list([#("files", types_core.ListVal(["a", "b"]))])
 
   let input = types_input.PayloadChat([], extra)
   let ctx = context_with_input(dict.new(), input)
@@ -369,6 +353,9 @@ pub fn interpolate_value_not_scalar_test() {
 
   let files_ctx = context_with_input(dict.new(), files_input)
 
-  interpolator.interpolate_string_strict("{{helpers.last_user_files}}", files_ctx)
+  interpolator.interpolate_string_strict(
+    "{{helpers.last_user_files}}",
+    files_ctx,
+  )
   |> should.equal(Error(interpolator.ValueNotScalar("helpers.last_user_files")))
 }

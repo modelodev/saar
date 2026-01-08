@@ -51,9 +51,8 @@ pub fn response_mapping_pointer_invalid_test() {
 
   let body = json.object([#("answer", json.string("ok"))])
 
-  let assert Error(
-    response_mapping.MappingError(kind: kind, message: _),
-  ) = response_mapping.apply_response_mapping(Some(mapping), body)
+  let assert Error(response_mapping.MappingError(kind: kind, message: _)) =
+    response_mapping.apply_response_mapping(Some(mapping), body)
 
   kind |> should.equal(types_enums.BadRequest)
 }
@@ -67,9 +66,8 @@ pub fn response_mapping_text_pointer_wrong_type_test() {
 
   let body = json.object([#("answer", json.int(42))])
 
-  let assert Error(
-    response_mapping.MappingError(kind: kind, message: _),
-  ) = response_mapping.apply_response_mapping(Some(mapping), body)
+  let assert Error(response_mapping.MappingError(kind: kind, message: _)) =
+    response_mapping.apply_response_mapping(Some(mapping), body)
 
   kind |> should.equal(types_enums.AgentError)
 }
@@ -83,9 +81,8 @@ pub fn response_mapping_artifacts_pointer_wrong_type_test() {
 
   let body = json.object([#("files", json.string("nope"))])
 
-  let assert Error(
-    response_mapping.MappingError(kind: kind, message: _),
-  ) = response_mapping.apply_response_mapping(Some(mapping), body)
+  let assert Error(response_mapping.MappingError(kind: kind, message: _)) =
+    response_mapping.apply_response_mapping(Some(mapping), body)
 
   kind |> should.equal(types_enums.AgentError)
 }

@@ -42,8 +42,7 @@ pub fn interpolate_profiles_base_url_golden_test() {
     let types_profile.Profile(interface: interface, ..) = profile
 
     let assert types_profile.HttpInterface(base_url: base_url, ..) = interface
-    let assert Ok(url) =
-      interpolator.interpolate_string_strict(base_url, ctx)
+    let assert Ok(url) = interpolator.interpolate_string_strict(base_url, ctx)
 
     url |> should.equal("http://127.0.0.1:8080")
   })

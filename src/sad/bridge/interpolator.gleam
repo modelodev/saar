@@ -1,5 +1,5 @@
 import gleam/dict.{type Dict}
-import gleam/dynamic as dynamic
+import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
@@ -160,10 +160,11 @@ fn resolve_helpers(
     None -> Error(UnknownKey("helpers", key))
     Some(types_input.SadHelpers(last_user_content, _)) ->
       case key {
-        "last_user_content" -> case last_user_content {
-          Some(content) -> Ok(content)
-          None -> Ok("")
-        }
+        "last_user_content" ->
+          case last_user_content {
+            Some(content) -> Ok(content)
+            None -> Ok("")
+          }
         "last_user_files" -> Error(ValueNotScalar("helpers.last_user_files"))
         _ -> Error(UnknownKey("helpers", key))
       }
@@ -186,14 +187,16 @@ fn resolve_runner(
   port: Option(Int),
 ) -> Result(String, InterpolationError) {
   case key {
-    "host" -> case host {
-      Some(value) -> Ok(value)
-      None -> Error(UnknownKey("runner", "host"))
-    }
-    "port" -> case port {
-      Some(value) -> Ok(int.to_string(value))
-      None -> Error(UnknownKey("runner", "port"))
-    }
+    "host" ->
+      case host {
+        Some(value) -> Ok(value)
+        None -> Error(UnknownKey("runner", "host"))
+      }
+    "port" ->
+      case port {
+        Some(value) -> Ok(int.to_string(value))
+        None -> Error(UnknownKey("runner", "port"))
+      }
     _ -> Error(UnknownKey("runner", key))
   }
 }
@@ -205,10 +208,11 @@ fn resolve_input(
   case input {
     types_input.PayloadChat(_, extra) | types_input.PayloadMixed(_, _, extra) ->
       case dict.get(extra, key) {
-        Ok(value) -> case is_scalar_value(value) {
-          True -> Ok(types_core.value_to_string(value))
-          False -> Error(ValueNotScalar("input." <> key))
-        }
+        Ok(value) ->
+          case is_scalar_value(value) {
+            True -> Ok(types_core.value_to_string(value))
+            False -> Error(ValueNotScalar("input." <> key))
+          }
         Error(_) -> Error(UnknownKey("input", key))
       }
     types_input.PayloadFiles(_) -> Error(UnknownKey("input", key))
@@ -230,9 +234,10 @@ fn interpolate_dynamic(
     Ok(fields) -> {
       case extract_from_pointer(fields) {
         Some(pointer) -> {
-          use resolved <- result.try(
-            resolve_json_pointer(pointer, interp_context_to_json(ctx)),
-          )
+          use resolved <- result.try(resolve_json_pointer(
+            pointer,
+            interp_context_to_json(ctx),
+          ))
           Ok(json_to_dynamic(resolved))
         }
         None -> {
@@ -247,33 +252,40 @@ fn interpolate_dynamic(
         }
       }
     }
-    Error(_) -> case decode.run(value, decode.list(of: decode.dynamic)) {
-      Ok(items) -> {
-        items
-        |> list.try_map(fn(item) { interpolate_dynamic(item, ctx) })
-        |> result.map(dynamic.list)
-      }
-      Error(_) -> case decode.run(value, decode.string) {
-        Ok(text) -> {
-          use interpolated <- result.try(interpolate_string_strict(text, ctx))
-          Ok(dynamic.string(interpolated))
+    Error(_) ->
+      case decode.run(value, decode.list(of: decode.dynamic)) {
+        Ok(items) -> {
+          items
+          |> list.try_map(fn(item) { interpolate_dynamic(item, ctx) })
+          |> result.map(dynamic.list)
         }
-        Error(_) -> Ok(value)
+        Error(_) ->
+          case decode.run(value, decode.string) {
+            Ok(text) -> {
+              use interpolated <- result.try(interpolate_string_strict(
+                text,
+                ctx,
+              ))
+              Ok(dynamic.string(interpolated))
+            }
+            Error(_) -> Ok(value)
+          }
       }
-    }
   }
 }
 
 fn extract_from_pointer(fields: Dict(String, dynamic.Dynamic)) -> Option(String) {
   case dict.size(fields) == 1 {
     False -> None
-    True -> case dict.get(fields, "$from") {
-      Ok(value) -> case decode.run(value, decode.string) {
-        Ok(pointer) -> Some(pointer)
+    True ->
+      case dict.get(fields, "$from") {
+        Ok(value) ->
+          case decode.run(value, decode.string) {
+            Ok(pointer) -> Some(pointer)
+            Error(_) -> None
+          }
         Error(_) -> None
       }
-      Error(_) -> None
-    }
   }
 }
 
@@ -396,34 +408,43 @@ fn dynamic_to_json_non_null(value: dynamic.Dynamic) -> json.Json {
       |> dict.to_list
       |> list.map(fn(pair) { #(pair.0, dynamic_to_json(pair.1)) })
       |> json.object
-    Error(_) -> case decode.run(value, decode.list(of: decode.dynamic)) {
-      Ok(items) -> json.array(items, dynamic_to_json)
-      Error(_) -> case decode.run(value, decode.string) {
-        Ok(text) -> json.string(text)
-        Error(_) -> case decode.run(value, decode.bool) {
-          Ok(flag) -> json.bool(flag)
-          Error(_) -> case decode.run(value, decode.int) {
-            Ok(number) -> json.int(number)
-            Error(_) -> case decode.run(value, decode.float) {
-              Ok(number) -> json.float(number)
-              Error(_) -> json.null()
-            }
+    Error(_) ->
+      case decode.run(value, decode.list(of: decode.dynamic)) {
+        Ok(items) -> json.array(items, dynamic_to_json)
+        Error(_) ->
+          case decode.run(value, decode.string) {
+            Ok(text) -> json.string(text)
+            Error(_) ->
+              case decode.run(value, decode.bool) {
+                Ok(flag) -> json.bool(flag)
+                Error(_) ->
+                  case decode.run(value, decode.int) {
+                    Ok(number) -> json.int(number)
+                    Error(_) ->
+                      case decode.run(value, decode.float) {
+                        Ok(number) -> json.float(number)
+                        Error(_) -> json.null()
+                      }
+                  }
+              }
           }
-        }
       }
-    }
   }
 }
 
-fn parse_json_pointer(pointer: String) -> Result(List(String), InterpolationError) {
+fn parse_json_pointer(
+  pointer: String,
+) -> Result(List(String), InterpolationError) {
   case pointer {
     "" -> Ok([])
-    _ -> case string.split(pointer, "/") {
-      ["", ..segments] -> list.try_map(segments, fn(segment) {
-        decode_pointer_segment(segment, pointer)
-      })
-      _ -> Error(InvalidPointer(pointer))
-    }
+    _ ->
+      case string.split(pointer, "/") {
+        ["", ..segments] ->
+          list.try_map(segments, fn(segment) {
+            decode_pointer_segment(segment, pointer)
+          })
+        _ -> Error(InvalidPointer(pointer))
+      }
   }
 }
 
@@ -446,7 +467,7 @@ fn decode_pointer_chars(
     ["~"] -> Error(InvalidPointer(pointer))
     ["~", "0", ..rest] -> decode_pointer_chars(rest, pointer, ["~", ..acc])
     ["~", "1", ..rest] -> decode_pointer_chars(rest, pointer, ["/", ..acc])
-    ["~", _, .._] -> Error(InvalidPointer(pointer))
+    ["~", _, ..] -> Error(InvalidPointer(pointer))
     [char, ..rest] -> decode_pointer_chars(rest, pointer, [char, ..acc])
   }
 }
@@ -458,19 +479,19 @@ fn resolve_dynamic_pointer(
 ) -> Result(dynamic.Dynamic, InterpolationError) {
   case segments {
     [] -> Ok(current)
-    [segment, ..rest] -> case decode.run(
-      current,
-      decode.dict(decode.string, decode.dynamic),
-    ) {
-      Ok(fields) -> case dict.get(fields, segment) {
-        Ok(next) -> resolve_dynamic_pointer(rest, next, pointer)
-        Error(_) -> Error(InvalidPointer(pointer))
+    [segment, ..rest] ->
+      case decode.run(current, decode.dict(decode.string, decode.dynamic)) {
+        Ok(fields) ->
+          case dict.get(fields, segment) {
+            Ok(next) -> resolve_dynamic_pointer(rest, next, pointer)
+            Error(_) -> Error(InvalidPointer(pointer))
+          }
+        Error(_) ->
+          case decode.run(current, decode.list(of: decode.dynamic)) {
+            Ok(items) -> resolve_list_pointer(segment, rest, items, pointer)
+            Error(_) -> Error(InvalidPointer(pointer))
+          }
       }
-      Error(_) -> case decode.run(current, decode.list(of: decode.dynamic)) {
-        Ok(items) -> resolve_list_pointer(segment, rest, items, pointer)
-        Error(_) -> Error(InvalidPointer(pointer))
-      }
-    }
   }
 }
 
@@ -481,13 +502,15 @@ fn resolve_list_pointer(
   pointer: String,
 ) -> Result(dynamic.Dynamic, InterpolationError) {
   case int.parse(segment) {
-    Ok(index) -> case index < 0 {
-      True -> Error(InvalidPointer(pointer))
-      False -> case list.drop(items, index) |> list.first {
-        Ok(value) -> resolve_dynamic_pointer(rest, value, pointer)
-        Error(_) -> Error(InvalidPointer(pointer))
+    Ok(index) ->
+      case index < 0 {
+        True -> Error(InvalidPointer(pointer))
+        False ->
+          case list.drop(items, index) |> list.first {
+            Ok(value) -> resolve_dynamic_pointer(rest, value, pointer)
+            Error(_) -> Error(InvalidPointer(pointer))
+          }
       }
-    }
     Error(_) -> Error(InvalidPointer(pointer))
   }
 }
@@ -525,7 +548,10 @@ fn is_valid_key(value: String) -> Bool {
 }
 
 fn is_namespace_char(char: String) -> Bool {
-  string.contains("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", char)
+  string.contains(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_",
+    char,
+  )
 }
 
 fn is_key_char(char: String) -> Bool {
