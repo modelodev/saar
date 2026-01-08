@@ -186,8 +186,7 @@ pub fn transient_timeout_stops_runner_test() {
       runner_fixtures.default_chat_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
-  let env =
-    port_helpers.base_env(500, [#("SAD_TIMEOUT_MARKER", marker)])
+  let env = port_helpers.base_env(500, [#("SAD_TIMEOUT_MARKER", marker)])
 
   let result =
     runner.execute_transient(
@@ -299,7 +298,8 @@ pub fn artifact_id_is_uuid_v7_test() {
     [only] -> {
       let types_output.PublicArtifact(id: id, url: url, ..) = only
       url |> should.equal(option.None)
-      let assert Ok(parsed) = uuid.from_string(types_core.artifact_id_to_string(id))
+      let assert Ok(parsed) =
+        uuid.from_string(types_core.artifact_id_to_string(id))
       uuid.version(parsed) |> should.equal(uuid.V7)
     }
     _ -> panic as "Expected one artifact"

@@ -6,7 +6,8 @@ pub type ResolvedValue {
   SecretVal(types_core.SecretValue)
 }
 
-pub type ResolvedParams = Dict(String, ResolvedValue)
+pub type ResolvedParams =
+  Dict(String, ResolvedValue)
 
 pub fn resolved_value_to_env(value: ResolvedValue) -> String {
   case value {

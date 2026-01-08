@@ -2,7 +2,7 @@ import gleam/list
 import gleam/option.{None}
 import gleeunit
 import gleeunit/should
-import sad/types as types
+import sad/types
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums

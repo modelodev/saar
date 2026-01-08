@@ -34,13 +34,10 @@ pub fn wrapper_stop_timing_respects_double_shutdown_test() {
   let shutdown_ms = 120
   let post_kill_wait_ms = 80
   let env =
-    port_helpers.base_env(
-      shutdown_ms,
-      [
-        #("SAD_WRAPPER_POST_KILL_WAIT_MS", int.to_string(post_kill_wait_ms)),
-        #("SAD_WRAPPER_POLL_MS", "10"),
-      ],
-    )
+    port_helpers.base_env(shutdown_ms, [
+      #("SAD_WRAPPER_POST_KILL_WAIT_MS", int.to_string(post_kill_wait_ms)),
+      #("SAD_WRAPPER_POLL_MS", "10"),
+    ])
   let process =
     port_helpers.start_process_with_env(
       "python3",

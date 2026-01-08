@@ -394,9 +394,12 @@ fn handle_event_line(
   line: String,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let ReadState(total_bytes: total_bytes, events: events, ..) = state
-  use next_total <- result.try(
-    enforce_stdout_limit(total_bytes, line, max_stdout_bytes, trace_id),
-  )
+  use next_total <- result.try(enforce_stdout_limit(
+    total_bytes,
+    line,
+    max_stdout_bytes,
+    trace_id,
+  ))
   use event <- result.try(decode_runner_event(line, trace_id))
 
   read_events_loop(
@@ -644,7 +647,7 @@ fn stop_deadline_from(
 ) -> Deadline {
   let types_config.WrapperConfig(post_kill_wait_ms: post_kill_wait_ms, ..) =
     wrapper
-  At(now_ms + {shutdown_timeout_ms * 2} + post_kill_wait_ms)
+  At(now_ms + { shutdown_timeout_ms * 2 } + post_kill_wait_ms)
 }
 
 fn ensure_stop_deadline(
@@ -673,13 +676,14 @@ fn update_state_for_timeout(
     True ->
       case stop_on_timeout {
         False -> Error(interaction_error(trace_id, "Runner call timeout"))
-        True -> Ok(apply_timeout_stop(
-          process,
-          state,
-          now_ms,
-          shutdown_timeout_ms,
-          wrapper,
-        ))
+        True ->
+          Ok(apply_timeout_stop(
+            process,
+            state,
+            now_ms,
+            shutdown_timeout_ms,
+            wrapper,
+          ))
       }
   }
 }
@@ -717,8 +721,7 @@ fn decrement_attempts_if_needed(
   call_deadline: Deadline,
 ) -> ReadState {
   case call_deadline {
-    Infinite ->
-      ReadState(..state, attempts: int.max(state.attempts - 1, 0))
+    Infinite -> ReadState(..state, attempts: int.max(state.attempts - 1, 0))
     At(_) -> state
   }
 }

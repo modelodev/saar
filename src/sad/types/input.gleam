@@ -1,9 +1,9 @@
 import gleam/dict.{type Dict}
 import gleam/option.{type Option}
+import sad/types
 import sad/types/core
 import sad/types/enums
 import sad/types/runner
-import sad/types as types
 
 pub type ChatMessage {
   ChatMessage(role: String, content: String)

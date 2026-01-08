@@ -1,4 +1,4 @@
-import gleam/dict as dict
+import gleam/dict
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/list
@@ -31,7 +31,10 @@ pub fn decode_interface(
 
 pub fn decode_capabilities(
   value: Dynamic,
-) -> Result(dict.Dict(String, types_profile.RunnerCapability), List(decode.DecodeError)) {
+) -> Result(
+  dict.Dict(String, types_profile.RunnerCapability),
+  List(decode.DecodeError),
+) {
   decode.run(value, runner_capabilities_decoder())
 }
 
@@ -52,9 +55,11 @@ pub fn decode_payload_std_chat(
   extra_fields: dict.Dict(String, types_profile.ExtraFieldDef),
 ) -> Result(types_input.InputPayload, List(decode.DecodeError)) {
   use fields <- result.try(decode_object(inputs))
-  use messages <- result.try(
-    decode_required_field(fields, "messages", chat_messages_decoder()),
-  )
+  use messages <- result.try(decode_required_field(
+    fields,
+    "messages",
+    chat_messages_decoder(),
+  ))
   use extra <- result.try(decode_extra_fields_from_fields(extra_fields, fields))
   Ok(types_input.PayloadChat(messages, extra))
 }
@@ -63,7 +68,11 @@ pub fn decode_payload_std_files(
   inputs: Dynamic,
 ) -> Result(types_input.InputPayload, List(decode.DecodeError)) {
   use fields <- result.try(decode_object(inputs))
-  use files <- result.try(decode_required_field(fields, "files", files_decoder()))
+  use files <- result.try(decode_required_field(
+    fields,
+    "files",
+    files_decoder(),
+  ))
   Ok(types_input.PayloadFiles(files))
 }
 
@@ -72,10 +81,16 @@ pub fn decode_payload_mixed(
   extra_fields: dict.Dict(String, types_profile.ExtraFieldDef),
 ) -> Result(types_input.InputPayload, List(decode.DecodeError)) {
   use fields <- result.try(decode_object(inputs))
-  use messages <- result.try(
-    decode_required_field(fields, "messages", chat_messages_decoder()),
-  )
-  use files <- result.try(decode_required_field(fields, "files", files_decoder()))
+  use messages <- result.try(decode_required_field(
+    fields,
+    "messages",
+    chat_messages_decoder(),
+  ))
+  use files <- result.try(decode_required_field(
+    fields,
+    "files",
+    files_decoder(),
+  ))
   use extra <- result.try(decode_extra_fields_from_fields(extra_fields, fields))
   Ok(types_input.PayloadMixed(messages, files, extra))
 }
@@ -98,14 +113,12 @@ pub fn profile_decoder() -> decode.Decoder(types_profile.Profile) {
     )
     use runner <- decode.field("runner", runner_decoder())
     use interface <- decode.field("interface", interface_decoder())
-    decode.success(
-      types_profile.Profile(
-        meta: meta,
-        parameters: parameters,
-        runner: runner,
-        interface: interface,
-      ),
-    )
+    decode.success(types_profile.Profile(
+      meta: meta,
+      parameters: parameters,
+      runner: runner,
+      interface: interface,
+    ))
   }
   decoder
 }
@@ -113,17 +126,19 @@ pub fn profile_decoder() -> decode.Decoder(types_profile.Profile) {
 fn profile_meta_decoder() -> decode.Decoder(types_profile.ProfileMeta) {
   let decoder = {
     use id <- decode.field("id", decode.string)
-    use name <- decode.optional_field("name", None, decode.optional(decode.string))
+    use name <- decode.optional_field(
+      "name",
+      None,
+      decode.optional(decode.string),
+    )
     use lifecycle <- decode.field("lifecycle", lifecycle_decoder())
     use description <- decode.field("description", decode.string)
-    decode.success(
-      types_profile.ProfileMeta(
-        id: types_core.profile_id(id),
-        name: name,
-        lifecycle: lifecycle,
-        description: description,
-      ),
-    )
+    decode.success(types_profile.ProfileMeta(
+      id: types_core.profile_id(id),
+      name: name,
+      lifecycle: lifecycle,
+      description: description,
+    ))
   }
   decoder
 }
@@ -139,7 +154,9 @@ fn lifecycle_decoder() -> decode.Decoder(types_enums.Lifecycle) {
   decoder
 }
 
-fn parameters_decoder() -> decode.Decoder(dict.Dict(String, types_profile.Parameter)) {
+fn parameters_decoder() -> decode.Decoder(
+  dict.Dict(String, types_profile.Parameter),
+) {
   decode.dict(decode.string, parameter_decoder())
 }
 
@@ -190,7 +207,8 @@ fn secret_param_decoder() -> decode.Decoder(types_profile.Parameter) {
       decode.optional(value_decoder(expected)),
     )
     case default {
-      Some(_) -> decode.failure(parameter_placeholder(), expected: "NoSecretDefault")
+      Some(_) ->
+        decode.failure(parameter_placeholder(), expected: "NoSecretDefault")
       None -> decode.success(types_profile.SecretParam(key, expected))
     }
   }
@@ -239,22 +257,22 @@ pub fn runner_decoder() -> decode.Decoder(types_runner.Runner) {
       types_runner.default_artifact_config(),
       artifact_config_decoder(),
     )
-    decode.success(
-      types_runner.Runner(
-        type_: type_,
-        tool_config: tool_config,
-        runtime: runtime,
-        env_map: env_map,
-        args: args,
-        artifact_config: artifact_config,
-      ),
-    )
+    decode.success(types_runner.Runner(
+      type_: type_,
+      tool_config: tool_config,
+      runtime: runtime,
+      env_map: env_map,
+      args: args,
+      artifact_config: artifact_config,
+    ))
   }
   decoder
 }
 
 fn tool_config_decoder() -> decode.Decoder(types_runner.ToolConfig) {
-  decode.one_of(tool_config_script_decoder(), or: [tool_config_package_decoder()])
+  decode.one_of(tool_config_script_decoder(), or: [
+    tool_config_package_decoder(),
+  ])
 }
 
 fn tool_config_script_decoder() -> decode.Decoder(types_runner.ToolConfig) {
@@ -274,13 +292,11 @@ fn tool_config_package_decoder() -> decode.Decoder(types_runner.ToolConfig) {
       [],
       decode.list(of: decode.string),
     )
-    decode.success(
-      types_runner.ToolConfigPackage(
-        package: package,
-        command: command,
-        with_packages: with_packages,
-      ),
-    )
+    decode.success(types_runner.ToolConfigPackage(
+      package: package,
+      command: command,
+      with_packages: with_packages,
+    ))
   }
   decoder
 }
@@ -302,13 +318,11 @@ fn runtime_config_decoder() -> decode.Decoder(types_runner.RuntimeConfig) {
       None,
       decode.optional(decode.string),
     )
-    decode.success(
-      types_runner.RuntimeConfig(
-        mode: mode,
-        port_env_var: port_env_var,
-        host_env_var: host_env_var,
-      ),
-    )
+    decode.success(types_runner.RuntimeConfig(
+      mode: mode,
+      port_env_var: port_env_var,
+      host_env_var: host_env_var,
+    ))
   }
   decoder
 }
@@ -318,7 +332,8 @@ fn network_mode_decoder() -> decode.Decoder(types_runner.NetworkMode) {
     use value <- decode.then(decode.string)
     case types_runner.network_mode_from_string(value) {
       Ok(mode) -> decode.success(mode)
-      Error(_) -> decode.failure(types_runner.NoNetwork, expected: "NetworkMode")
+      Error(_) ->
+        decode.failure(types_runner.NoNetwork, expected: "NetworkMode")
     }
   }
   decoder
@@ -336,16 +351,18 @@ fn artifact_config_decoder() -> decode.Decoder(types_runner.ArtifactConfig) {
       [],
       string_list_or_single_decoder(),
     )
-    decode.success(types_runner.ArtifactConfig(include: include, exclude: exclude))
+    decode.success(types_runner.ArtifactConfig(
+      include: include,
+      exclude: exclude,
+    ))
   }
   decoder
 }
 
 fn string_list_or_single_decoder() -> decode.Decoder(List(String)) {
-  decode.one_of(
-    decode.string |> decode.map(fn(value) { [value] }),
-    or: [decode.list(of: decode.string)],
-  )
+  decode.one_of(decode.string |> decode.map(fn(value) { [value] }), or: [
+    decode.list(of: decode.string),
+  ])
 }
 
 pub fn interface_decoder() -> decode.Decoder(types_profile.Interface) {
@@ -354,7 +371,8 @@ pub fn interface_decoder() -> decode.Decoder(types_profile.Interface) {
     case protocol {
       "runner" -> runner_interface_decoder()
       "http" -> http_interface_decoder()
-      _ -> decode.failure(interface_placeholder(), expected: "InterfaceProtocol")
+      _ ->
+        decode.failure(interface_placeholder(), expected: "InterfaceProtocol")
     }
   }
   decoder
@@ -362,7 +380,10 @@ pub fn interface_decoder() -> decode.Decoder(types_profile.Interface) {
 
 fn runner_interface_decoder() -> decode.Decoder(types_profile.Interface) {
   let decoder = {
-    use capabilities <- decode.field("capabilities", runner_capabilities_decoder())
+    use capabilities <- decode.field(
+      "capabilities",
+      runner_capabilities_decoder(),
+    )
     decode.success(types_profile.RunnerInterface(capabilities))
   }
   decoder
@@ -381,15 +402,16 @@ fn http_interface_decoder() -> decode.Decoder(types_profile.Interface) {
       None,
       decode.optional(health_check_decoder()),
     )
-    use capabilities <- decode.field("capabilities", http_capabilities_decoder())
-    decode.success(
-      types_profile.HttpInterface(
-        base_url: base_url,
-        headers: headers,
-        health_check: health_check,
-        capabilities: capabilities,
-      ),
+    use capabilities <- decode.field(
+      "capabilities",
+      http_capabilities_decoder(),
     )
+    decode.success(types_profile.HttpInterface(
+      base_url: base_url,
+      headers: headers,
+      health_check: health_check,
+      capabilities: capabilities,
+    ))
   }
   decoder
 }
@@ -402,14 +424,15 @@ fn health_check_decoder() -> decode.Decoder(types_profile.HealthCheck) {
   let decoder = {
     use path <- decode.field("path", decode.string)
     use method <- decode.field("method", http_method_decoder())
-    use expect_statuses <- decode.field("expect_statuses", decode.list(of: decode.int))
-    decode.success(
-      types_profile.HealthCheck(
-        path: path,
-        method: method,
-        expect_statuses: expect_statuses,
-      ),
+    use expect_statuses <- decode.field(
+      "expect_statuses",
+      decode.list(of: decode.int),
     )
+    decode.success(types_profile.HealthCheck(
+      path: path,
+      method: method,
+      expect_statuses: expect_statuses,
+    ))
   }
   decoder
 }
@@ -444,14 +467,12 @@ fn runner_capability_decoder() -> decode.Decoder(types_profile.RunnerCapability)
       None,
       decode.optional(capability_limits_decoder()),
     )
-    decode.success(
-      types_profile.RunnerCapability(
-        input_schema: input_schema,
-        description: description,
-        streaming: streaming,
-        limits: limits,
-      ),
-    )
+    decode.success(types_profile.RunnerCapability(
+      input_schema: input_schema,
+      description: description,
+      streaming: streaming,
+      limits: limits,
+    ))
   }
   decoder
 }
@@ -476,16 +497,14 @@ fn http_capability_decoder() -> decode.Decoder(types_profile.HttpCapability) {
       None,
       decode.optional(capability_limits_decoder()),
     )
-    decode.success(
-      types_profile.HttpCapability(
-        path: path,
-        method: method,
-        input_schema: input_schema,
-        description: description,
-        streaming: streaming,
-        limits: limits,
-      ),
-    )
+    decode.success(types_profile.HttpCapability(
+      path: path,
+      method: method,
+      input_schema: input_schema,
+      description: description,
+      streaming: streaming,
+      limits: limits,
+    ))
   }
   decoder
 }
@@ -517,10 +536,10 @@ fn http_method_decoder() -> decode.Decoder(types_profile.HttpMethod) {
 }
 
 fn input_schema_decoder() -> decode.Decoder(types_profile.InputSchema) {
-  decode.one_of(
-    input_schema_string_decoder(),
-    or: [input_schema_ref_decoder(), input_schema_extended_decoder()],
-  )
+  decode.one_of(input_schema_string_decoder(), or: [
+    input_schema_ref_decoder(),
+    input_schema_extended_decoder(),
+  ])
 }
 
 fn input_schema_string_decoder() -> decode.Decoder(types_profile.InputSchema) {
@@ -528,7 +547,8 @@ fn input_schema_string_decoder() -> decode.Decoder(types_profile.InputSchema) {
     use value <- decode.then(decode.string)
     case input_schema_from_string(value) {
       Ok(schema) -> decode.success(schema)
-      Error(_) -> decode.failure(types_profile.SchemaChat, expected: "InputSchema")
+      Error(_) ->
+        decode.failure(types_profile.SchemaChat, expected: "InputSchema")
     }
   }
   decoder
@@ -539,7 +559,8 @@ fn input_schema_ref_decoder() -> decode.Decoder(types_profile.InputSchema) {
     use value <- decode.field("$ref", decode.string)
     case input_schema_from_string(value) {
       Ok(schema) -> decode.success(schema)
-      Error(_) -> decode.failure(types_profile.SchemaChat, expected: "InputSchema")
+      Error(_) ->
+        decode.failure(types_profile.SchemaChat, expected: "InputSchema")
     }
   }
   decoder
@@ -548,14 +569,12 @@ fn input_schema_ref_decoder() -> decode.Decoder(types_profile.InputSchema) {
 fn input_schema_extended_decoder() -> decode.Decoder(types_profile.InputSchema) {
   let decoder = {
     use base <- decode.field("base", decode.string)
-    use extra_fields <- decode.field(
-      "extra_fields",
-      extra_field_defs_decoder(),
-    )
+    use extra_fields <- decode.field("extra_fields", extra_field_defs_decoder())
     case base {
       "std:chat" ->
         decode.success(types_profile.SchemaChatExtended(extra_fields))
-      _ -> decode.failure(types_profile.SchemaChat, expected: "SchemaChatExtended")
+      _ ->
+        decode.failure(types_profile.SchemaChat, expected: "SchemaChatExtended")
     }
   }
   decoder
@@ -598,13 +617,11 @@ fn extra_field_def_decoder() -> decode.Decoder(types_profile.ExtraFieldDef) {
               Some(types_core.StringVal(value)) ->
                 case list.contains(values, value) {
                   True ->
-                    decode.success(
-                      types_profile.ExtraFieldDef(
-                        type_: type_,
-                        enum_values: enum_values,
-                        default: default,
-                      ),
-                    )
+                    decode.success(types_profile.ExtraFieldDef(
+                      type_: type_,
+                      enum_values: enum_values,
+                      default: default,
+                    ))
                   False ->
                     decode.failure(
                       extra_field_def_placeholder(),
@@ -617,25 +634,24 @@ fn extra_field_def_decoder() -> decode.Decoder(types_profile.ExtraFieldDef) {
                   expected: "EnumDefault",
                 )
               None ->
-                decode.success(
-                  types_profile.ExtraFieldDef(
-                    type_: type_,
-                    enum_values: enum_values,
-                    default: default,
-                  ),
-                )
+                decode.success(types_profile.ExtraFieldDef(
+                  type_: type_,
+                  enum_values: enum_values,
+                  default: default,
+                ))
             }
           _ ->
-            decode.failure(extra_field_def_placeholder(), expected: "EnumString")
+            decode.failure(
+              extra_field_def_placeholder(),
+              expected: "EnumString",
+            )
         }
       None ->
-        decode.success(
-          types_profile.ExtraFieldDef(
-            type_: type_,
-            enum_values: enum_values,
-            default: default,
-          ),
-        )
+        decode.success(types_profile.ExtraFieldDef(
+          type_: type_,
+          enum_values: enum_values,
+          default: default,
+        ))
     }
   }
   decoder
@@ -669,8 +685,7 @@ fn extra_field_value_decoder(
   case type_ {
     types_profile.FieldString ->
       decode.string |> decode.map(types_core.StringVal)
-    types_profile.FieldBoolean ->
-      decode.bool |> decode.map(types_core.BoolVal)
+    types_profile.FieldBoolean -> decode.bool |> decode.map(types_core.BoolVal)
     types_profile.FieldNumber -> number_value_decoder()
     types_profile.FieldInteger -> decode.int |> decode.map(types_core.IntVal)
   }
@@ -704,7 +719,8 @@ fn value_decoder(
     types_core.TypeInt -> decode.int |> decode.map(types_core.IntVal)
     types_core.TypeFloat -> decode.float |> decode.map(types_core.FloatVal)
     types_core.TypeBool -> decode.bool |> decode.map(types_core.BoolVal)
-    types_core.TypeList -> decode.list(of: decode.string) |> decode.map(types_core.ListVal)
+    types_core.TypeList ->
+      decode.list(of: decode.string) |> decode.map(types_core.ListVal)
   }
 }
 
@@ -735,9 +751,12 @@ fn file_ref_decoder() -> decode.Decoder(types_input.FileRef) {
       None,
       decode.optional(decode.string),
     )
-    decode.success(
-      types_input.FileRef(url: url, mime: mime, name: name, context: context),
-    )
+    decode.success(types_input.FileRef(
+      url: url,
+      mime: mime,
+      name: name,
+      context: context,
+    ))
   }
   decoder
 }

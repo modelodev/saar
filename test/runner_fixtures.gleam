@@ -1,6 +1,6 @@
 import gleam/dict
 import gleam/option
-import sad/types as types
+import sad/types
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input

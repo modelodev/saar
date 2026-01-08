@@ -2,11 +2,11 @@ import gleam/dict
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option
+import sad/types
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input
 import sad/types/runner as types_runner
-import sad/types as types
 
 pub fn sad_input_to_json(input: types_input.SadInput) -> Json {
   json.object([

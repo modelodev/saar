@@ -1,11 +1,11 @@
-import gleam/dict as dict
+import gleam/dict
 import gleam/float
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
-import sad/types as types
+import sad/types
 import sad/types/core as types_core
 import sad/types/profile as types_profile
 
@@ -36,13 +36,15 @@ pub fn resolve_params(
       let #(current, errs) = acc
       let #(param_name, param) = entry
 
-      case resolve_param(
-        param_name: param_name,
-        param: param,
-        config_values: config_values,
-        env_lookup: env_lookup,
-        init_params: init_params,
-      ) {
+      case
+        resolve_param(
+          param_name: param_name,
+          param: param,
+          config_values: config_values,
+          env_lookup: env_lookup,
+          init_params: init_params,
+        )
+      {
         Ok(value) -> #(dict.insert(current, param_name, value), errs)
         Error(err) -> #(current, [err, ..errs])
       }
@@ -112,7 +114,11 @@ fn resolve_from_dict(
     Error(_) ->
       case default {
         Some(value) -> {
-          use checked <- result.try(ensure_type(param_name, expected_type, value))
+          use checked <- result.try(ensure_type(
+            param_name,
+            expected_type,
+            value,
+          ))
           Ok(types.NormalValue(checked))
         }
         None -> Error(on_missing())

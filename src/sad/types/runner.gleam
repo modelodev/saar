@@ -37,7 +37,11 @@ pub type RunnerEvent {
 }
 
 pub type ToolConfig {
-  ToolConfigPackage(package: String, command: String, with_packages: List(String))
+  ToolConfigPackage(
+    package: String,
+    command: String,
+    with_packages: List(String),
+  )
   ToolConfigScript(script: String)
 }
 
