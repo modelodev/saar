@@ -25,6 +25,7 @@ pub fn transient_echo_happy_test() {
       runner_fixtures.default_chat_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
+  let config = default_config()
 
   let result =
     runner.execute_transient(
@@ -33,8 +34,9 @@ pub fn transient_echo_happy_test() {
       port_helpers.base_env(500, []),
       ".",
       input,
-      default_config(),
+      config,
       False,
+      config.call_timeout_ms,
     )
 
   let assert Ok(output) = result
@@ -59,6 +61,7 @@ pub fn transient_invalid_json_fails_test() {
       runner_fixtures.default_chat_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
+  let config = default_config()
   let script = "print('not-json')"
 
   let result =
@@ -68,8 +71,9 @@ pub fn transient_invalid_json_fails_test() {
       port_helpers.base_env(500, []),
       ".",
       input,
-      default_config(),
+      config,
       False,
+      config.call_timeout_ms,
     )
 
   let assert Error(err) = result
@@ -84,6 +88,7 @@ pub fn provision_requires_single_result_test() {
       runner_fixtures.default_chat_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
+  let config = default_config()
   let script =
     "import json; print(json.dumps({'t':'provision_result','status':'success','log_files':[]})); print(json.dumps({'t':'provision_result','status':'success','log_files':[]}))"
 
@@ -94,7 +99,8 @@ pub fn provision_requires_single_result_test() {
       port_helpers.base_env(500, []),
       ".",
       input,
-      default_config(),
+      config,
+      config.call_timeout_ms,
     )
 
   let assert Error(err) = result
@@ -109,6 +115,7 @@ pub fn streaming_chunks_ok_test() {
       runner_fixtures.default_chat_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
+  let config = default_config()
 
   let result =
     runner.execute_transient(
@@ -117,8 +124,9 @@ pub fn streaming_chunks_ok_test() {
       port_helpers.base_env(500, []),
       ".",
       input,
-      default_config(),
+      config,
       True,
+      config.call_timeout_ms,
     )
 
   let assert Ok(_) = result
@@ -130,8 +138,9 @@ pub fn streaming_chunks_ok_test() {
       port_helpers.base_env(500, []),
       ".",
       input,
-      default_config(),
+      config,
       False,
+      config.call_timeout_ms,
     )
 
   let assert Error(err) = result
@@ -146,16 +155,18 @@ pub fn runner_crash_returns_infra_error_test() {
       runner_fixtures.default_chat_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
+  let config = default_config()
 
   let result =
     runner.execute_transient(
       "python3",
       ["./test/fixtures/source_local/runners/crasher.py"],
-      port_helpers.base_env(500, []),
+      port_helpers.base_env(500, [#("SAD_CRASH_ON_START", "1")]),
       ".",
       input,
-      default_config(),
+      config,
       False,
+      config.call_timeout_ms,
     )
 
   let assert Error(err) = result
@@ -163,10 +174,44 @@ pub fn runner_crash_returns_infra_error_test() {
   kind |> should.equal(types_enums.InfraError)
 }
 
+pub fn transient_timeout_stops_runner_test() {
+  port_helpers.ensure_wrapper_path()
+  let workspace = "./build/test-workspaces/timeout"
+  let _ = ensure_workspace(workspace)
+  let marker = workspace <> "/stopped.txt"
+  let config =
+    types_config.SadConfig(..default_config(), shutdown_timeout_ms: 100)
+  let input =
+    runner_fixtures.base_input(
+      runner_fixtures.default_chat_payload(),
+      types_runner.ArtifactConfig(include: [], exclude: []),
+    )
+  let env =
+    port_helpers.base_env(500, [#("SAD_TIMEOUT_MARKER", marker)])
+
+  let result =
+    runner.execute_transient(
+      "python3",
+      ["./test/fixtures/source_local/runners/timeout_sleep.py"],
+      env,
+      ".",
+      input,
+      config,
+      False,
+      50,
+    )
+
+  let assert Error(err) = result
+  let types_output.InteractionError(kind: kind, ..) = err
+  kind |> should.equal(types_enums.InfraError)
+  simplifile.is_file(marker) |> should.equal(Ok(True))
+}
+
 pub fn artifact_collection_respects_globs_test() {
   port_helpers.ensure_wrapper_path()
   let workspace = "./build/test-workspaces/artifacts"
   let _ = ensure_workspace(workspace)
+  let config = default_config()
 
   let include_only =
     types_runner.ArtifactConfig(include: ["outputs/**"], exclude: [])
@@ -185,8 +230,9 @@ pub fn artifact_collection_respects_globs_test() {
       env,
       ".",
       input,
-      default_config(),
+      config,
       False,
+      config.call_timeout_ms,
     )
 
   let assert Ok(types_output.InteractionResult(artifacts: artifacts, ..)) =
@@ -208,8 +254,9 @@ pub fn artifact_collection_respects_globs_test() {
       env,
       ".",
       input,
-      default_config(),
+      config,
       False,
+      config.call_timeout_ms,
     )
 
   let assert Ok(types_output.InteractionResult(artifacts: artifacts, ..)) =
@@ -221,11 +268,16 @@ pub fn artifact_id_is_uuid_v7_test() {
   port_helpers.ensure_wrapper_path()
   let workspace = "./build/test-workspaces/artifacts-uuid"
   let _ = ensure_workspace(workspace)
+  let sad_config = default_config()
 
-  let config = types_runner.ArtifactConfig(include: ["outputs/**"], exclude: [])
+  let artifact_config =
+    types_runner.ArtifactConfig(include: ["outputs/**"], exclude: [])
 
   let input =
-    runner_fixtures.base_input(runner_fixtures.default_chat_payload(), config)
+    runner_fixtures.base_input(
+      runner_fixtures.default_chat_payload(),
+      artifact_config,
+    )
   let env = port_helpers.env_with_workspace(500, workspace)
 
   let result =
@@ -235,8 +287,9 @@ pub fn artifact_id_is_uuid_v7_test() {
       env,
       ".",
       input,
-      default_config(),
+      sad_config,
       False,
+      sad_config.call_timeout_ms,
     )
 
   let assert Ok(types_output.InteractionResult(artifacts: artifacts, ..)) =

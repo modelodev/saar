@@ -26,6 +26,7 @@ pub type RunnerIoConfig {
 pub type WrapperConfig {
   WrapperConfig(
     read_buffer_bytes: Int,
+    control_line_bytes: Int,
     poll_interval_ms: Int,
     post_kill_wait_ms: Int,
   )
@@ -100,6 +101,7 @@ pub fn default_sad_config() -> SadConfig {
     runner_io: RunnerIoConfig(read_timeout_ms: 200, max_read_attempts: 200),
     wrapper: WrapperConfig(
       read_buffer_bytes: 4096,
+      control_line_bytes: 262_144,
       poll_interval_ms: 50,
       post_kill_wait_ms: 200,
     ),

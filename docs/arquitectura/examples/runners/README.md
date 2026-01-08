@@ -3,7 +3,7 @@
 Estos runners se lanzan siempre a través del wrapper de PID namespace (`../wrapper_pid_namespace.md`). El wrapper se encarga de:
 - Crear PID namespace + user namespace (rootless).
 - Lanzar el runner real.
-- Al recibir `{"t":"stop"}` por stdin o EOF, enviar SIGTERM → timeout → SIGKILL a toda la subtree del namespace y salir.
+- Al recibir la línea `{"t":"stop"}` (terminada en `\n`) por stdin o EOF, enviar SIGTERM → timeout → SIGKILL a toda la subtree del namespace y salir.
 - Autodestruirse si muere el parent (port owner).
 
 Expectativas para cualquier runner:
@@ -15,7 +15,7 @@ Expectativas para cualquier runner:
 - `runner_def.env_map` y `runner_def.args` llegan ya resueltos por SAD (sin `{{...}}`).
 - No necesitan implementar stop; basta con reaccionar a SIGTERM/SIGKILL y salir.
 - Host/port llegan por env (`SAD_HOST`/`SAD_PORT` o `runtime.port_env_var/host_env_var`).
-- Input llega en `SAD_INPUT_JSON` (ya validado).
+- Input llega en `SAD_INPUT_JSON` (ya validado) reenviado por el wrapper desde `{"t":"input","payload":<SAD_INPUT_JSON>}`.
 - SAD habla con el wrapper/runner vía una única abstracción (`sad/bridge/port_process.gleam`) para aislar la implementación de ports (FFI mínima).
 
 Runners incluidos:

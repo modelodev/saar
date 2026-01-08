@@ -3,7 +3,7 @@
 Objetivo: lanzar cualquier runner a través de un wrapper que:
 - Cree un PID namespace (y user namespace para hacerlo sin root).
 - Lance el runner real.
-- Al recibir `stop` (mensaje por stdin) o EOF, envíe SIGTERM→timeout→SIGKILL a toda la subtree.
+- Al recibir control por stdin (JSONL): `{"t":"input","payload":<SAD_INPUT_JSON>}` → reenvía payload al runner y cierra su stdin; `{"t":"stop"}` o EOF → SIGTERM→timeout→SIGKILL a toda la subtree.
 - Si el parent (port owner) muere, se auto-destruya y mate el namespace.
 
 ## Notas importantes
@@ -17,14 +17,14 @@ Objetivo: lanzar cualquier runner a través de un wrapper que:
   - El wrapper debe permanecer en silencio en STDOUT.
   - El runner emite eventos JSONL por STDOUT (logs/stream/result) según `arquitectura/protocolos_runner.md`.
   - Cualquier diagnóstico del wrapper va por STDERR (fuera de contrato). No se usa `stderr_to_stdout`.
-- Stop: SAD puede enviar `{"t":"stop"}` por stdin o simplemente cerrar stdin; el wrapper debe tratar ambos como orden de parada.
+- Stop: SAD puede enviar la línea `{"t":"stop"}` (terminada en `\n`) por stdin o simplemente cerrar stdin; el wrapper debe tratar ambos como orden de parada.
 
 ## Requisitos mínimos (v0)
 
 Un wrapper válido debe cumplir:
 - **PID 1 en pidns:** actuar como “init” del namespace y **reapear zombies** (`waitpid(-1, ...)` en loop o handler `SIGCHLD`).
 - **Propagación de señales:** ante stop, enviar SIGTERM→grace→SIGKILL a toda la subtree del namespace (y esperar reap final).
-- **Stop por stdin/EOF:** tratar `{"t":"stop"}` y EOF como orden de parada.
+- **Control por stdin (JSONL):** `{"t":"input","payload":<SAD_INPUT_JSON>}` (reenviar payload y cerrar stdin), `{"t":"stop"}` (terminada en `\n`) y EOF como orden de parada.
 - **Sin ruido por STDOUT:** no escribir bytes en STDOUT (SAD espera JSONL del runner ahí). Logs/diagnóstico del wrapper solo por STDERR.
 - **Salir si muere el parent:** `PR_SET_PDEATHSIG` o, alternativamente, depender de EOF en stdin si el BEAM/port owner muere.
 
@@ -35,7 +35,8 @@ En este documento mantenemos solo los requisitos y el contrato.
 
 ## Integración con SAD
 - SAD lanza siempre el wrapper vía Port: `spawn_executable wrapper -- <runner> ...`.
-- Stop/Delete: SAD puede enviar `{"t":"stop"}` por stdin y/o cerrar stdin; el wrapper hace SIGTERM→SIGKILL a toda la subtree del namespace.
+- Input: SAD envía `{"t":"input","payload":<SAD_INPUT_JSON>}` (terminada en `\n`); el wrapper reenvía `payload` al runner y cierra su stdin.
+- Stop/Delete: SAD puede enviar la línea `{"t":"stop"}` (terminada en `\n`) por stdin y/o cerrar stdin; el wrapper hace SIGTERM→SIGKILL a toda la subtree del namespace.
 - Salida: el runner emite eventos JSONL por STDOUT (incluye `t="log"`, `t="chunk"`, `t="result"`). El wrapper no debe emitir bytes por STDOUT; cualquier diagnóstico va por STDERR.
 
 ## Riesgos y pendientes

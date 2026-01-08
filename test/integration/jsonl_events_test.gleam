@@ -49,7 +49,7 @@ pub fn exceeds_max_stdout_bytes_test() {
   read_until_exceeded(process, max_stdout_bytes, 0, 200)
   |> should.equal(Ok(Nil))
 
-  port_process.send(process, "{\"t\":\"stop\"}")
+  port_process.send(process, "{\"t\":\"stop\"}\n")
   port_helpers.wait_for_exit_optional(process, read_timeout_ms, 40)
 }
 

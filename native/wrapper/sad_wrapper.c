@@ -61,8 +61,341 @@ static int read_shutdown_ms(void) {
   return read_env_int("SAD_SHUTDOWN_MS", 10000);
 }
 
-static bool is_stop_message(const char *buf) {
-  return strstr(buf, "\"t\":\"stop\"") != NULL;
+static int read_control_line_max_bytes(void) {
+  return read_env_int("SAD_WRAPPER_CONTROL_LINE_BYTES", 262144);
+}
+
+static bool is_json_ws(char c) {
+  return c == ' ' || c == '\t' || c == '\r';
+}
+
+static size_t skip_json_ws(const char *buf, size_t len, size_t pos) {
+  while (pos < len && is_json_ws(buf[pos])) {
+    pos++;
+  }
+  return pos;
+}
+
+static bool skip_json_string(const char *buf, size_t len, size_t *pos) {
+  if (*pos >= len || buf[*pos] != '"') {
+    return false;
+  }
+  (*pos)++;
+  while (*pos < len) {
+    char c = buf[*pos];
+    if (c == '"') {
+      (*pos)++;
+      return true;
+    }
+    if (c == '\\') {
+      (*pos)++;
+      if (*pos >= len) {
+        return false;
+      }
+      if (buf[*pos] == 'u') {
+        if (*pos + 4 >= len) {
+          return false;
+        }
+        *pos += 4;
+      }
+    }
+    (*pos)++;
+  }
+  return false;
+}
+
+static int hex_value(char c) {
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  }
+  if (c >= 'a' && c <= 'f') {
+    return 10 + (c - 'a');
+  }
+  if (c >= 'A' && c <= 'F') {
+    return 10 + (c - 'A');
+  }
+  return -1;
+}
+
+static bool parse_json_string(const char *buf,
+                              size_t len,
+                              size_t *pos,
+                              char *out,
+                              size_t out_cap,
+                              size_t *out_len,
+                              bool *truncated) {
+  if (*pos >= len || buf[*pos] != '"') {
+    return false;
+  }
+  (*pos)++;
+  size_t out_i = 0;
+  bool trunc = false;
+  while (*pos < len) {
+    char c = buf[*pos];
+    if (c == '"') {
+      (*pos)++;
+      if (out_cap > 0) {
+        out[out_i < out_cap ? out_i : out_cap - 1] = '\0';
+      }
+      if (out_len) {
+        *out_len = out_i;
+      }
+      if (truncated) {
+        *truncated = trunc;
+      }
+      return true;
+    }
+    if (c == '\\') {
+      (*pos)++;
+      if (*pos >= len) {
+        return false;
+      }
+      char esc = buf[*pos];
+      switch (esc) {
+      case '"':
+      case '\\':
+      case '/':
+        c = esc;
+        break;
+      case 'b':
+        c = '\b';
+        break;
+      case 'f':
+        c = '\f';
+        break;
+      case 'n':
+        c = '\n';
+        break;
+      case 'r':
+        c = '\r';
+        break;
+      case 't':
+        c = '\t';
+        break;
+      case 'u': {
+        if (*pos + 4 >= len) {
+          return false;
+        }
+        int h1 = hex_value(buf[*pos + 1]);
+        int h2 = hex_value(buf[*pos + 2]);
+        int h3 = hex_value(buf[*pos + 3]);
+        int h4 = hex_value(buf[*pos + 4]);
+        if (h1 < 0 || h2 < 0 || h3 < 0 || h4 < 0) {
+          return false;
+        }
+        int code = (h1 << 12) | (h2 << 8) | (h3 << 4) | h4;
+        c = code <= 0x7f ? (char)code : '?';
+        *pos += 4;
+        break;
+      }
+      default:
+        return false;
+      }
+    }
+    if (!trunc && out_cap > 0) {
+      if (out_i + 1 < out_cap) {
+        out[out_i++] = c;
+      } else {
+        trunc = true;
+      }
+    }
+    (*pos)++;
+  }
+  return false;
+}
+
+static bool skip_json_value(const char *buf, size_t len, size_t *pos);
+
+static bool skip_json_container(const char *buf,
+                                size_t len,
+                                size_t *pos,
+                                char open_char,
+                                char close_char) {
+  if (*pos >= len || buf[*pos] != open_char) {
+    return false;
+  }
+  (*pos)++;
+  while (*pos < len) {
+    char c = buf[*pos];
+    if (c == '"') {
+      if (!skip_json_string(buf, len, pos)) {
+        return false;
+      }
+      continue;
+    }
+    if (c == '{') {
+      if (!skip_json_container(buf, len, pos, '{', '}')) {
+        return false;
+      }
+      continue;
+    }
+    if (c == '[') {
+      if (!skip_json_container(buf, len, pos, '[', ']')) {
+        return false;
+      }
+      continue;
+    }
+    if (c == close_char) {
+      (*pos)++;
+      return true;
+    }
+    (*pos)++;
+  }
+  return false;
+}
+
+static bool is_json_value_delim(char c) {
+  return c == ' ' || c == '\t' || c == '\r' || c == ',' || c == '}' ||
+         c == ']';
+}
+
+static bool skip_json_value(const char *buf, size_t len, size_t *pos) {
+  *pos = skip_json_ws(buf, len, *pos);
+  if (*pos >= len) {
+    return false;
+  }
+  char c = buf[*pos];
+  if (c == '"') {
+    return skip_json_string(buf, len, pos);
+  }
+  if (c == '{') {
+    return skip_json_container(buf, len, pos, '{', '}');
+  }
+  if (c == '[') {
+    return skip_json_container(buf, len, pos, '[', ']');
+  }
+  size_t start = *pos;
+  while (*pos < len && !is_json_value_delim(buf[*pos])) {
+    (*pos)++;
+  }
+  return *pos > start;
+}
+
+typedef enum {
+  CONTROL_NONE,
+  CONTROL_STOP,
+  CONTROL_INPUT,
+} ControlCommand;
+
+typedef struct {
+  ControlCommand command;
+  const char *payload;
+  size_t payload_len;
+} ControlMessage;
+
+static bool parse_control_line(const char *line,
+                               size_t len,
+                               ControlMessage *message) {
+  message->command = CONTROL_NONE;
+  message->payload = NULL;
+  message->payload_len = 0;
+
+  size_t pos = skip_json_ws(line, len, 0);
+  if (pos >= len) {
+    return true;
+  }
+  if (line[pos] != '{') {
+    return false;
+  }
+  pos++;
+
+  bool has_t = false;
+  bool has_payload = false;
+  char t_value[16] = {0};
+
+  while (pos < len) {
+    pos = skip_json_ws(line, len, pos);
+    if (pos >= len) {
+      return false;
+    }
+    if (line[pos] == '}') {
+      pos++;
+      break;
+    }
+
+    char key[16] = {0};
+    size_t key_len = 0;
+    bool key_truncated = false;
+    if (!parse_json_string(
+            line, len, &pos, key, sizeof(key), &key_len, &key_truncated)) {
+      return false;
+    }
+    pos = skip_json_ws(line, len, pos);
+    if (pos >= len || line[pos] != ':') {
+      return false;
+    }
+    pos++;
+    pos = skip_json_ws(line, len, pos);
+    if (pos >= len) {
+      return false;
+    }
+
+    if (!key_truncated && key_len == 1 && key[0] == 't') {
+      size_t t_len = 0;
+      bool t_truncated = false;
+      if (!parse_json_string(
+              line, len, &pos, t_value, sizeof(t_value), &t_len, &t_truncated)) {
+        return false;
+      }
+      if (t_truncated) {
+        return false;
+      }
+      has_t = true;
+    } else if (!key_truncated && strcmp(key, "payload") == 0) {
+      size_t value_start = pos;
+      if (!skip_json_value(line, len, &pos)) {
+        return false;
+      }
+      message->payload = line + value_start;
+      message->payload_len = pos - value_start;
+      has_payload = true;
+    } else {
+      if (!skip_json_value(line, len, &pos)) {
+        return false;
+      }
+    }
+
+    pos = skip_json_ws(line, len, pos);
+    if (pos >= len) {
+      return false;
+    }
+    if (line[pos] == ',') {
+      pos++;
+      continue;
+    }
+    if (line[pos] == '}') {
+      pos++;
+      break;
+    }
+    return false;
+  }
+
+  pos = skip_json_ws(line, len, pos);
+  if (pos != len) {
+    return false;
+  }
+  if (!has_t) {
+    return false;
+  }
+  if (strcmp(t_value, "stop") == 0) {
+    message->command = CONTROL_STOP;
+    return true;
+  }
+  if (strcmp(t_value, "input") == 0) {
+    if (!has_payload || message->payload_len == 0) {
+      return false;
+    }
+    size_t payload_pos = skip_json_ws(message->payload, message->payload_len, 0);
+    if (payload_pos >= message->payload_len ||
+        message->payload[payload_pos] != '{') {
+      return false;
+    }
+    message->payload += payload_pos;
+    message->payload_len -= payload_pos;
+    message->command = CONTROL_INPUT;
+    return true;
+  }
+  return false;
 }
 
 static void kill_process_group(pid_t child_pid, int sig) {
@@ -195,6 +528,41 @@ static void stop_sequence(pid_t child_pid, int shutdown_ms, bool in_namespace) {
   _exit(0);
 }
 
+static void handle_control_line(const char *line,
+                                size_t len,
+                                pid_t child_pid,
+                                int *child_stdin_fd,
+                                bool *input_sent,
+                                int shutdown_ms,
+                                bool in_namespace) {
+  ControlMessage message;
+  if (!parse_control_line(line, len, &message)) {
+    debug_log("wrapper stop: invalid control line");
+    close_child_stdin(child_stdin_fd);
+    stop_sequence(child_pid, shutdown_ms, in_namespace);
+  }
+  if (message.command == CONTROL_STOP) {
+    debug_log("wrapper stop: stop message");
+    close_child_stdin(child_stdin_fd);
+    stop_sequence(child_pid, shutdown_ms, in_namespace);
+  }
+  if (message.command == CONTROL_INPUT) {
+    if (*input_sent) {
+      debug_log("wrapper stop: duplicate input");
+      close_child_stdin(child_stdin_fd);
+      stop_sequence(child_pid, shutdown_ms, in_namespace);
+    }
+    if (*child_stdin_fd >= 0) {
+      if (!write_all(*child_stdin_fd, message.payload, message.payload_len) ||
+          !write_all(*child_stdin_fd, "\n", 1)) {
+        debug_log("wrapper stdin forward failed");
+      }
+      close_child_stdin(child_stdin_fd);
+    }
+    *input_sent = true;
+  }
+}
+
 static int run_child(char **argv) {
   execvp(argv[0], argv);
   _exit(127);
@@ -208,6 +576,15 @@ static int main_loop(pid_t child_pid, bool in_namespace, int child_stdin_fd) {
     return 1;
   }
   const int shutdown_ms = read_shutdown_ms();
+  const int control_line_max = read_control_line_max_bytes();
+  char *line_buf = malloc((size_t)control_line_max + 1);
+  if (!line_buf) {
+    perror("malloc");
+    free(buf);
+    return 1;
+  }
+  size_t line_len = 0;
+  bool input_sent = false;
 
   while (1) {
     if (child_exited) {
@@ -216,6 +593,7 @@ static int main_loop(pid_t child_pid, bool in_namespace, int child_stdin_fd) {
       if (waited == child_pid) {
         close_child_stdin(&child_stdin_fd);
         free(buf);
+        free(line_buf);
         return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
       }
       child_exited = 0;
@@ -236,16 +614,29 @@ static int main_loop(pid_t child_pid, bool in_namespace, int child_stdin_fd) {
       stop_sequence(child_pid, shutdown_ms, in_namespace);
     }
     if (n > 0) {
-      buf[n] = '\0';
-      if (is_stop_message(buf)) {
-        debug_log("wrapper stop: stop message");
-        close_child_stdin(&child_stdin_fd);
-        stop_sequence(child_pid, shutdown_ms, in_namespace);
-      }
-      if (child_stdin_fd >= 0) {
-        if (!write_all(child_stdin_fd, buf, (size_t)n)) {
-          debug_log("wrapper stdin forward failed");
+      for (ssize_t i = 0; i < n; i++) {
+        char c = buf[i];
+        if (c == '\n') {
+          if (line_len == 0) {
+            continue;
+          }
+          handle_control_line(line_buf,
+                              line_len,
+                              child_pid,
+                              &child_stdin_fd,
+                              &input_sent,
+                              shutdown_ms,
+                              in_namespace);
+          line_len = 0;
+          continue;
         }
+        if (line_len == (size_t)control_line_max) {
+          debug_log("wrapper stop: control line too long");
+          close_child_stdin(&child_stdin_fd);
+          stop_sequence(child_pid, shutdown_ms, in_namespace);
+        }
+        line_buf[line_len] = c;
+        line_len++;
       }
     }
   }

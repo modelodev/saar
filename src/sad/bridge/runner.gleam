@@ -7,6 +7,7 @@ import gleam/result
 import sad/artifacts
 import sad/bridge/port_process
 import sad/bridge/serialization
+import sad/ffi
 import sad/runner_contract
 import sad/types/config as types_config
 import sad/types/core as types_core
@@ -15,12 +16,18 @@ import sad/types/input as types_input
 import sad/types/output as types_output
 import sad/types/runner as types_runner
 
+type Deadline {
+  Infinite
+  At(Int)
+}
+
 type ReadState {
   ReadState(
     total_bytes: Int,
     events: List(types_runner.RunnerEvent),
     attempts: Int,
     stdin_closed: Bool,
+    stop_deadline: Deadline,
   )
 }
 
@@ -32,12 +39,14 @@ pub fn execute_transient(
   input: types_input.SadInput,
   config: types_config.SadConfig,
   streaming: Bool,
+  timeout_ms: Int,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   let #(
     max_runner_event_bytes,
     max_stdout_bytes,
     read_timeout_ms,
     max_read_attempts,
+    shutdown_timeout_ms,
     wrapper,
     artifact_base_path,
   ) = runner_settings(config)
@@ -52,6 +61,8 @@ pub fn execute_transient(
     max_stdout_bytes,
     read_timeout_ms,
     max_read_attempts,
+    timeout_ms,
+    shutdown_timeout_ms,
     wrapper,
     True,
   ))
@@ -85,12 +96,14 @@ pub fn run_provision(
   cwd: String,
   input: types_input.SadInput,
   config: types_config.SadConfig,
+  timeout_ms: Int,
 ) -> Result(types_runner.RunnerProvisionResult, types_output.InteractionError) {
   let #(
     max_runner_event_bytes,
     max_stdout_bytes,
     read_timeout_ms,
     max_read_attempts,
+    shutdown_timeout_ms,
     wrapper,
     _,
   ) = runner_settings(config)
@@ -106,6 +119,8 @@ pub fn run_provision(
     max_stdout_bytes,
     read_timeout_ms,
     max_read_attempts,
+    timeout_ms,
+    shutdown_timeout_ms,
     wrapper,
     True,
   ))
@@ -157,10 +172,12 @@ fn run_and_collect_events(
   max_stdout_bytes: Int,
   read_timeout_ms: Int,
   max_read_attempts: Int,
+  timeout_ms: Int,
+  shutdown_timeout_ms: Int,
   wrapper: types_config.WrapperConfig,
-  close_on_timeout: Bool,
+  stop_on_timeout: Bool,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
-  let env = append_wrapper_env(env, wrapper)
+  let env = append_wrapper_env(env, wrapper, shutdown_timeout_ms)
   use process <- result.try(start_process(
     runner_path,
     runner_args,
@@ -170,16 +187,24 @@ fn run_and_collect_events(
     input.context.trace_id,
   ))
 
-  let payload = serialization.sad_input_to_string(input)
-  port_process.send(process, payload)
+  let control_line =
+    json.object([
+      #("t", json.string("input")),
+      #("payload", serialization.sad_input_to_json(input)),
+    ])
+    |> json.to_string
+  port_process.send(process, control_line <> "\n")
 
   read_events(
     process,
     max_stdout_bytes,
     input.context.trace_id,
-    close_on_timeout,
     read_timeout_ms,
     max_read_attempts,
+    timeout_ms,
+    shutdown_timeout_ms,
+    wrapper,
+    stop_on_timeout,
   )
 }
 
@@ -187,22 +212,30 @@ fn read_events(
   process: port_process.PortProcess,
   max_stdout_bytes: Int,
   trace_id: types_core.TraceId,
-  close_on_timeout: Bool,
   read_timeout_ms: Int,
   max_read_attempts: Int,
+  timeout_ms: Int,
+  shutdown_timeout_ms: Int,
+  wrapper: types_config.WrapperConfig,
+  stop_on_timeout: Bool,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
+  let call_deadline = deadline_from_timeout(timeout_ms)
   read_events_loop(
     process,
     max_stdout_bytes,
     trace_id,
-    close_on_timeout,
     ReadState(
       total_bytes: 0,
       events: [],
       attempts: max_read_attempts,
       stdin_closed: False,
+      stop_deadline: Infinite,
     ),
     read_timeout_ms,
+    call_deadline,
+    shutdown_timeout_ms,
+    wrapper,
+    stop_on_timeout,
   )
 }
 
@@ -210,105 +243,220 @@ fn read_events_loop(
   process: port_process.PortProcess,
   max_stdout_bytes: Int,
   trace_id: types_core.TraceId,
-  close_on_timeout: Bool,
   state: ReadState,
   read_timeout_ms: Int,
+  call_deadline: Deadline,
+  shutdown_timeout_ms: Int,
+  wrapper: types_config.WrapperConfig,
+  stop_on_timeout: Bool,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
-  let ReadState(
-    total_bytes: total_bytes,
-    events: events,
-    attempts: attempts,
-    stdin_closed: stdin_closed,
-  ) = state
+  let now_ms = ffi.now_ms()
 
-  case attempts {
-    0 -> Error(interaction_error(trace_id, "Runner read timeout"))
-    _ ->
-      case port_process.read_line(process, read_timeout_ms) {
-        Ok(line) -> {
-          use next_total <- result.try(
-            runner_contract.enforce_max_stdout_bytes(
-              total_bytes,
-              line,
-              max_stdout_bytes,
-            )
-            |> result.map_error(fn(error) {
-              interaction_error(
-                trace_id,
-                "Runner output exceeded limit: "
-                  <> contract_error_to_string(error),
-              )
-            }),
-          )
+  use state <- result.try(ensure_stop_deadline(state, now_ms, trace_id))
+  use state <- result.try(update_state_for_timeout(
+    process,
+    state,
+    now_ms,
+    call_deadline,
+    stop_on_timeout,
+    shutdown_timeout_ms,
+    wrapper,
+    trace_id,
+  ))
 
-          case runner_contract.decode_event(line) {
-            Ok(event) ->
-              read_events_loop(
-                process,
-                max_stdout_bytes,
-                trace_id,
-                close_on_timeout,
-                ReadState(
-                  total_bytes: next_total,
-                  events: [event, ..events],
-                  attempts: attempts,
-                  stdin_closed: stdin_closed,
-                ),
-                read_timeout_ms,
-              )
-            Error(error) ->
-              Error(interaction_error(
-                trace_id,
-                "Invalid runner event: " <> contract_error_to_string(error),
-              ))
-          }
-        }
+  case attempts_expired(state, call_deadline) {
+    True -> Error(interaction_error(trace_id, "Runner read timeout"))
+    False ->
+      read_event(
+        process,
+        max_stdout_bytes,
+        trace_id,
+        read_timeout_ms,
+        call_deadline,
+        shutdown_timeout_ms,
+        wrapper,
+        stop_on_timeout,
+        state,
+      )
+  }
+}
 
-        Error(port_process.Timeout) ->
-          case close_on_timeout && !stdin_closed {
-            True -> {
-              port_process.send(process, "{\"t\":\"stop\"}")
-              read_events_loop(
-                process,
-                max_stdout_bytes,
-                trace_id,
-                close_on_timeout,
-                ReadState(
-                  total_bytes: total_bytes,
-                  events: events,
-                  attempts: attempts,
-                  stdin_closed: True,
-                ),
-                read_timeout_ms,
-              )
-            }
-            False ->
-              read_events_loop(
-                process,
-                max_stdout_bytes,
-                trace_id,
-                close_on_timeout,
-                ReadState(
-                  total_bytes: total_bytes,
-                  events: events,
-                  attempts: attempts - 1,
-                  stdin_closed: stdin_closed,
-                ),
-                read_timeout_ms,
-              )
-          }
-        Error(port_process.NoeolFragment(fragment)) ->
-          Error(interaction_error(trace_id, "Fragmented output: " <> fragment))
-        Error(port_process.PortExited(code)) ->
-          case code {
-            0 -> Ok(list.reverse(events))
-            _ ->
-              Error(interaction_error(
-                trace_id,
-                "Runner exited with code " <> int.to_string(code),
-              ))
-          }
+fn read_event(
+  process: port_process.PortProcess,
+  max_stdout_bytes: Int,
+  trace_id: types_core.TraceId,
+  read_timeout_ms: Int,
+  call_deadline: Deadline,
+  shutdown_timeout_ms: Int,
+  wrapper: types_config.WrapperConfig,
+  stop_on_timeout: Bool,
+  state: ReadState,
+) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
+  let ReadState(events: events, ..) = state
+
+  case port_process.read_line(process, read_timeout_ms) {
+    Ok(line) ->
+      handle_read_line(
+        process,
+        max_stdout_bytes,
+        trace_id,
+        read_timeout_ms,
+        call_deadline,
+        shutdown_timeout_ms,
+        wrapper,
+        stop_on_timeout,
+        state,
+        line,
+      )
+
+    Error(port_process.Timeout) ->
+      read_events_loop(
+        process,
+        max_stdout_bytes,
+        trace_id,
+        decrement_attempts_if_needed(state, call_deadline),
+        read_timeout_ms,
+        call_deadline,
+        shutdown_timeout_ms,
+        wrapper,
+        stop_on_timeout,
+      )
+    Error(port_process.NoeolFragment(fragment)) ->
+      Error(interaction_error(trace_id, "Fragmented output: " <> fragment))
+    Error(port_process.PortExited(code)) ->
+      handle_port_exit(code, events, trace_id, call_deadline)
+  }
+}
+
+fn handle_read_line(
+  process: port_process.PortProcess,
+  max_stdout_bytes: Int,
+  trace_id: types_core.TraceId,
+  read_timeout_ms: Int,
+  call_deadline: Deadline,
+  shutdown_timeout_ms: Int,
+  wrapper: types_config.WrapperConfig,
+  stop_on_timeout: Bool,
+  state: ReadState,
+  line: String,
+) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
+  let now_ms = ffi.now_ms()
+  use state <- result.try(update_state_for_timeout(
+    process,
+    state,
+    now_ms,
+    call_deadline,
+    stop_on_timeout,
+    shutdown_timeout_ms,
+    wrapper,
+    trace_id,
+  ))
+
+  case deadline_reached(call_deadline, now_ms) {
+    True ->
+      read_events_loop(
+        process,
+        max_stdout_bytes,
+        trace_id,
+        state,
+        read_timeout_ms,
+        call_deadline,
+        shutdown_timeout_ms,
+        wrapper,
+        stop_on_timeout,
+      )
+    False ->
+      handle_event_line(
+        process,
+        max_stdout_bytes,
+        trace_id,
+        read_timeout_ms,
+        call_deadline,
+        shutdown_timeout_ms,
+        wrapper,
+        stop_on_timeout,
+        state,
+        line,
+      )
+  }
+}
+
+fn handle_event_line(
+  process: port_process.PortProcess,
+  max_stdout_bytes: Int,
+  trace_id: types_core.TraceId,
+  read_timeout_ms: Int,
+  call_deadline: Deadline,
+  shutdown_timeout_ms: Int,
+  wrapper: types_config.WrapperConfig,
+  stop_on_timeout: Bool,
+  state: ReadState,
+  line: String,
+) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
+  let ReadState(total_bytes: total_bytes, events: events, ..) = state
+  use next_total <- result.try(
+    enforce_stdout_limit(total_bytes, line, max_stdout_bytes, trace_id),
+  )
+  use event <- result.try(decode_runner_event(line, trace_id))
+
+  read_events_loop(
+    process,
+    max_stdout_bytes,
+    trace_id,
+    ReadState(..state, total_bytes: next_total, events: [event, ..events]),
+    read_timeout_ms,
+    call_deadline,
+    shutdown_timeout_ms,
+    wrapper,
+    stop_on_timeout,
+  )
+}
+
+fn enforce_stdout_limit(
+  total_bytes: Int,
+  line: String,
+  max_stdout_bytes: Int,
+  trace_id: types_core.TraceId,
+) -> Result(Int, types_output.InteractionError) {
+  runner_contract.enforce_max_stdout_bytes(total_bytes, line, max_stdout_bytes)
+  |> result.map_error(fn(error) {
+    interaction_error(
+      trace_id,
+      "Runner output exceeded limit: " <> contract_error_to_string(error),
+    )
+  })
+}
+
+fn decode_runner_event(
+  line: String,
+  trace_id: types_core.TraceId,
+) -> Result(types_runner.RunnerEvent, types_output.InteractionError) {
+  runner_contract.decode_event(line)
+  |> result.map_error(fn(error) {
+    interaction_error(
+      trace_id,
+      "Invalid runner event: " <> contract_error_to_string(error),
+    )
+  })
+}
+
+fn handle_port_exit(
+  code: Int,
+  events: List(types_runner.RunnerEvent),
+  trace_id: types_core.TraceId,
+  call_deadline: Deadline,
+) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
+  case code {
+    0 ->
+      case deadline_reached(call_deadline, ffi.now_ms()) {
+        True -> Error(interaction_error(trace_id, "Runner call timeout"))
+        False -> Ok(list.reverse(events))
       }
+    _ ->
+      Error(interaction_error(
+        trace_id,
+        "Runner exited with code " <> int.to_string(code),
+      ))
   }
 }
 
@@ -425,11 +573,12 @@ fn interaction_error(
 
 fn runner_settings(
   config: types_config.SadConfig,
-) -> #(Int, Int, Int, Int, types_config.WrapperConfig, String) {
+) -> #(Int, Int, Int, Int, Int, types_config.WrapperConfig, String) {
   let types_config.SadConfig(
     max_runner_event_bytes: max_runner_event_bytes,
     max_stdout_bytes: max_stdout_bytes,
     runner_io: runner_io,
+    shutdown_timeout_ms: shutdown_timeout_ms,
     wrapper: wrapper,
     artifacts: artifacts,
     ..,
@@ -447,6 +596,7 @@ fn runner_settings(
     max_stdout_bytes,
     read_timeout_ms,
     max_read_attempts,
+    shutdown_timeout_ms,
     wrapper,
     base_path,
   )
@@ -455,18 +605,122 @@ fn runner_settings(
 fn append_wrapper_env(
   env: List(#(String, String)),
   wrapper: types_config.WrapperConfig,
+  shutdown_timeout_ms: Int,
 ) -> List(#(String, String)) {
   let types_config.WrapperConfig(
     read_buffer_bytes: read_buffer_bytes,
+    control_line_bytes: control_line_bytes,
     poll_interval_ms: poll_interval_ms,
     post_kill_wait_ms: post_kill_wait_ms,
   ) = wrapper
 
   list.append(env, [
+    #("SAD_SHUTDOWN_MS", int.to_string(shutdown_timeout_ms)),
     #("SAD_WRAPPER_READ_BUFFER_BYTES", int.to_string(read_buffer_bytes)),
+    #("SAD_WRAPPER_CONTROL_LINE_BYTES", int.to_string(control_line_bytes)),
     #("SAD_WRAPPER_POLL_MS", int.to_string(poll_interval_ms)),
     #("SAD_WRAPPER_POST_KILL_WAIT_MS", int.to_string(post_kill_wait_ms)),
   ])
+}
+
+fn deadline_from_timeout(timeout_ms: Int) -> Deadline {
+  case timeout_ms <= 0 {
+    True -> Infinite
+    False -> At(ffi.now_ms() + timeout_ms)
+  }
+}
+
+fn deadline_reached(deadline: Deadline, now_ms: Int) -> Bool {
+  case deadline {
+    Infinite -> False
+    At(deadline_ms) -> now_ms >= deadline_ms
+  }
+}
+
+fn stop_deadline_from(
+  now_ms: Int,
+  shutdown_timeout_ms: Int,
+  wrapper: types_config.WrapperConfig,
+) -> Deadline {
+  let types_config.WrapperConfig(post_kill_wait_ms: post_kill_wait_ms, ..) =
+    wrapper
+  At(now_ms + {shutdown_timeout_ms * 2} + post_kill_wait_ms)
+}
+
+fn ensure_stop_deadline(
+  state: ReadState,
+  now_ms: Int,
+  trace_id: types_core.TraceId,
+) -> Result(ReadState, types_output.InteractionError) {
+  case deadline_reached(state.stop_deadline, now_ms) {
+    True -> Error(interaction_error(trace_id, "Runner stop timeout"))
+    False -> Ok(state)
+  }
+}
+
+fn update_state_for_timeout(
+  process: port_process.PortProcess,
+  state: ReadState,
+  now_ms: Int,
+  call_deadline: Deadline,
+  stop_on_timeout: Bool,
+  shutdown_timeout_ms: Int,
+  wrapper: types_config.WrapperConfig,
+  trace_id: types_core.TraceId,
+) -> Result(ReadState, types_output.InteractionError) {
+  case deadline_reached(call_deadline, now_ms) {
+    False -> Ok(state)
+    True ->
+      case stop_on_timeout {
+        False -> Error(interaction_error(trace_id, "Runner call timeout"))
+        True -> Ok(apply_timeout_stop(
+          process,
+          state,
+          now_ms,
+          shutdown_timeout_ms,
+          wrapper,
+        ))
+      }
+  }
+}
+
+fn apply_timeout_stop(
+  process: port_process.PortProcess,
+  state: ReadState,
+  now_ms: Int,
+  shutdown_timeout_ms: Int,
+  wrapper: types_config.WrapperConfig,
+) -> ReadState {
+  let stop_deadline = case state.stop_deadline {
+    Infinite -> stop_deadline_from(now_ms, shutdown_timeout_ms, wrapper)
+    At(_) -> state.stop_deadline
+  }
+
+  case state.stdin_closed {
+    True -> ReadState(..state, stop_deadline: stop_deadline)
+    False -> {
+      port_process.send(process, "{\"t\":\"stop\"}\n")
+      ReadState(..state, stdin_closed: True, stop_deadline: stop_deadline)
+    }
+  }
+}
+
+fn attempts_expired(state: ReadState, call_deadline: Deadline) -> Bool {
+  case call_deadline {
+    Infinite -> state.attempts <= 0
+    At(_) -> False
+  }
+}
+
+fn decrement_attempts_if_needed(
+  state: ReadState,
+  call_deadline: Deadline,
+) -> ReadState {
+  case call_deadline {
+    Infinite ->
+      ReadState(..state, attempts: int.max(state.attempts - 1, 0))
+    At(_) -> state
+  }
 }
 
 fn contract_error_to_string(error: runner_contract.ContractError) -> String {

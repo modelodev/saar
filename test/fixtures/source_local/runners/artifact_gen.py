@@ -11,7 +11,7 @@ def emit(event):
 
 
 def main():
-    input_json = json.loads(sys.stdin.read())
+    input_json = json.loads(sys.stdin.readline())
     workspace = os.environ.get("SAD_WORKSPACE", "/tmp")
 
     output_path = os.path.join(workspace, "outputs", "report.pdf")

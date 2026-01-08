@@ -5,6 +5,7 @@ import gleeunit
 import gleeunit/should
 import port_helpers
 import sad/bridge/port_process
+import sad/ffi
 import sad/runner_contract
 
 const max_event_bytes = 262_144
@@ -18,15 +19,43 @@ pub fn main() {
 pub fn wrapper_stop_message_terminates_child_test() {
   let process = start_child("wait_stdin", [], 200, max_event_bytes)
 
-  port_process.send(process, "{\"t\":\"stop\"}")
+  port_process.send(process, "{\"t\":\"stop\"}\n")
   port_helpers.wait_for_exit(process, read_timeout_ms, 20)
 }
 
 pub fn wrapper_sigterm_escalates_to_sigkill_test() {
   let process = start_child("ignore_sigterm", [], 200, max_event_bytes)
 
-  port_process.send(process, "{\"t\":\"stop\"}")
+  port_process.send(process, "{\"t\":\"stop\"}\n")
   port_helpers.wait_for_exit(process, read_timeout_ms, 40)
+}
+
+pub fn wrapper_stop_timing_respects_double_shutdown_test() {
+  let shutdown_ms = 120
+  let post_kill_wait_ms = 80
+  let env =
+    port_helpers.base_env(
+      shutdown_ms,
+      [
+        #("SAD_WRAPPER_POST_KILL_WAIT_MS", int.to_string(post_kill_wait_ms)),
+        #("SAD_WRAPPER_POLL_MS", "10"),
+      ],
+    )
+  let process =
+    port_helpers.start_process_with_env(
+      "python3",
+      child_args("ignore_sigterm", []),
+      env,
+      ".",
+      max_event_bytes,
+    )
+
+  let start_ms = ffi.now_ms()
+  port_process.send(process, "{\"t\":\"stop\"}\n")
+  port_helpers.wait_for_exit(process, 50, 80)
+  let elapsed = ffi.now_ms() - start_ms
+  let expected_min = shutdown_ms * 2
+  should.equal(elapsed >= expected_min - 10, True)
 }
 
 pub fn wrapper_noeol_fragment_is_infra_error_test() {
@@ -58,7 +87,7 @@ pub fn wrapper_enforces_stdout_byte_limit_test() {
   read_until_exceeded(process, max_stdout_bytes, 0, 200)
   |> should.equal(Ok(Nil))
 
-  port_process.send(process, "{\"t\":\"stop\"}")
+  port_process.send(process, "{\"t\":\"stop\"}\n")
   port_helpers.wait_for_exit_optional(process, read_timeout_ms, 40)
 }
 

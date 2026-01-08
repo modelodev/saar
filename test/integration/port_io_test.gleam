@@ -94,7 +94,7 @@ pub fn port_read_timeout_does_not_kill_test() {
     _ -> Nil
   }
 
-  port_process.send(process, "{\"t\":\"stop\"}")
+  port_process.send(process, "{\"t\":\"stop\"}\n")
   port_helpers.wait_for_exit(process, read_timeout_ms, 20)
 }
 

@@ -48,14 +48,18 @@ fn run_interaction_worker(
 ) -> Nil {
   // Los params ya están resueltos en ctx.params.
   let input = build_input_from_request(ctx, req)
-  let json_str = sad_input_to_string(input)
+  let control_line =
+    json.object([
+      #("t", json.string("input")),
+      #("payload", sad_input_to_json(input)),
+    ])
+    |> json.to_string
   
   // Abrir port
   let port = open_runner_port(ctx.profile.runner, ctx.workspace)
   
-  // Enviar JSON por stdin
-  port.send(port, json_str)
-  port.close_stdin(port)
+  // Enviar JSONL de control por stdin (no cerrar; permite stop posterior)
+  port.send(port, control_line <> "\n")
 
   // El streaming de interacción se entrega solo vía StreamSink (no pasa por el actor).
   // Si no hay StreamSink (modo non-streaming), el worker solo emitirá InteractionDone al actor.

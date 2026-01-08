@@ -604,6 +604,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `transient_greedy_logs` | `greedy_logger` | `t="log"` → `LogEvent`, `t="result"` final |
 | `transient_bad_exit` | custom | exit != 0 → `InfraError` |
 | `transient_invalid_json` | custom | bytes fuera de contrato (no JSONL) → error fail-fast |
+| `transient_timeout_stops_runner` | `timeout_sleep` | Timeout → infra_error y proceso detenido |
 | `artifact_valid_path` | `artifact_gen` | `ArtifactRef.path` pasa validación |
 | `continuous_start_health_ok` | `echo_server` | Health check OK → `Ready` |
 | `continuous_health_timeout` | `slow_poke` | Timeout → `Failed` |
@@ -651,7 +652,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `post_agents_interact_continuous` | `echo_server` → respuesta nativa (sync o SSE según capability) |
 | `post_agents_interact_agent_down` | Agente caído → `safe_call.call_within` devuelve error HTTP sin tumbar handler |
 | `post_agents_interact_timeout` | Timeout → `safe_call.call_within` devuelve 504/timeout, proceso sigue vivo |
-| `post_agents_interact_timeout_then_next_request_ok` | Tras un timeout, el servidor sigue atendiendo requests (el handler no queda muerto ni el router inconsistente) |
+| `post_agents_interact_timeout_then_next_request_ok` | Continuous: tras un timeout, el servidor sigue atendiendo requests (el handler no queda muerto ni el router inconsistente) |
 | `post_agents_interact_streaming_a2ui_header_switches_wire` | Con `X-SAD-UI-Protocol: a2ui/v0.8`, el SSE entrega JSONL A2UI (sin envelope AG-UI) |
 | `post_agents_interact_streaming_a2ui_disconnect_is_terminal` | En modo A2UI “puro”, el fin del stream se observa por cierre de conexión (sin evento terminal adicional) |
 | `problem_details_mapping_native` | `ErrorKind` → RFC7807 nativo vía `sad/gateway/problem.gleam` + status (400/422/500) |
@@ -1023,7 +1024,7 @@ test/
 |------|-------------|
 | `killing_worker_does_not_crash_actor` | Interacción en curso + matar worker → actor sigue vivo y limpia estado (Idle) |
 | `worker_down_without_done_is_handled` | `WorkerDown` sin `InteractionDone` → actor responde error y vuelve a Idle |
-| `timeout_does_not_crash_actor` | Timeout de interacción → se limpia estado sin tumbar actor |
+| `timeout_does_not_crash_actor` | Timeout de interacción → se limpia estado sin tumbar actor; en transient se cierra el port y se detiene el runner |
 | `hard_timeout_not_extended_by_output` | Runner emite output continuo → el timeout sigue siendo hard (no se resetea por actividad) |
 
 ---
@@ -1086,6 +1087,7 @@ Los casos “agresivos” de traversal (Windows separators, `%2e%2e`, null bytes
 | `port_process_invalid_json_line_is_contract_error` | Runner emite una línea con `\\n` pero JSON inválido → error de contrato estable (no panic; no intenta “adivinar”) |
 | `wrapper_eof_triggers_stop` | Cerrar stdin → wrapper aplica stop y el port termina en tiempo |
 | `wrapper_stop_timeout_escalates_to_sigkill` | Runner ignora SIGTERM/stop → wrapper aplica SIGKILL tras grace y el port termina (sin quedar huérfanos) |
+| `wrapper_stop_timing_respects_double_shutdown` | Secuencia de stop respeta el doble `shutdown_timeout_ms` antes de SIGKILL (el `post_kill_wait_ms` es best-effort) |
 | `wrapper_is_silent_on_stdout` | Wrapper no emite bytes por STDOUT (solo runner), para no romper el contrato JSONL |
 
 ---

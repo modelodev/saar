@@ -15,7 +15,7 @@ def main():
         emit({"t": "provision_result", "status": "success", "log_files": []})
         return 0
 
-    input_json = json.loads(sys.stdin.read())
+    input_json = json.loads(sys.stdin.readline())
     delay_ms = input_json.get("params", {}).get("delay_ms", 100)
     time.sleep(delay_ms / 1000)
 

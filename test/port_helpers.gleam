@@ -41,13 +41,29 @@ pub fn start_process(
   cwd: String,
   max_event_bytes: Int,
 ) -> port_process.PortProcess {
+  start_process_with_env(
+    runner_path,
+    runner_args,
+    base_env(shutdown_ms, []),
+    cwd,
+    max_event_bytes,
+  )
+}
+
+pub fn start_process_with_env(
+  runner_path: String,
+  runner_args: List(String),
+  env: List(#(String, String)),
+  cwd: String,
+  max_event_bytes: Int,
+) -> port_process.PortProcess {
   process.trap_exits(True)
   ensure_wrapper_path()
 
   port_process.start(
     runner_path,
     runner_args,
-    base_env(shutdown_ms, []),
+    env,
     cwd,
     max_event_bytes,
   )

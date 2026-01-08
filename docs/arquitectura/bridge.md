@@ -257,7 +257,7 @@ pub fn start_provisioning(ctx: BridgeCtx, agent: AgentRef) -> Pid {
 ### 4.2 Construcción de SadInput
 
 ```gleam
-import sad/bridge/serialization.{sad_input_to_string}
+import sad/bridge/serialization.{sad_input_to_json}
 
 /// Construye el input interno rico.
 /// Los params ya vienen resueltos; aquí solo se empaquetan.
@@ -297,13 +297,18 @@ pub fn provision(
   input: SadInput,
   workspace: String,
 ) -> Result(ProvisionResponse, String) {
-  let json_str = sad_input_to_string(input)
+  let control_line =
+    json.object([
+      #("t", json.string("input")),
+      #("payload", sad_input_to_json(input)),
+    ])
+    |> json.to_string
   
   // Ejecutar runner --provision
   let result = execute_runner_sync(
     runner,
     ["--provision"],
-    json_str,
+    control_line <> "\n",
     workspace,
   )
   
@@ -625,7 +630,8 @@ Este contrato evita buffers infinitos sin introducir resume/replay ni acoplar el
 | Runner devuelve error (no streaming) | `InteractionDone(Error)` | Actor propaga error al cliente |
 | Runner devuelve error (streaming) | `InteractionDone(Error)` | Actor propaga error y cierra el stream |
 | Servidor continuous muere | `ServerDied(code)` | Actor transita a Failed |
-| Timeout de runner | Worker no termina | Cliente recibe timeout |
+| Timeout de runner (transient) | Worker no termina | Cliente recibe timeout; el worker detiene el runner (cierra port/stop) |
+| Timeout de runner (continuous) | Worker no termina | Cliente recibe timeout; el servidor queda vivo |
 
 ### 8.4 Spawn vs Link
 
@@ -682,6 +688,7 @@ Esto evita propagación de exits indeseada (que un `kill` del worker tumbe al ac
 | HTTP requests | Delegado al caller (agent usa `resolve_call_timeout`) |
 
 **Regla:** El bridge no decide timeouts de interacción; eso lo hace `agent` usando `SadConfig` y `CapabilityLimits`.
+**Semántica:** Cuando expira el timeout de interacción, en `transient` se detiene el runner (stop/EOF via port); en `continuous` solo falla la llamada y el servidor sigue vivo.
 
 ## 12. Flujo de parámetros (resumen)
 

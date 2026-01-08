@@ -141,11 +141,13 @@ pub fn default_config_invariants_test() {
 
   let types_config.WrapperConfig(
     read_buffer_bytes: read_buffer_bytes,
+    control_line_bytes: control_line_bytes,
     poll_interval_ms: poll_interval_ms,
     post_kill_wait_ms: post_kill_wait_ms,
   ) = wrapper
 
   read_buffer_bytes |> should.equal(4096)
+  control_line_bytes |> should.equal(262_144)
   poll_interval_ms |> should.equal(50)
   post_kill_wait_ms |> should.equal(200)
 

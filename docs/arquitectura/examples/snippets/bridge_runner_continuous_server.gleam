@@ -9,7 +9,12 @@ pub fn start_server(
   instance_id: InstanceId,
   agent: AgentRef,
 ) -> Result(AgentResource, String) {
-  let json_str = sad_input_to_string(input)
+  let control_line =
+    json.object([
+      #("t", json.string("input")),
+      #("payload", sad_input_to_json(input)),
+    ])
+    |> json.to_string
   
   // host/port provienen del port pool (ManagedPort): SAD reserva un puerto libre
   // (rango configurable) y lo inyecta en env vars del runner.
@@ -17,7 +22,7 @@ pub fn start_server(
   let env = build_server_env(runner, host, port)
   
   // Abrir port para el servidor
-  let port_handle = open_server_port(runner, workspace, env, json_str)
+  let port_handle = open_server_port(runner, workspace, env, control_line <> "\n")
   let resource = process_resource(port_handle)
   
   // Spawn proceso para capturar logs del servidor (eventos JSONL por stdout) con instance_id

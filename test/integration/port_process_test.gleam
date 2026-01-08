@@ -1,4 +1,3 @@
-import gleam/erlang/process as erlang_process
 import gleeunit
 import gleeunit/should
 import port_helpers
@@ -28,7 +27,7 @@ pub fn wrapper_eof_triggers_stop_no_orphans_test() {
 
 pub fn wrapper_stop_message_triggers_stop_no_orphans_test() {
   let process = start_process("/bin/sh", ["-c", "sleep 60"], 500)
-  port_process.send(process, "{\"t\":\"stop\"}")
+  port_process.send(process, "{\"t\":\"stop\"}\n")
   port_helpers.wait_for_exit(process, read_timeout_ms, 20)
 }
 
@@ -36,7 +35,7 @@ pub fn wrapper_stop_timeout_escalates_to_sigkill_test() {
   let script =
     "import signal, time; signal.signal(signal.SIGTERM, lambda *_: None); time.sleep(60)"
   let process = start_process("python3", ["-c", script], 200)
-  port_process.send(process, "{\"t\":\"stop\"}")
+  port_process.send(process, "{\"t\":\"stop\"}\n")
   port_helpers.wait_for_exit(process, read_timeout_ms, 40)
 }
 
@@ -63,9 +62,7 @@ pub fn echo_cli_result_is_received_test() {
 
   let input =
     "{\"params\":{\"delay_ms\":0},\"input\":{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}}"
-  port_process.send(process, input)
-  erlang_process.sleep(20)
-  port_process.send(process, "{\"t\":\"stop\"}")
+  port_process.send(process, "{\"t\":\"input\",\"payload\":" <> input <> "}\n")
 
   let line =
     port_helpers.read_line_with_retries(process, read_timeout_ms, 10)

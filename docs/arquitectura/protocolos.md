@@ -110,12 +110,14 @@ Contrato obligatorio para scripts runner que interactúen con SAD.
 | Provision | `./runner --provision` | `SAD_INPUT_JSON` | Stream de eventos JSONL; final `t="provision_result"` |
 | Execution (transient) | `./runner` | `SAD_INPUT_JSON` | Stream de eventos JSONL; final `t="result"` |
 | Start (continuous) | `./runner` | `SAD_INPUT_JSON` | Stream de eventos JSONL (normalmente `t="log"`). No hay `t="result"` salvo salida del proceso |
-| Stop | En el core, SAD cierra stdin/envía `{"t":"stop"}` al wrapper y espera `shutdown_timeout_ms`; el wrapper aplica SIGTERM→timeout→SIGKILL al runner | - | - |
+| Stop | En el core, SAD cierra stdin/envía la línea `{"t":"stop"}` (terminada en `\n`) al wrapper y espera `shutdown_timeout_ms`; el wrapper aplica SIGTERM→timeout→SIGKILL al runner | - | - |
 | Status (continuous) | Health-check HTTP definido en perfil | - | - |
+
+**Nota wrapper (stdin de control):** SAD escribe al wrapper líneas JSONL de control. La primera es `{"t":"input","payload":<SAD_INPUT_JSON>}` y el wrapper reenvía `payload` al runner y cierra su stdin. Las líneas siguientes pueden ser `{"t":"stop"}` (o futuras). **Sin compatibilidad v0:** no se acepta el formato previo de input “implícito” (JSON único sin `t`).
 
 ### 1.2 Reglas
 
-1. **JSON in / JSON out (por eventos)** — STDIN recibe `SAD_INPUT_JSON`; STDOUT es un stream JSONL de eventos tipados (incluye `result`)
+1. **JSON in / JSON out (por eventos)** — STDIN del runner recibe `SAD_INPUT_JSON` (reenviado por el wrapper); STDOUT es un stream JSONL de eventos tipados (incluye `result`)
 2. **No depender de STDERR** — STDERR está fuera de contrato; SAD no asume captura ni separación
 3. **Exit codes** — `0` para success, `1` para error
 4. **Idempotencia** — `--provision` puede ejecutarse múltiples veces

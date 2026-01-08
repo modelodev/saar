@@ -2,12 +2,15 @@
 
 **Lanzamiento vía wrapper** (obligatorio en v0):
 - SAD siempre invoca `wrapper -- <runner> ...` (ver `arquitectura/examples/wrapper_pid_namespace.md`).
-- Wrapper crea PID+user namespace, lanza el runner y gestiona stop: `{"t":"stop"}` o EOF → SIGTERM → timeout → SIGKILL a la subtree.
+- Wrapper crea PID+user namespace, lanza el runner y gestiona control por stdin (JSONL):
+  - `{"t":"input","payload":<SAD_INPUT_JSON>}` (línea única): reenvía el `payload` al runner por stdin y luego cierra su stdin.
+  - `{"t":"stop"}` (línea única) o EOF → SIGTERM → timeout → SIGKILL a la subtree.
 - SAD no necesita FFI de señales ni conocer `os_pid`; la FFI solo cubre open/send/close del port (idealmente vía `sad/bridge/port_process.gleam`).
  - **Wrapper recomendado:** binario compilado tipo “init PID1” (C/Rust/Go). Evitar bash como wrapper: no es fiable para reaping/propagación de señales.
 
 ### Entradas y salidas
-- STDIN: `SAD_INPUT_JSON` (validado) para start/exec; `{"t":"stop"}` para detener; EOF equivale a stop.
+- STDIN del wrapper: JSONL de control. Primera línea: `{"t":"input","payload":<SAD_INPUT_JSON>}`. Líneas posteriores: `{"t":"stop"}` (o futuros comandos). EOF equivale a stop.
+- STDIN del runner: `SAD_INPUT_JSON` (validado) para start/exec; el wrapper lo reenvía y luego cierra stdin.
 - STDOUT: **stream de eventos** (una línea por evento, JSONL/NDJSON). Incluye logs, streaming y el resultado final.
 - STDERR: fuera de contrato (diagnóstico local). SAD no debe depender de capturarlo ni de separarlo de STDOUT.
 
@@ -18,6 +21,7 @@
 - **Wrapper silencioso en STDOUT:** el wrapper no debe imprimir banners/logs a STDOUT; si necesita logs, que vaya a STDERR o a fichero.
 - **`sad runner-test` como gate:** cualquier runner/wrapper debe pasar `sad runner-test` (ideal: CI obligatorio) para evitar “basura” accidental en STDOUT.
 - **Adaptadores fuera del core:** si queréis ejecutar un binario que escribe texto libre, haced un “shim runner” que capture su salida y emita eventos JSONL; ese shim vive fuera del core SAD.
+- **Límite de control:** el wrapper corta si una línea de control excede `SAD_WRAPPER_CONTROL_LINE_BYTES` (default 262_144).
 
 ### Interpolación (strict)
 
@@ -57,8 +61,17 @@ Eventos mínimos:
   - `{"t":"provision_result","status":"success","log_files":[]}`
 
 ### Stop
-- SAD envía `{"t":"stop"}` y/o cierra stdin.
-- Wrapper propaga SIGTERM → espera `shutdown_timeout_ms` → SIGKILL si sigue vivo.
+- SAD envía la línea `{"t":"stop"}` (terminada en `\n`) y/o cierra stdin.
+- **Sin compatibilidad v0:** no se acepta el formato previo de input “implícito” (JSON único sin `t`).
+- **Secuencia de stop (wrapper):**
+  - `t0`: recibe EOF/stop.
+  - `t0 → t0 + shutdown_timeout_ms`: espera salida natural (sin señales).
+  - `t0 + shutdown_timeout_ms`: envía SIGTERM al grupo/subtree.
+  - `t0 + shutdown_timeout_ms → t0 + 2*shutdown_timeout_ms`: grace tras SIGTERM.
+  - `t0 + 2*shutdown_timeout_ms`: envía SIGKILL.
+  - `t0 + 2*shutdown_timeout_ms → + post_kill_wait_ms`: espera extra antes de `waitpid`.
+- Valores configurables: `shutdown_timeout_ms` (SAD) y `SAD_WRAPPER_POST_KILL_WAIT_MS`/`SAD_WRAPPER_POLL_MS` (wrapper).
+- Nota: `post_kill_wait_ms` es **best-effort**; una señal `SIGCHLD` puede interrumpir el sleep.
 - Runners no necesitan implementar stop explícito; basta con manejar SIGTERM/SIGKILL correctamente.
 
 ### Artefactos
