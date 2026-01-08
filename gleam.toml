@@ -7,12 +7,7 @@ authors = ["SAD"]
 [dependencies]
 gleam_stdlib = "~> 0.67"
 gleam_erlang = "~> 1.3"
-gleam_otp = "~> 1.2"
-mist = "~> 5.0"
-gleam_http = "~> 4.3"
-httpp = "~> 1.8"
 gleam_json = "~> 3.1"
-tom = "~> 2.0"
 simplifile = "~> 2.3"
 filepath = "~> 1.1"
 envoy = "~> 1.1"
@@ -20,5 +15,4 @@ youid = "~> 1.5"
 
 [dev-dependencies]
 gleeunit = "~> 1.2"
-startest = "~> 0.2"
 qcheck = "~> 1.0"
