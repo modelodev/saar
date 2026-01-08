@@ -486,6 +486,11 @@ fn http_capability_decoder() -> decode.Decoder(types_profile.HttpCapability) {
       None,
       decode.optional(input_schema_decoder()),
     )
+    use response <- decode.optional_field(
+      "response",
+      None,
+      decode.optional(response_mapping_decoder()),
+    )
     use description <- decode.optional_field(
       "description",
       None,
@@ -501,9 +506,30 @@ fn http_capability_decoder() -> decode.Decoder(types_profile.HttpCapability) {
       path: path,
       method: method,
       input_schema: input_schema,
+      response: response,
       description: description,
       streaming: streaming,
       limits: limits,
+    ))
+  }
+  decoder
+}
+
+fn response_mapping_decoder() -> decode.Decoder(types_profile.ResponseMapping) {
+  let decoder = {
+    use text_pointer <- decode.optional_field(
+      "text_pointer",
+      None,
+      decode.optional(decode.string),
+    )
+    use artifacts_pointer <- decode.optional_field(
+      "artifacts_pointer",
+      None,
+      decode.optional(decode.string),
+    )
+    decode.success(types_profile.ResponseMapping(
+      text_pointer: text_pointer,
+      artifacts_pointer: artifacts_pointer,
     ))
   }
   decoder
