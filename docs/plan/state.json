@@ -2,6 +2,40 @@
   "version": "1.0",
   "current_sprint": null,
   "sprints": {
+    "S06": {
+      "status": "completed",
+      "branch": "sprint/s06-interpolacion-strict-response",
+      "started_at": "2026-01-08T16:22:40Z",
+      "completed_at": "2026-01-08T16:52:57Z",
+      "current_story": null,
+      "stories": {
+        "S06-T01": {
+          "status": "completed",
+          "branch": "feat/s06-t01-interpolate-string-dict-list",
+          "commit": "7b52f47673734876e03c392d52e86681db993835"
+        },
+        "S06-T02": {
+          "status": "completed",
+          "branch": "feat/s06-t02-interpolate-json-from",
+          "commit": "8e4bb5eaed6c62aaeceddc4ae7d46290d32cf73a"
+        },
+        "S06-T03": {
+          "status": "completed",
+          "branch": "sprint/s06-interpolacion-strict-response",
+          "commit": "9a30b1491fdaea35e9b6dd4c772df100c1f1032b"
+        },
+        "S06-T04": {
+          "status": "completed",
+          "branch": "sprint/s06-interpolacion-strict-response",
+          "commit": "fcffeab7181de144ef5a659cae8d036a1b30533b"
+        },
+        "S06-T05": {
+          "status": "completed",
+          "branch": "sprint/s06-interpolacion-strict-response",
+          "commit": "650067ed9f19b7a6c32d9b470ff4ac7a901f0f3c"
+        }
+      }
+    },
     "S05": {
       "status": "completed",
       "branch": "sprint/s05-decoders-params-puro",
