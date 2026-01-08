@@ -25,10 +25,10 @@ def main():
     signal.signal(signal.SIGTERM, handle_sigterm)
     signal.signal(signal.SIGINT, handle_sigterm)
 
-    line = sys.stdin.readline()
-    if not line:
+    raw = sys.stdin.read()
+    if not raw:
         return 1
-    _input_json = json.loads(line)
+    _input_json = json.loads(raw)
 
     time.sleep(5.0)
     print(

@@ -11,7 +11,7 @@ def emit(event):
 
 
 def main():
-    input_json = json.loads(sys.stdin.readline())
+    input_json = json.loads(sys.stdin.read())
     messages = input_json.get("input", {}).get("messages", [])
     content = ""
     if messages:
