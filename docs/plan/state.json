@@ -2,6 +2,45 @@
   "version": "1.0",
   "current_sprint": null,
   "sprints": {
+    "S01": {
+      "status": "completed",
+      "branch": "sprint/s01-scaffolding-ci-zoo",
+      "started_at": "2026-01-08T17:11:02Z",
+      "completed_at": "2026-01-08T17:20:23Z",
+      "current_story": null,
+      "stories": {
+        "S01-T01": {
+          "status": "completed",
+          "branch": "sprint/s01-scaffolding-ci-zoo",
+          "commit": "78f4e985a03024705d11872e05d76ff69d6792d3"
+        },
+        "S01-T02": {
+          "status": "completed",
+          "branch": "feat/s01-t02-gleam-deps",
+          "commit": "3eb2218c030dfc64ad1cb37e66a43c304ad044e1"
+        },
+        "S01-T03": {
+          "status": "completed",
+          "branch": "sprint/s01-scaffolding-ci-zoo",
+          "commit": "78f4e985a03024705d11872e05d76ff69d6792d3"
+        },
+        "S01-T04": {
+          "status": "completed",
+          "branch": "sprint/s01-scaffolding-ci-zoo",
+          "commit": "78f4e985a03024705d11872e05d76ff69d6792d3"
+        },
+        "S01-T05": {
+          "status": "completed",
+          "branch": "feat/s01-t05-zoo-runners",
+          "commit": "139731b28afbed5fdb0ad7bbd4770e36c562bf9e"
+        },
+        "S01-T06": {
+          "status": "completed",
+          "branch": "sprint/s01-scaffolding-ci-zoo",
+          "commit": "78f4e985a03024705d11872e05d76ff69d6792d3"
+        }
+      }
+    },
     "S06": {
       "status": "completed",
       "branch": "sprint/s06-interpolacion-strict-response",
