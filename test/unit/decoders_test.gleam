@@ -2,10 +2,13 @@ import gleam/dict
 import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/json
+import gleam/list
+import gleam/option.{None, Some}
 import gleeunit
 import gleeunit/should
 import sad/decoders
 import sad/types/core as types_core
+import sad/types/input as types_input
 import sad/types/profile as types_profile
 import simplifile
 
@@ -84,4 +87,141 @@ pub fn decode_extra_fields_only_for_std_chat_test() {
 
   decoders.decode_input_schema(invalid)
   |> should.be_error
+}
+
+pub fn decode_payload_chat_ok_test() {
+  let assert Ok(contents) =
+    simplifile.read(from: "test/fixtures/payloads/chat_simple.json")
+  let assert Ok(inputs) = json.parse(contents, decode.dynamic)
+
+  let assert Ok(types_input.PayloadChat(messages, extra)) =
+    decoders.decode_payload_std_chat(inputs, dict.new())
+
+  list.length(messages)
+  |> should.equal(1)
+
+  dict.size(extra)
+  |> should.equal(0)
+}
+
+pub fn decode_payload_files_ok_test() {
+  let assert Ok(contents) =
+    simplifile.read(from: "test/fixtures/payloads/files_single.json")
+  let assert Ok(inputs) = json.parse(contents, decode.dynamic)
+
+  let assert Ok(types_input.PayloadFiles(files)) =
+    decoders.decode_payload_std_files(inputs)
+
+  list.length(files)
+  |> should.equal(1)
+}
+
+pub fn decode_payload_mixed_ok_test() {
+  let mixed_json =
+    "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"files\":[{\"name\":\"doc.txt\",\"url\":\"https://example.com/doc.txt\",\"mime\":\"text/plain\"}]}"
+
+  let assert Ok(inputs) = json.parse(mixed_json, decode.dynamic)
+
+  let assert Ok(types_input.PayloadMixed(messages, files, extra)) =
+    decoders.decode_payload_mixed(inputs, dict.new())
+
+  list.length(messages)
+  |> should.equal(1)
+
+  list.length(files)
+  |> should.equal(1)
+
+  dict.size(extra)
+  |> should.equal(0)
+}
+
+pub fn decode_extra_field_default_applied_test() {
+  let extra_fields =
+    dict.from_list([
+      #(
+        "tone",
+        types_profile.ExtraFieldDef(
+          type_: types_profile.FieldString,
+          enum_values: None,
+          default: Some(types_core.StringVal("formal")),
+        ),
+      ),
+    ])
+
+  let inputs_json = "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+  let assert Ok(inputs) = json.parse(inputs_json, decode.dynamic)
+
+  let assert Ok(types_input.PayloadChat(_, extra)) =
+    decoders.decode_payload_std_chat(inputs, extra_fields)
+
+  dict.get(extra, "tone")
+  |> should.equal(Ok(types_core.StringVal("formal")))
+}
+
+pub fn decode_extra_field_required_missing_test() {
+  let extra_fields =
+    dict.from_list([
+      #(
+        "tone",
+        types_profile.ExtraFieldDef(
+          type_: types_profile.FieldString,
+          enum_values: None,
+          default: None,
+        ),
+      ),
+    ])
+
+  let inputs_json = "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+  let assert Ok(inputs) = json.parse(inputs_json, decode.dynamic)
+
+  decoders.decode_payload_std_chat(inputs, extra_fields)
+  |> should.be_error
+}
+
+pub fn decode_extra_field_enum_valid_test() {
+  let extra_fields =
+    dict.from_list([
+      #(
+        "tone",
+        types_profile.ExtraFieldDef(
+          type_: types_profile.FieldString,
+          enum_values: Some(["formal", "casual"]),
+          default: None,
+        ),
+      ),
+    ])
+
+  let inputs_json =
+    "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"tone\":\"formal\"}"
+  let assert Ok(inputs) = json.parse(inputs_json, decode.dynamic)
+
+  let assert Ok(types_input.PayloadChat(_, extra)) =
+    decoders.decode_payload_std_chat(inputs, extra_fields)
+
+  dict.get(extra, "tone")
+  |> should.equal(Ok(types_core.StringVal("formal")))
+}
+
+pub fn decode_extra_fields_unknown_ignored_test() {
+  let extra_fields =
+    dict.from_list([
+      #(
+        "tone",
+        types_profile.ExtraFieldDef(
+          type_: types_profile.FieldString,
+          enum_values: None,
+          default: Some(types_core.StringVal("formal")),
+        ),
+      ),
+    ])
+
+  let inputs_json =
+    "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"unknown\":\"x\"}"
+  let assert Ok(inputs) = json.parse(inputs_json, decode.dynamic)
+
+  let assert Ok(types_input.PayloadChat(_, extra)) =
+    decoders.decode_payload_std_chat(inputs, extra_fields)
+
+  dict.has_key(extra, "unknown")
+  |> should.equal(False)
 }
