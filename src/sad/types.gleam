@@ -22,3 +22,7 @@ pub fn resolved_value_inspect(value: ResolvedValue) -> String {
     SecretVal(secret) -> types_core.secret_inspect(secret)
   }
 }
+
+pub fn failure_reason_port_pool_exhausted() -> String {
+  "PORT_POOL_EXHAUSTED"
+}
