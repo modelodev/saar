@@ -782,11 +782,11 @@ pub type RequestContext {
 // ============================================================================
 // SECCIÓN 6: CONTRATO RUNNER (SAD ↔ SCRIPTS)
 // ============================================================================
-// Los tipos del contrato runner están en sad/runner_contract.gleam
+// Los tipos del contrato runner están en sad/bridge/runner_contract.gleam
 // Ver `arquitectura/protocolos_runner.md` para documentación completa.
 //
 // Importar como:
-//   import sad/runner_contract.{
+//   import sad/bridge/runner_contract.{
 //     type SadInput, type RunnerResponse, type ArtifactRef,
 //     validate_response, sad_input_to_json,
 //   }

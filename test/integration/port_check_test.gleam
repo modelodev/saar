@@ -1,6 +1,6 @@
+import gleam/string
 import gleeunit
 import gleeunit/should
-import gleam/string
 import sad/net/port_check
 import sad/net/tcp_listener
 import sad/port_pool
@@ -58,7 +58,7 @@ pub fn port_check_reports_available_test() {
 }
 
 pub fn port_check_invalid_host_returns_bind_failed_test() {
-  case port_check.check_available("invalid_host", 12345) {
+  case port_check.check_available("invalid_host", 12_345) {
     Error(port_pool.CheckBindFailed(_)) -> Nil
     other -> panic as { "Expected bind failed, got " <> string.inspect(other) }
   }

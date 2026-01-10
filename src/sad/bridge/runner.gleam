@@ -6,9 +6,9 @@ import gleam/option
 import gleam/result
 import sad/artifacts
 import sad/bridge/port_process
+import sad/bridge/runner_contract
 import sad/bridge/serialization
 import sad/ffi
-import sad/runner_contract
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums

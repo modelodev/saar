@@ -1,7 +1,7 @@
 import gleam/option
 import gleeunit
 import gleeunit/should
-import sad/runner_contract
+import sad/bridge/runner_contract
 import sad/types/runner as types_runner
 
 pub fn main() {

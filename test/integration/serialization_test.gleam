@@ -86,7 +86,8 @@ pub fn helpers_include_last_user_files_test() {
 
   let assert Ok(#(last_user_content, files)) = json.parse(body, decoder)
   last_user_content |> should.equal(option.None)
-  files |> should.equal([
+  files
+  |> should.equal([
     types_input.FileRef(
       url: "https://example.com/doc.pdf",
       mime: "application/pdf",
@@ -122,8 +123,9 @@ fn chat_message_decoder() -> decode.Decoder(types_input.ChatMessage) {
   decoder
 }
 
-fn helpers_decoder(
-) -> decode.Decoder(#(option.Option(String), List(types_input.FileRef))) {
+fn helpers_decoder() -> decode.Decoder(
+  #(option.Option(String), List(types_input.FileRef)),
+) {
   let decoder = {
     use last_user_content <- decode.field(
       "last_user_content",

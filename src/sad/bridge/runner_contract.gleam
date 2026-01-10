@@ -5,7 +5,7 @@ import gleam/list
 import gleam/option
 import gleam/result
 import gleam/string
-import sad/runner_contract_common as contract_common
+import sad/bridge/runner_contract_common as contract_common
 import sad/types/enums as types_enums
 import sad/types/runner as types_runner
 

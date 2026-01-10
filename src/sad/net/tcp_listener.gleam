@@ -17,8 +17,8 @@
 import gleam/int
 import gleam/result
 import gleam/string
-import glisten/socket as socket
-import glisten/socket/options as options
+import glisten/socket
+import glisten/socket/options
 import glisten/tcp
 
 /// Handle for a TCP listener socket.
@@ -88,8 +88,7 @@ fn parse_interface(host: String) -> Result(options.Interface, ListenError) {
     _ ->
       case parse_ipv4(host) {
         Ok(address) -> Ok(options.Address(address))
-        Error(_) ->
-          Error(ListenFailed("Unsupported host: " <> host))
+        Error(_) -> Error(ListenFailed("Unsupported host: " <> host))
       }
   }
 }

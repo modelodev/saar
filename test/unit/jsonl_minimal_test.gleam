@@ -1,6 +1,6 @@
 import gleeunit
 import gleeunit/should
-import sad/runner_contract_min
+import sad/bridge/runner_contract_min
 import sad/types/runner as types_runner
 
 pub fn main() {

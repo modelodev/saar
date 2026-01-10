@@ -5,8 +5,7 @@ pub fn main() {
   let toml = read_file("docs/plan/limits.toml")
   let entries = case limits_table.parse_toml(toml) {
     Ok(found) -> found
-    Error(err) ->
-      panic as { "LIMITS_TOML_PARSE_FAIL reason=" <> err }
+    Error(err) -> panic as { "LIMITS_TOML_PARSE_FAIL reason=" <> err }
   }
 
   let content = limits_table.render_markdown(entries)

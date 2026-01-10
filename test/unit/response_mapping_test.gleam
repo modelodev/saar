@@ -60,10 +60,11 @@ pub fn response_mapping_pointer_invalid_test() {
       #(dynamic.string("answer"), dynamic.string("ok")),
     ])
 
-  let assert Error(response_mapping.MappingError(kind: kind, message: _)) =
+  let assert Error(response_mapping.MappingError(kind: kind, message: message)) =
     response_mapping.apply_response_mapping(Some(mapping), body)
 
   kind |> should.equal(types_enums.BadRequest)
+  message |> should.equal("Invalid JSON pointer 'bad'")
 }
 
 pub fn response_mapping_text_pointer_wrong_type_test() {
@@ -78,10 +79,35 @@ pub fn response_mapping_text_pointer_wrong_type_test() {
       #(dynamic.string("answer"), dynamic.int(42)),
     ])
 
-  let assert Error(response_mapping.MappingError(kind: kind, message: _)) =
+  let assert Error(response_mapping.MappingError(kind: kind, message: message)) =
     response_mapping.apply_response_mapping(Some(mapping), body)
 
   kind |> should.equal(types_enums.AgentError)
+  message |> should.equal("Expected string at '/answer', got number")
+}
+
+pub fn response_mapping_text_pointer_wrong_type_object_test() {
+  let mapping =
+    types_profile.ResponseMapping(
+      text_pointer: Some("/answer"),
+      artifacts_pointer: None,
+    )
+
+  let body =
+    dynamic.properties([
+      #(
+        dynamic.string("answer"),
+        dynamic.properties([
+          #(dynamic.string("nested"), dynamic.string("nope")),
+        ]),
+      ),
+    ])
+
+  let assert Error(response_mapping.MappingError(kind: kind, message: message)) =
+    response_mapping.apply_response_mapping(Some(mapping), body)
+
+  kind |> should.equal(types_enums.AgentError)
+  message |> should.equal("Expected string at '/answer', got object")
 }
 
 pub fn response_mapping_artifacts_pointer_wrong_type_test() {
@@ -96,10 +122,11 @@ pub fn response_mapping_artifacts_pointer_wrong_type_test() {
       #(dynamic.string("files"), dynamic.string("nope")),
     ])
 
-  let assert Error(response_mapping.MappingError(kind: kind, message: _)) =
+  let assert Error(response_mapping.MappingError(kind: kind, message: message)) =
     response_mapping.apply_response_mapping(Some(mapping), body)
 
   kind |> should.equal(types_enums.AgentError)
+  message |> should.equal("Expected array at '/files', got string")
 }
 
 pub fn response_mapping_artifacts_pointer_test() {
@@ -111,10 +138,13 @@ pub fn response_mapping_artifacts_pointer_test() {
 
   let body =
     dynamic.properties([
-      #(dynamic.string("files"), dynamic.list([
-        dynamic.string("a"),
-        dynamic.string("b"),
-      ])),
+      #(
+        dynamic.string("files"),
+        dynamic.list([
+          dynamic.string("a"),
+          dynamic.string("b"),
+        ]),
+      ),
     ])
 
   let assert Ok(response_mapping.MappingResult(text: _, artifacts: artifacts)) =

@@ -54,8 +54,7 @@ pub fn doc_lint_limits_defaults_match_config_test() {
 
 pub fn doc_lint_limits_md_matches_toml() {
   let toml_defaults = read_limits_toml_defaults("docs/plan/limits.toml")
-  let md_defaults =
-    read_limits_table_defaults("docs/plan/limits.md", "| Key |")
+  let md_defaults = read_limits_table_defaults("docs/plan/limits.md", "| Key |")
   assert_defaults_match("docs/plan/limits.md", md_defaults, toml_defaults)
 }
 
@@ -226,10 +225,7 @@ fn expected_defaults_from_config() -> dict.Dict(String, String) {
   |> dict.insert("server.host", server_host)
   |> dict.insert("server.port", int.to_string(server_port))
   |> dict.insert("auth.api_key", api_key_default)
-  |> dict.insert(
-    "profiles.sources",
-    profile_sources_default(profiles_sources),
-  )
+  |> dict.insert("profiles.sources", profile_sources_default(profiles_sources))
   |> dict.insert("profiles.git_cache_dir", profiles_git_cache_dir)
   |> dict.insert("runners.python_bin", runners_python_bin)
   |> dict.insert("workspaces.directory", workspaces_directory)
@@ -331,7 +327,7 @@ fn read_limits_table_defaults(
   |> list.fold(dict.new(), fn(acc, line) {
     let cells = table_cells(line)
     case cells {
-      [key, _kind, default_value, .._rest] ->
+      [key, _kind, default_value, ..] ->
         dict.insert(acc, key, normalize_doc_default(default_value))
       _ ->
         panic as {
@@ -368,7 +364,7 @@ fn read_config_table_defaults(
   |> list.fold(dict.new(), fn(acc, line) {
     let cells = table_cells(line)
     case cells {
-      [key_cell, _desc, default_cell, .._rest] ->
+      [key_cell, _desc, default_cell, ..] ->
         insert_config_defaults(acc, path, key_cell, default_cell)
       _ ->
         panic as {
@@ -412,13 +408,13 @@ fn insert_pairs(
   }
 }
 
-fn normalize_config_defaults(
-  raw: String,
-) -> option.Option(List(String)) {
+fn normalize_config_defaults(raw: String) -> option.Option(List(String)) {
   let cleaned = normalize_doc_default(raw)
 
-  case string.contains(cleaned, "ver defaults")
-  || string.contains(cleaned, "requerido") {
+  case
+    string.contains(cleaned, "ver defaults")
+    || string.contains(cleaned, "requerido")
+  {
     True -> option.None
     False -> {
       let parts =
@@ -468,7 +464,9 @@ fn read_doc(path: String) -> String {
     Ok(content) -> content
     Error(err) ->
       panic as {
-        "DOC_LINT_FAIL file=" <> path <> " pattern="
+        "DOC_LINT_FAIL file="
+        <> path
+        <> " pattern="
         <> simplifile.describe_error(err)
       }
   }
@@ -556,10 +554,7 @@ fn assert_defaults_match(
         }
       Error(_) ->
         panic as {
-          "DOC_LINT_FAIL file="
-          <> path
-          <> " pattern=missing_key key="
-          <> key
+          "DOC_LINT_FAIL file=" <> path <> " pattern=missing_key key=" <> key
         }
     }
   })
@@ -572,10 +567,7 @@ fn assert_defaults_match(
       Ok(_) -> Nil
       Error(_) ->
         panic as {
-          "DOC_LINT_FAIL file="
-          <> path
-          <> " pattern=unknown_key key="
-          <> key
+          "DOC_LINT_FAIL file=" <> path <> " pattern=unknown_key key=" <> key
         }
     }
   })
@@ -592,7 +584,9 @@ fn assert_config_defaults_match(
     let #(key, found) = entry
     case dict.get(expected_defaults, key) {
       Ok(expected) ->
-        case normalize_config_scalar(found) == normalize_config_scalar(expected) {
+        case
+          normalize_config_scalar(found) == normalize_config_scalar(expected)
+        {
           True -> Nil
           False ->
             panic as {

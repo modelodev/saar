@@ -64,7 +64,9 @@ pub fn segments(pointer: Pointer) -> List(String) {
 fn parse_non_empty(pointer: String) -> Result(Pointer, ParseError) {
   case string.split(pointer, "/") {
     ["", ..segments] ->
-      case list.try_map(segments, fn(segment) { decode_segment(segment, pointer) }) {
+      case
+        list.try_map(segments, fn(segment) { decode_segment(segment, pointer) })
+      {
         Ok(decoded) -> Ok(Pointer(decoded))
         Error(err) -> Error(err)
       }
@@ -93,7 +95,10 @@ fn parse_non_empty(pointer: String) -> Result(Pointer, ParseError) {
 /// let assert Ok(pointer) = json_pointer.parse("/a/b")
 /// json_pointer.resolve(pointer, data)
 /// ```
-pub fn resolve(pointer: Pointer, current: dynamic.Dynamic) -> Option(dynamic.Dynamic) {
+pub fn resolve(
+  pointer: Pointer,
+  current: dynamic.Dynamic,
+) -> Option(dynamic.Dynamic) {
   let Pointer(segments) = pointer
   resolve_segments(segments, current)
 }
@@ -234,9 +239,7 @@ fn json_decoder() -> decode.Decoder(json.Json) {
 
   let array_decoder =
     decode.list(of: json_decoder())
-    |> decode.map(fn(items) {
-      json.array(items, fn(item) { item })
-    })
+    |> decode.map(fn(items) { json.array(items, fn(item) { item }) })
 
   decode.one_of(decode.string |> decode.map(json.string), [
     decode.bool |> decode.map(json.bool),

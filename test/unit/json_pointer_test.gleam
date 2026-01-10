@@ -40,9 +40,12 @@ pub fn parse_decodes_escapes_test() {
 pub fn resolve_object_path_test() {
   let data =
     dynamic.properties([
-      #(dynamic.string("a"), dynamic.properties([
-        #(dynamic.string("b"), dynamic.string("ok")),
-      ])),
+      #(
+        dynamic.string("a"),
+        dynamic.properties([
+          #(dynamic.string("b"), dynamic.string("ok")),
+        ]),
+      ),
     ])
 
   let assert Ok(pointer) = json_pointer.parse("/a/b")
@@ -54,11 +57,14 @@ pub fn resolve_object_path_test() {
 pub fn resolve_array_index_test() {
   let data =
     dynamic.properties([
-      #(dynamic.string("arr"), dynamic.list([
-        dynamic.int(1),
-        dynamic.int(2),
-        dynamic.int(3),
-      ])),
+      #(
+        dynamic.string("arr"),
+        dynamic.list([
+          dynamic.int(1),
+          dynamic.int(2),
+          dynamic.int(3),
+        ]),
+      ),
     ])
 
   let assert Ok(pointer) = json_pointer.parse("/arr/1")
@@ -70,11 +76,14 @@ pub fn resolve_array_index_test() {
 pub fn resolve_invalid_index_returns_none_test() {
   let data =
     dynamic.properties([
-      #(dynamic.string("arr"), dynamic.list([
-        dynamic.int(1),
-        dynamic.int(2),
-        dynamic.int(3),
-      ])),
+      #(
+        dynamic.string("arr"),
+        dynamic.list([
+          dynamic.int(1),
+          dynamic.int(2),
+          dynamic.int(3),
+        ]),
+      ),
     ])
 
   let assert Ok(pointer) = json_pointer.parse("/arr/nope")
@@ -86,10 +95,13 @@ pub fn resolve_invalid_index_returns_none_test() {
 pub fn dynamic_to_json_roundtrip_test() {
   let data =
     dynamic.properties([
-      #(dynamic.string("items"), dynamic.list([
-        dynamic.string("a"),
-        dynamic.string("b"),
-      ])),
+      #(
+        dynamic.string("items"),
+        dynamic.list([
+          dynamic.string("a"),
+          dynamic.string("b"),
+        ]),
+      ),
     ])
 
   let expected =

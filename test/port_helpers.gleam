@@ -90,8 +90,10 @@ pub fn read_noeol_fragment(
     0 -> #(process, Error(port_process.Timeout))
     _ ->
       case port_process.read_line(process, timeout_ms) {
-        #(next_process, Error(port_process.NoeolFragment(fragment))) ->
-          #(next_process, Ok(fragment))
+        #(next_process, Error(port_process.NoeolFragment(fragment))) -> #(
+          next_process,
+          Ok(fragment),
+        )
         #(next_process, Error(port_process.Timeout)) ->
           read_noeol_fragment(next_process, timeout_ms, attempts - 1)
         #(next_process, Ok(_)) ->

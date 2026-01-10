@@ -35,10 +35,7 @@ fn helpers_to_json(
           option.Some(content) -> json.string(content)
           option.None -> json.null()
         }),
-        #(
-          "last_user_files",
-          json.array(last_user_files, file_ref_to_json),
-        ),
+        #("last_user_files", json.array(last_user_files, file_ref_to_json)),
       ])
   }
 }

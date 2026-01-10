@@ -203,7 +203,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.3. `sad/runner_contract.gleam`
+### 3.3. `sad/bridge/runner_contract.gleam`
 
 **Frameworks:** gleeunit + gleam_qcheck
 

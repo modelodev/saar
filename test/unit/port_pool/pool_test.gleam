@@ -79,7 +79,9 @@ pub fn port_pool_allocate_checked_no_available_after_retries_test() {
 pub fn port_pool_allocate_checked_bind_check_failed_test() {
   let pool0 = new_pool(9090, 9091)
   let instance = instance_id("inst-1")
-  let check_failed = fn(_port) { Error(port_pool.CheckBindFailed("bind failed")) }
+  let check_failed = fn(_port) {
+    Error(port_pool.CheckBindFailed("bind failed"))
+  }
 
   port_pool.allocate_checked(pool0, instance, check_failed)
   |> should.equal(Error(port_pool.BindCheckFailed("bind failed")))
@@ -88,8 +90,7 @@ pub fn port_pool_allocate_checked_bind_check_failed_test() {
 pub fn port_pool_allocate_checked_pool_exhausted_test() {
   let pool0 = new_pool(9100, 9100)
 
-  let assert Ok(result1) =
-    port_pool.allocate(pool0, instance_id("inst-1"))
+  let assert Ok(result1) = port_pool.allocate(pool0, instance_id("inst-1"))
   let #(pool1, _) = result1
 
   let check_ok = fn(_port) { Ok(Nil) }
@@ -101,12 +102,10 @@ pub fn port_pool_allocate_checked_pool_exhausted_test() {
 pub fn port_pool_allocate_unique_test() {
   let pool0 = new_pool(9000, 9001)
 
-  let assert Ok(result1) =
-    port_pool.allocate(pool0, instance_id("inst-1"))
+  let assert Ok(result1) = port_pool.allocate(pool0, instance_id("inst-1"))
   let #(pool1, first) = result1
 
-  let assert Ok(result2) =
-    port_pool.allocate(pool1, instance_id("inst-2"))
+  let assert Ok(result2) = port_pool.allocate(pool1, instance_id("inst-2"))
 
   case result2 {
     #(_pool2, second) -> {
@@ -117,31 +116,51 @@ pub fn port_pool_allocate_unique_test() {
 }
 
 pub fn port_pool_release_frees_port_test() {
-  let pool0 = new_pool(9000, 9001)
+  let pool0 = new_pool(9000, 9000)
   let instance = instance_id("inst-1")
 
   let assert Ok(result1) = port_pool.allocate(pool0, instance)
   let #(pool1, first) = result1
 
   let pool2 = port_pool.release(pool1, instance)
-  let assert Ok(result2) =
-    port_pool.allocate(pool2, instance_id("inst-2"))
+  let assert Ok(result2) = port_pool.allocate(pool2, instance_id("inst-2"))
   let #(_, reused) = result2
 
   reused |> should.equal(first)
 }
 
+pub fn port_pool_cursor_advances_test() {
+  let pool0 = new_pool(9500, 9501)
+
+  let assert Ok(result1) = port_pool.allocate(pool0, instance_id("inst-1"))
+  let #(pool1, first) = result1
+  first |> should.equal(9500)
+
+  let pool2 = port_pool.release(pool1, instance_id("inst-1"))
+
+  let assert Ok(result2) = port_pool.allocate(pool2, instance_id("inst-2"))
+  let #(pool3, second) = result2
+  second |> should.equal(9501)
+
+  let assert Ok(result3) = port_pool.allocate(pool3, instance_id("inst-3"))
+  let #(_, third) = result3
+  third |> should.equal(9500)
+}
+
 pub fn port_pool_reuse_after_release_test() {
   let pool0 = new_pool(9100, 9101)
-  let instance = instance_id("inst-1")
+  let instance1 = instance_id("inst-1")
 
-  let assert Ok(result1) = port_pool.allocate(pool0, instance)
+  let assert Ok(result1) = port_pool.allocate(pool0, instance1)
   let #(pool1, first) = result1
 
-  let pool2 = port_pool.release(pool1, instance)
-  let assert Ok(result2) =
-    port_pool.allocate(pool2, instance_id("inst-2"))
-  let #(_, reused) = result2
+  let assert Ok(result2) = port_pool.allocate(pool1, instance_id("inst-2"))
+  let #(pool2, _second) = result2
+
+  let pool3 = port_pool.release(pool2, instance1)
+
+  let assert Ok(result3) = port_pool.allocate(pool3, instance_id("inst-3"))
+  let #(_, reused) = result3
 
   reused |> should.equal(first)
 }
@@ -151,16 +170,13 @@ pub fn port_pool_respects_range_test() {
   let max_port = 9202
   let pool0 = new_pool(min_port, max_port)
 
-  let assert Ok(result1) =
-    port_pool.allocate(pool0, instance_id("inst-1"))
+  let assert Ok(result1) = port_pool.allocate(pool0, instance_id("inst-1"))
   let #(pool1, first) = result1
 
-  let assert Ok(result2) =
-    port_pool.allocate(pool1, instance_id("inst-2"))
+  let assert Ok(result2) = port_pool.allocate(pool1, instance_id("inst-2"))
   let #(pool2, second) = result2
 
-  let assert Ok(result3) =
-    port_pool.allocate(pool2, instance_id("inst-3"))
+  let assert Ok(result3) = port_pool.allocate(pool2, instance_id("inst-3"))
   let #(_, third) = result3
 
   let ports = [first, second, third]
@@ -181,8 +197,7 @@ pub fn port_pool_requires_explicit_range_test() {
 pub fn port_pool_exhausted_error_test() {
   let pool0 = new_pool(9300, 9300)
 
-  let assert Ok(result1) =
-    port_pool.allocate(pool0, instance_id("inst-1"))
+  let assert Ok(result1) = port_pool.allocate(pool0, instance_id("inst-1"))
   let #(pool1, _) = result1
 
   port_pool.allocate(pool1, instance_id("inst-2"))
@@ -196,8 +211,7 @@ pub fn port_pool_concurrent_allocate_test() {
   let #(_, ports) =
     list.fold(instances, #(pool0, []), fn(acc, instance) {
       let #(pool, ports) = acc
-      let assert Ok(result) =
-        port_pool.allocate(pool, instance_id(instance))
+      let assert Ok(result) = port_pool.allocate(pool, instance_id(instance))
       let #(next_pool, port) = result
       #(next_pool, [port, ..ports])
     })

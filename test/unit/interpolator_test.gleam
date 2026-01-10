@@ -353,9 +353,6 @@ pub fn interpolate_value_not_scalar_test() {
 
   let files_ctx = context_with_input(dict.new(), files_input)
 
-  interpolator.interpolate_string(
-    "{{helpers.last_user_files}}",
-    files_ctx,
-  )
+  interpolator.interpolate_string("{{helpers.last_user_files}}", files_ctx)
   |> should.equal(Error(interpolator.ValueNotScalar("helpers.last_user_files")))
 }

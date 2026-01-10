@@ -482,6 +482,7 @@ SAD asigna puertos para agentes `continuous` con `network_mode=managed_port` usa
 - `allocate(instance_id)` devuelve un puerto libre dentro del rango, o `Error(PoolExhausted)`.
 - `allocate_checked(instance_id, check)` valida disponibilidad en el SO y puede devolver `PortInUse`, `NoAvailablePortAfterRetries` o `BindCheckFailed`.
 - `release(instance_id)` libera el puerto reservado (idempotente si no existe).
+- El orden de asignación no está garantizado (el actor puede usar un cursor/round-robin por eficiencia).
 - El bridge debe pedir `allocate_checked` **antes** de arrancar el servidor (port/wrapper). Si falla:
   - `PoolExhausted` → `ProvisioningDone(Error("PORT_POOL_EXHAUSTED: ..."))`
   - `PortInUse` → `ProvisioningDone(Error("PORT_IN_USE: ..."))` (fail-fast)

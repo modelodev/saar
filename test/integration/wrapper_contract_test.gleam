@@ -6,7 +6,7 @@ import gleeunit/should
 import port_helpers
 import sad/bridge/port_process
 import sad/ffi
-import sad/runner_contract
+import sad/bridge/runner_contract
 
 const max_event_bytes = 262_144
 
@@ -153,12 +153,7 @@ fn read_until_exceeded(
             )
           {
             Ok(next) ->
-              read_until_exceeded(
-                process,
-                max_stdout_bytes,
-                next,
-                attempts - 1,
-              )
+              read_until_exceeded(process, max_stdout_bytes, next, attempts - 1)
             Error(_) -> Ok(Nil)
           }
 

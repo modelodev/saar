@@ -2,7 +2,7 @@ import gleeunit
 import gleeunit/should
 import port_helpers
 import sad/bridge/port_process
-import sad/runner_contract_min
+import sad/bridge/runner_contract_min
 import sad/types/runner as types_runner
 import test_assertions
 

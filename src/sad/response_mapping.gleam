@@ -1,4 +1,4 @@
-//// Response mapping for runner outputs.
+//// Response mapping for runner and HTTP outputs.
 ////
 //// Mission: resolve JSON pointers over dynamic payloads to build response data.
 ////
@@ -24,6 +24,11 @@ import gleam/result
 import sad/json_pointer
 import sad/types/enums as types_enums
 import sad/types/profile as types_profile
+
+type MappingFailure {
+  InvalidPointer(pointer: String)
+  WrongType(expected: String, pointer: Option(String), got: String)
+}
 
 /// Output from applying a response mapping.
 pub type MappingResult {
@@ -63,12 +68,21 @@ pub fn apply_response_mapping(
   mapping: Option(types_profile.ResponseMapping),
   body: dynamic.Dynamic,
 ) -> Result(MappingResult, MappingError) {
+  apply_response_mapping_pure(mapping, body)
+  |> result.map_error(mapping_failure_to_error)
+}
+
+fn apply_response_mapping_pure(
+  mapping: Option(types_profile.ResponseMapping),
+  body: dynamic.Dynamic,
+) -> Result(MappingResult, MappingFailure) {
   case mapping {
     None ->
       Ok(MappingResult(
         text: Some(json.to_string(json_pointer.dynamic_to_json(body))),
         artifacts: None,
       ))
+
     Some(types_profile.ResponseMapping(text_pointer, artifacts_pointer)) -> {
       use text_value <- result.try(resolve_pointer_option(text_pointer, body))
       use artifacts_value <- result.try(resolve_pointer_option(
@@ -90,7 +104,7 @@ pub fn apply_response_mapping(
 fn resolve_pointer_option(
   pointer: Option(String),
   root: dynamic.Dynamic,
-) -> Result(Option(dynamic.Dynamic), MappingError) {
+) -> Result(Option(dynamic.Dynamic), MappingFailure) {
   case pointer {
     None -> Ok(None)
     Some(value) -> resolve_pointer(value, root)
@@ -100,11 +114,12 @@ fn resolve_pointer_option(
 fn resolve_pointer(
   pointer: String,
   root: dynamic.Dynamic,
-) -> Result(Option(dynamic.Dynamic), MappingError) {
+) -> Result(Option(dynamic.Dynamic), MappingFailure) {
   use parsed_pointer <- result.try(
     json_pointer.parse(pointer)
-    |> result.map_error(fn(_) { invalid_pointer(pointer) }),
+    |> result.map_error(fn(_) { InvalidPointer(pointer) }),
   )
+
   case json_pointer.resolve(parsed_pointer, root) {
     None -> Ok(None)
     Some(value) -> Ok(Some(value))
@@ -114,29 +129,84 @@ fn resolve_pointer(
 fn text_from_value(
   value: Option(dynamic.Dynamic),
   pointer: Option(String),
-) -> Result(Option(String), MappingError) {
-  case value {
-    None -> Ok(None)
-    Some(payload) ->
-      case decode.run(payload, decode.string) {
-        Ok(text) -> Ok(Some(text))
-        Error(_) -> Error(wrong_type("string", pointer))
-      }
-  }
+) -> Result(Option(String), MappingFailure) {
+  decode_optional(value, decode.string, "string", pointer)
 }
 
 fn artifacts_from_value(
   value: Option(dynamic.Dynamic),
   pointer: Option(String),
-) -> Result(Option(List(json.Json)), MappingError) {
+) -> Result(Option(List(json.Json)), MappingFailure) {
+  use items <- result.try(decode_optional(
+    value,
+    decode.list(of: decode.dynamic),
+    "array",
+    pointer,
+  ))
+
+  Ok(case items {
+    None -> None
+    Some(values) -> Some(list.map(values, json_pointer.dynamic_to_json))
+  })
+}
+
+fn decode_optional(
+  value: Option(dynamic.Dynamic),
+  decoder: decode.Decoder(a),
+  expected: String,
+  pointer: Option(String),
+) -> Result(Option(a), MappingFailure) {
   case value {
     None -> Ok(None)
     Some(payload) ->
-      case decode.run(payload, decode.list(of: decode.dynamic)) {
-        Ok(items) ->
-          Ok(Some(list.map(items, json_pointer.dynamic_to_json)))
-        Error(_) -> Error(wrong_type("array", pointer))
+      case decode.run(payload, decoder) {
+        Ok(inner) -> Ok(Some(inner))
+        Error(_) ->
+          Error(WrongType(
+            expected: expected,
+            pointer: pointer,
+            got: describe_dynamic(payload),
+          ))
       }
+  }
+}
+
+fn describe_dynamic(value: dynamic.Dynamic) -> String {
+  case decode.run(value, decode.string) {
+    Ok(_) -> "string"
+    Error(_) ->
+      case decode.run(value, decode.bool) {
+        Ok(_) -> "bool"
+        Error(_) ->
+          case decode.run(value, decode.int) {
+            Ok(_) -> "number"
+            Error(_) ->
+              case decode.run(value, decode.float) {
+                Ok(_) -> "number"
+                Error(_) ->
+                  case decode.run(value, decode.list(of: decode.dynamic)) {
+                    Ok(_) -> "array"
+                    Error(_) ->
+                      case
+                        decode.run(
+                          value,
+                          decode.dict(decode.string, decode.dynamic),
+                        )
+                      {
+                        Ok(_) -> "object"
+                        Error(_) -> "unknown"
+                      }
+                  }
+              }
+          }
+      }
+  }
+}
+
+fn mapping_failure_to_error(failure: MappingFailure) -> MappingError {
+  case failure {
+    InvalidPointer(pointer) -> invalid_pointer(pointer)
+    WrongType(expected, pointer, got) -> wrong_type(expected, pointer, got)
   }
 }
 
@@ -147,7 +217,11 @@ fn invalid_pointer(pointer: String) -> MappingError {
   )
 }
 
-fn wrong_type(expected: String, pointer: Option(String)) -> MappingError {
+fn wrong_type(
+  expected: String,
+  pointer: Option(String),
+  got: String,
+) -> MappingError {
   let suffix = case pointer {
     Some(value) -> " at '" <> value <> "'"
     None -> ""
@@ -155,6 +229,6 @@ fn wrong_type(expected: String, pointer: Option(String)) -> MappingError {
 
   MappingError(
     kind: types_enums.AgentError,
-    message: "Expected " <> expected <> suffix,
+    message: "Expected " <> expected <> suffix <> ", got " <> got,
   )
 }

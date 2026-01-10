@@ -143,8 +143,7 @@ pub fn read_line(
   timeout_ms: Int,
 ) -> #(PortProcess, Result(String, PortReadError)) {
   case take_line(process.buffer) {
-    Some(#(line, rest)) ->
-      handle_line(process, line, rest)
+    Some(#(line, rest)) -> handle_line(process, line, rest)
     None ->
       case receive(process, timeout_ms) {
         Ok(PortChunk(chunk)) -> {
@@ -154,14 +153,13 @@ pub fn read_line(
             Some(#(line, rest)) -> handle_line(next_process, line, rest)
             None ->
               case string.byte_size(next_buffer) > process.max_event_bytes {
-                True ->
-                  #(
-                    PortProcess(..process, buffer: ""),
-                    Error(OversizedEvent(
-                      size: string.byte_size(next_buffer),
-                      max: process.max_event_bytes,
-                    )),
-                  )
+                True -> #(
+                  PortProcess(..process, buffer: ""),
+                  Error(OversizedEvent(
+                    size: string.byte_size(next_buffer),
+                    max: process.max_event_bytes,
+                  )),
+                )
                 False -> read_line(next_process, timeout_ms)
               }
           }
@@ -169,11 +167,10 @@ pub fn read_line(
         Ok(PortExit(status)) ->
           case string.is_empty(process.buffer) {
             True -> #(process, Error(PortExited(status)))
-            False ->
-              #(
-                PortProcess(..process, buffer: ""),
-                Error(NoeolFragment(process.buffer)),
-              )
+            False -> #(
+              PortProcess(..process, buffer: ""),
+              Error(NoeolFragment(process.buffer)),
+            )
           }
         Error(_) -> #(process, Error(Timeout))
       }
@@ -207,14 +204,13 @@ fn handle_line(
   rest: String,
 ) -> #(PortProcess, Result(String, PortReadError)) {
   case string.byte_size(line) > process.max_event_bytes {
-    True ->
-      #(
-        PortProcess(..process, buffer: ""),
-        Error(OversizedEvent(
-          size: string.byte_size(line),
-          max: process.max_event_bytes,
-        )),
-      )
+    True -> #(
+      PortProcess(..process, buffer: ""),
+      Error(OversizedEvent(
+        size: string.byte_size(line),
+        max: process.max_event_bytes,
+      )),
+    )
     False -> #(PortProcess(..process, buffer: rest), Ok(line))
   }
 }

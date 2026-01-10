@@ -31,10 +31,13 @@ pub fn response_mapping_profile_fixture_test() {
   let body =
     dynamic.properties([
       #(dynamic.string("answer"), dynamic.string("ok")),
-      #(dynamic.string("files"), dynamic.list([
-        dynamic.string("a"),
-        dynamic.string("b"),
-      ])),
+      #(
+        dynamic.string("files"),
+        dynamic.list([
+          dynamic.string("a"),
+          dynamic.string("b"),
+        ]),
+      ),
     ])
 
   let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =

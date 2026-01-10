@@ -1,7 +1,7 @@
 import gleam/dynamic/decode
 import gleam/option.{None}
 import gleam/result
-import sad/runner_contract_common as contract_common
+import sad/bridge/runner_contract_common as contract_common
 import sad/types/runner as types_runner
 
 pub type JsonlError {

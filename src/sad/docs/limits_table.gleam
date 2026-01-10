@@ -57,9 +57,7 @@ pub fn render_markdown(entries: List(LimitEntry)) -> String {
   <> "\n"
 }
 
-pub fn defaults_by_key(
-  entries: List(LimitEntry),
-) -> List(#(String, String)) {
+pub fn defaults_by_key(entries: List(LimitEntry)) -> List(#(String, String)) {
   entries
   |> list.map(fn(entry) {
     let LimitEntry(key, _kind, default, _sprint, _usage) = entry
@@ -69,7 +67,17 @@ pub fn defaults_by_key(
 
 fn render_row(entry: LimitEntry) -> String {
   let LimitEntry(key, kind, default, sprint, usage) = entry
-  "| " <> key <> " | " <> kind <> " | " <> default <> " | " <> sprint <> " | " <> usage <> " |"
+  "| "
+  <> key
+  <> " | "
+  <> kind
+  <> " | "
+  <> default
+  <> " | "
+  <> sprint
+  <> " | "
+  <> usage
+  <> " |"
 }
 
 fn parse_lines(
@@ -91,8 +99,7 @@ fn parse_lines(
       case parse_line(line, current) {
         Ok(#(next_current, maybe_entry)) ->
           case maybe_entry {
-            Some(entry) ->
-              parse_lines(rest, next_current, [entry, ..acc])
+            Some(entry) -> parse_lines(rest, next_current, [entry, ..acc])
             None -> parse_lines(rest, next_current, acc)
           }
         Error(err) -> Error(err)
@@ -135,10 +142,7 @@ fn start_new_entry(
   }
 }
 
-fn apply_kv(
-  partial: PartialEntry,
-  line: String,
-) -> Result(PartialEntry, String) {
+fn apply_kv(partial: PartialEntry, line: String) -> Result(PartialEntry, String) {
   use parts <- result.try(split_key_value(line))
 
   let #(raw_key, raw_value) = parts
@@ -149,11 +153,40 @@ fn apply_kv(
     partial
 
   case key {
-    "key" -> Ok(PartialEntry(Some(value), prev_kind, prev_default, prev_sprint, prev_usage))
-    "type" -> Ok(PartialEntry(prev_key, Some(value), prev_default, prev_sprint, prev_usage))
-    "default" -> Ok(PartialEntry(prev_key, prev_kind, Some(value), prev_sprint, prev_usage))
-    "sprint" -> Ok(PartialEntry(prev_key, prev_kind, prev_default, Some(value), prev_usage))
-    "use" -> Ok(PartialEntry(prev_key, prev_kind, prev_default, prev_sprint, Some(value)))
+    "key" ->
+      Ok(PartialEntry(
+        Some(value),
+        prev_kind,
+        prev_default,
+        prev_sprint,
+        prev_usage,
+      ))
+    "type" ->
+      Ok(PartialEntry(
+        prev_key,
+        Some(value),
+        prev_default,
+        prev_sprint,
+        prev_usage,
+      ))
+    "default" ->
+      Ok(PartialEntry(prev_key, prev_kind, Some(value), prev_sprint, prev_usage))
+    "sprint" ->
+      Ok(PartialEntry(
+        prev_key,
+        prev_kind,
+        prev_default,
+        Some(value),
+        prev_usage,
+      ))
+    "use" ->
+      Ok(PartialEntry(
+        prev_key,
+        prev_kind,
+        prev_default,
+        prev_sprint,
+        Some(value),
+      ))
     _ -> Error("limits_toml_unknown_field " <> key)
   }
 }
@@ -163,8 +196,7 @@ fn split_key_value(line: String) -> Result(#(String, String), String) {
 
   case parts {
     [left, right] -> Ok(#(left, right))
-    [left, right, ..rest] ->
-      Ok(#(left, [right, ..rest] |> string.join("=")))
+    [left, right, ..rest] -> Ok(#(left, [right, ..rest] |> string.join("=")))
     _ -> Error("limits_toml_invalid_line")
   }
 }
@@ -202,8 +234,7 @@ fn finalize_partial(partial: PartialEntry) -> Result(LimitEntry, String) {
   let PartialEntry(key, kind, default, sprint, usage) = partial
 
   case key, kind, default, sprint, usage {
-    Some(k), Some(t), Some(d), Some(s), Some(u) ->
-      Ok(LimitEntry(k, t, d, s, u))
+    Some(k), Some(t), Some(d), Some(s), Some(u) -> Ok(LimitEntry(k, t, d, s, u))
     _, _, _, _, _ -> Error("limits_toml_incomplete_entry")
   }
 }

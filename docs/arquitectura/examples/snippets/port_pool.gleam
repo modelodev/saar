@@ -37,12 +37,14 @@ pub fn new(min_port: Int, max_port: Int) -> Result(PortPool, PortPoolError) {
 
 /// Reserva un puerto para una instancia.
 /// - Idempotente: si la instancia ya tiene puerto, devuelve el mismo puerto.
+/// - El orden de asignación no está garantizado.
 /// - Si no hay puertos libres, devuelve `PoolExhausted`.
 pub fn allocate(pool: PortPool, instance_id: InstanceId) -> Result(#(PortPool, Int), PortPoolError) {
   ...
 }
 
 /// Reserva un puerto solo si `check` confirma que se puede bindear.
+/// - El orden de asignación no está garantizado.
 /// - Si el pool está lleno, devuelve `PoolExhausted`.
 /// - Si todos los candidatos están en uso, devuelve `PortInUse` (1) o `NoAvailablePortAfterRetries`.
 /// - Si el check falla de forma no recuperable, devuelve `BindCheckFailed`.

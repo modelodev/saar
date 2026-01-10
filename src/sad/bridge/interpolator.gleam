@@ -126,9 +126,11 @@ pub fn interpolate_json(
   let string_context = string_context_value(ctx)
   let pointer_context = pointer_context_value(ctx)
 
-  use interpolated <- result.try(
-    interpolate_value(value, string_context, pointer_context),
-  )
+  use interpolated <- result.try(interpolate_value(
+    value,
+    string_context,
+    pointer_context,
+  ))
   Ok(value_to_json(interpolated))
 }
 
@@ -221,12 +223,7 @@ fn pointer_context_value(ctx: InterpContext) -> InterpValue {
 fn params_to_value(params: types.ResolvedParams) -> InterpValue {
   params
   |> dict.to_list
-  |> list.map(fn(pair) {
-    #(
-      pair.0,
-      Str(types.resolved_value_to_env(pair.1)),
-    )
-  })
+  |> list.map(fn(pair) { #(pair.0, Str(types.resolved_value_to_env(pair.1))) })
   |> dict.from_list
   |> Object
 }
@@ -248,10 +245,7 @@ fn input_full_to_value(payload: types_input.InputPayload) -> InterpValue {
   case payload {
     types_input.PayloadChat(messages, extra) -> {
       let base = [
-        #(
-          "messages",
-          Array(list.map(messages, chat_message_to_value)),
-        ),
+        #("messages", Array(list.map(messages, chat_message_to_value))),
       ]
       let extra_fields =
         extra
@@ -271,14 +265,8 @@ fn input_full_to_value(payload: types_input.InputPayload) -> InterpValue {
 
     types_input.PayloadMixed(messages, files, extra) -> {
       let base = [
-        #(
-          "messages",
-          Array(list.map(messages, chat_message_to_value)),
-        ),
-        #(
-          "files",
-          Array(list.map(files, file_ref_to_value)),
-        ),
+        #("messages", Array(list.map(messages, chat_message_to_value))),
+        #("files", Array(list.map(files, file_ref_to_value))),
       ]
       let extra_fields =
         extra
@@ -301,10 +289,7 @@ fn helpers_to_value(payload: types_input.InputPayload) -> InterpValue {
         Some(content) -> Str(content)
         None -> Null
       }),
-      #(
-        "last_user_files",
-        Array(list.map(last_user_files, file_ref_to_value)),
-      ),
+      #("last_user_files", Array(list.map(last_user_files, file_ref_to_value))),
     ]),
   )
 }
@@ -397,9 +382,11 @@ fn interpolate_value(
           |> dict.to_list
           |> list.try_map(fn(pair) {
             let #(key, field_value) = pair
-            use interpolated <- result.try(
-              interpolate_value(field_value, string_context, pointer_context),
-            )
+            use interpolated <- result.try(interpolate_value(
+              field_value,
+              string_context,
+              pointer_context,
+            ))
             Ok(#(key, interpolated))
           })
           |> result.map(fn(entries) { Object(dict.from_list(entries)) })
@@ -521,14 +508,16 @@ fn dynamic_to_value(value: dynamic.Dynamic) -> InterpValue {
 }
 
 fn dynamic_to_value_non_null(value: dynamic.Dynamic) -> InterpValue {
-  case first_some(value, [
-    try_decode_dict,
-    try_decode_list,
-    try_decode_string,
-    try_decode_bool,
-    try_decode_int,
-    try_decode_float,
-  ]) {
+  case
+    first_some(value, [
+      try_decode_dict,
+      try_decode_list,
+      try_decode_string,
+      try_decode_bool,
+      try_decode_int,
+      try_decode_float,
+    ])
+  {
     Some(decoded) -> decoded
     None -> Null
   }
@@ -625,8 +614,7 @@ fn do_tokenize(
   tokens: List(Token),
 ) -> Result(List(Token), InterpolationError) {
   case string.split_once(remaining, on: "{{") {
-    Error(_) ->
-      Ok(list.reverse(add_literal_token(tokens, remaining)))
+    Error(_) -> Ok(list.reverse(add_literal_token(tokens, remaining)))
 
     Ok(#(before, after_open)) -> {
       let tokens = add_literal_token(tokens, before)
