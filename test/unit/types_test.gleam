@@ -3,10 +3,10 @@ import gleam/option.{None}
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/types
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
+import sad/types/resolved_params
 import sad/types/runner as types_runner
 
 pub fn main() {
@@ -44,30 +44,19 @@ pub fn secret_redaction_test() {
 }
 
 pub fn resolved_value_redacts_secrets_test() {
-  types.SecretVal(types_core.secret_value("super-secret"))
-  |> types.resolved_value_inspect
+  resolved_params.SecretVal(types_core.secret_value("super-secret"))
+  |> resolved_params.resolved_value_inspect
   |> should.equal("***REDACTED***")
 }
 
 pub fn resolved_value_to_env_unwraps_test() {
-  types.NormalValue(types_core.StringVal("hi"))
-  |> types.resolved_value_to_env
+  resolved_params.NormalValue(types_core.StringVal("hi"))
+  |> resolved_params.resolved_value_to_env
   |> should.equal("hi")
 
-  types.SecretVal(types_core.secret_value("top-secret"))
-  |> types.resolved_value_to_env
+  resolved_params.SecretVal(types_core.secret_value("top-secret"))
+  |> resolved_params.resolved_value_to_env
   |> should.equal("top-secret")
-}
-
-pub fn failure_reason_helpers_test() {
-  types.failure_reason_port_pool_exhausted()
-  |> should.equal("PORT_POOL_EXHAUSTED")
-
-  types.failure_reason_port_in_use()
-  |> should.equal("PORT_IN_USE")
-
-  types.failure_reason_port_bind_failed()
-  |> should.equal("PORT_BIND_FAILED")
 }
 
 pub fn id_roundtrip_test() {

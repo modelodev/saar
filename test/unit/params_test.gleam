@@ -4,9 +4,9 @@ import gleam/option.{None, Some}
 import gleeunit
 import gleeunit/should
 import sad/params
-import sad/types
 import sad/types/core as types_core
 import sad/types/profile as types_profile
+import sad/types/resolved_params
 
 pub fn main() {
   gleeunit.main()
@@ -44,7 +44,7 @@ pub fn fixed_uses_value_test() {
     params.resolve_params(params, dict.new(), fn(_) { Error(Nil) }, dict.new())
 
   dict.get(resolved, "delay_ms")
-  |> should.equal(Ok(types.NormalValue(types_core.IntVal(100))))
+  |> should.equal(Ok(resolved_params.NormalValue(types_core.IntVal(100))))
 }
 
 pub fn defaults_applied_test() {
@@ -72,10 +72,12 @@ pub fn defaults_applied_test() {
     params.resolve_params(params, dict.new(), fn(_) { Error(Nil) }, dict.new())
 
   dict.get(resolved, "model")
-  |> should.equal(Ok(types.NormalValue(types_core.StringVal("gpt-4"))))
+  |> should.equal(
+    Ok(resolved_params.NormalValue(types_core.StringVal("gpt-4"))),
+  )
 
   dict.get(resolved, "timeout")
-  |> should.equal(Ok(types.NormalValue(types_core.IntVal(30))))
+  |> should.equal(Ok(resolved_params.NormalValue(types_core.IntVal(30))))
 }
 
 pub fn missing_config_accumulates_test() {

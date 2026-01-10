@@ -1,9 +1,9 @@
 import gleam/dict
 import gleam/option
-import sad/types
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input
+import sad/types/resolved_params
 import sad/types/runner as types_runner
 
 pub fn base_input(
@@ -20,7 +20,7 @@ pub fn base_input(
       mode: types_enums.Transient,
     ),
     params: dict.from_list([
-      #("model", types.NormalValue(types_core.StringVal("gpt-4"))),
+      #("model", resolved_params.NormalValue(types_core.StringVal("gpt-4"))),
     ]),
     input: payload,
     context: types_input.RequestContext(

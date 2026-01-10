@@ -1,9 +1,9 @@
 import gleam/dict.{type Dict}
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import sad/types
 import sad/types/core
 import sad/types/enums
+import sad/types/resolved_params
 import sad/types/runner
 
 pub type ChatMessage {
@@ -83,7 +83,7 @@ pub type SadInputMeta {
 }
 
 pub type ResolvedParams =
-  types.ResolvedParams
+  resolved_params.ResolvedParams
 
 pub type SadInput {
   SadInput(

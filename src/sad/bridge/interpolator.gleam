@@ -9,9 +9,9 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import sad/json_pointer
-import sad/types
 import sad/types/core as types_core
 import sad/types/input as types_input
+import sad/types/resolved_params
 
 pub type RunnerAddress {
   RunnerAddress(host: Option(String), port: Option(Int))
@@ -19,7 +19,7 @@ pub type RunnerAddress {
 
 pub type InterpContext {
   InterpContext(
-    params: types.ResolvedParams,
+    params: resolved_params.ResolvedParams,
     input: types_input.InputPayload,
     context: types_input.RequestContext,
     runner: RunnerAddress,
@@ -83,7 +83,7 @@ pub fn interpolate_string(
 }
 
 pub fn build_context(
-  params: types.ResolvedParams,
+  params: resolved_params.ResolvedParams,
   input: types_input.InputPayload,
   context: types_input.RequestContext,
   runner_host: Option(String),
@@ -220,10 +220,12 @@ fn pointer_context_value(ctx: InterpContext) -> InterpValue {
   )
 }
 
-fn params_to_value(params: types.ResolvedParams) -> InterpValue {
+fn params_to_value(params: resolved_params.ResolvedParams) -> InterpValue {
   params
   |> dict.to_list
-  |> list.map(fn(pair) { #(pair.0, Str(types.resolved_value_to_env(pair.1))) })
+  |> list.map(fn(pair) {
+    #(pair.0, Str(resolved_params.resolved_value_to_env(pair.1)))
+  })
   |> dict.from_list
   |> Object
 }

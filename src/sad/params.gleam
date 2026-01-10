@@ -1,7 +1,7 @@
 //// Parameter resolution for runner profiles.
 ////
 //// Mission: resolve profile parameters (`types_profile.Parameter`) into concrete
-//// values (`types.ResolvedParams`) using config values, init params, and
+//// values (`resolved_params.ResolvedParams`) using config values, init params, and
 //// environment lookups.
 ////
 //// Responsibilities:
@@ -15,7 +15,7 @@
 ////
 //// Relationships:
 //// - Consumes `types_profile.Parameter` from profile decoding.
-//// - Produces `types.ResolvedParams` for interpolation/execution.
+//// - Produces `resolved_params.ResolvedParams` for interpolation/execution.
 
 import gleam/dict
 import gleam/float
@@ -24,9 +24,9 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
-import sad/types
 import sad/types/core as types_core
 import sad/types/profile as types_profile
+import sad/types/resolved_params
 
 /// Errors that can occur while resolving parameters.
 pub type ParamResolutionError {
@@ -72,7 +72,7 @@ pub fn resolve_params(
   config_values: dict.Dict(String, types_core.Value),
   env_lookup: fn(String) -> Result(String, Nil),
   init_params: dict.Dict(String, types_core.Value),
-) -> Result(types.ResolvedParams, List(ParamResolutionError)) {
+) -> Result(resolved_params.ResolvedParams, List(ParamResolutionError)) {
   let entries =
     parameters
     |> dict.to_list
@@ -109,9 +109,9 @@ fn resolve_param(
   config_values config_values: dict.Dict(String, types_core.Value),
   env_lookup env_lookup: fn(String) -> Result(String, Nil),
   init_params init_params: dict.Dict(String, types_core.Value),
-) -> Result(types.ResolvedValue, ParamResolutionError) {
+) -> Result(resolved_params.ResolvedValue, ParamResolutionError) {
   case param {
-    types_profile.FixedParam(value) -> Ok(types.NormalValue(value))
+    types_profile.FixedParam(value) -> Ok(resolved_params.NormalValue(value))
 
     types_profile.ConfigParam(key, default, expected_type) ->
       resolve_from_dict(
@@ -143,7 +143,7 @@ fn resolve_secret_param(
   key: String,
   expected_type: types_profile.ParamType,
   env_lookup: fn(String) -> Result(String, Nil),
-) -> Result(types.ResolvedValue, ParamResolutionError) {
+) -> Result(resolved_params.ResolvedValue, ParamResolutionError) {
   use raw <- result.try(
     env_lookup(key)
     |> result.map_error(fn(_) { MissingSecret(param_name, key) }),
@@ -156,7 +156,7 @@ fn resolve_secret_param(
     raw: raw,
   ))
 
-  Ok(types.SecretVal(types_core.secret_value(raw)))
+  Ok(resolved_params.SecretVal(types_core.secret_value(raw)))
 }
 
 fn resolve_from_dict(
@@ -166,7 +166,7 @@ fn resolve_from_dict(
   values values: dict.Dict(String, types_core.Value),
   default default: Option(types_core.Value),
   on_missing on_missing: fn() -> ParamResolutionError,
-) -> Result(types.ResolvedValue, ParamResolutionError) {
+) -> Result(resolved_params.ResolvedValue, ParamResolutionError) {
   let expected_value_type =
     types_profile.param_type_to_value_type(expected_type)
 
@@ -176,7 +176,7 @@ fn resolve_from_dict(
       expected_value_type,
       value,
     ))
-    Ok(types.NormalValue(checked))
+    Ok(resolved_params.NormalValue(checked))
   }
 
   case dict.get(values, source_key) {

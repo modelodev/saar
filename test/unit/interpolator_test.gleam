@@ -6,15 +6,17 @@ import gleam/option.{type Option, None, Some}
 import gleeunit
 import gleeunit/should
 import sad/bridge/interpolator
-import sad/types
 import sad/types/core as types_core
 import sad/types/input as types_input
+import sad/types/resolved_params
 
 pub fn main() {
   gleeunit.main()
 }
 
-fn base_context(params: types.ResolvedParams) -> interpolator.InterpContext {
+fn base_context(
+  params: resolved_params.ResolvedParams,
+) -> interpolator.InterpContext {
   context_with_runner(
     params,
     types_input.PayloadChat([], dict.new()),
@@ -24,14 +26,14 @@ fn base_context(params: types.ResolvedParams) -> interpolator.InterpContext {
 }
 
 fn context_with_input(
-  params: types.ResolvedParams,
+  params: resolved_params.ResolvedParams,
   input: types_input.InputPayload,
 ) -> interpolator.InterpContext {
   context_with_runner(params, input, None, None)
 }
 
 fn context_with_runner(
-  params: types.ResolvedParams,
+  params: resolved_params.ResolvedParams,
   input: types_input.InputPayload,
   runner_host: Option(String),
   runner_port: Option(Int),
@@ -64,7 +66,7 @@ fn decode_object(value: dynamic.Dynamic) -> dict.Dict(String, dynamic.Dynamic) {
 pub fn interpolate_params_test() {
   let params =
     dict.from_list([
-      #("name", types.NormalValue(types_core.StringVal("Ada"))),
+      #("name", resolved_params.NormalValue(types_core.StringVal("Ada"))),
     ])
 
   let ctx = base_context(params)
@@ -76,7 +78,7 @@ pub fn interpolate_params_test() {
 pub fn interpolate_hyphenated_key_test() {
   let params =
     dict.from_list([
-      #("api-key", types.NormalValue(types_core.StringVal("token"))),
+      #("api-key", resolved_params.NormalValue(types_core.StringVal("token"))),
     ])
 
   let ctx = base_context(params)
@@ -102,7 +104,7 @@ pub fn interpolate_invalid_placeholder_literal_test() {
 pub fn interpolate_json_nested_objects_test() {
   let params =
     dict.from_list([
-      #("x", types.NormalValue(types_core.StringVal("value"))),
+      #("x", resolved_params.NormalValue(types_core.StringVal("value"))),
     ])
 
   let ctx = base_context(params)
@@ -122,8 +124,8 @@ pub fn interpolate_json_nested_objects_test() {
 pub fn interpolate_json_arrays_test() {
   let params =
     dict.from_list([
-      #("a", types.NormalValue(types_core.StringVal("one"))),
-      #("b", types.NormalValue(types_core.StringVal("two"))),
+      #("a", resolved_params.NormalValue(types_core.StringVal("one"))),
+      #("b", resolved_params.NormalValue(types_core.StringVal("two"))),
     ])
 
   let ctx = base_context(params)
@@ -143,7 +145,7 @@ pub fn interpolate_json_arrays_test() {
 pub fn interpolate_json_mixed_types_test() {
   let params =
     dict.from_list([
-      #("x", types.NormalValue(types_core.StringVal("ok"))),
+      #("x", resolved_params.NormalValue(types_core.StringVal("ok"))),
     ])
 
   let ctx = base_context(params)
@@ -199,7 +201,7 @@ pub fn interpolate_json_preserves_numbers_test() {
 pub fn interpolate_json_deep_nesting_test() {
   let params =
     dict.from_list([
-      #("deep", types.NormalValue(types_core.StringVal("ok"))),
+      #("deep", resolved_params.NormalValue(types_core.StringVal("ok"))),
     ])
 
   let ctx = base_context(params)
@@ -234,7 +236,7 @@ pub fn interpolate_json_deep_nesting_test() {
 pub fn interpolate_json_from_pointer_test() {
   let params =
     dict.from_list([
-      #("x", types.NormalValue(types_core.StringVal("value"))),
+      #("x", resolved_params.NormalValue(types_core.StringVal("value"))),
     ])
 
   let input =
