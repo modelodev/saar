@@ -3,17 +3,19 @@
 // Purpose: documentation-only; may not compile as-is.
 
 // FILE: sad/types.gleam (dominio + wire; 0 imports OTP)
-import gleam/option.{type Option, None, Some}
 import gleam/dict.{type Dict}
-import gleam/json.{type Json}
-import gleam/http.{type Method}
-import gleam/result
-import gleam/list
-import gleam/string
-import gleam/int
 import gleam/float
+import gleam/http.{type Method}
+import gleam/int
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option.{type Option, None, Some}
+import gleam/result
+import gleam/string
+import sad/ffi
 import youid/uuid
-import sad/ffi  // Timestamp y FFI centralizada
+
+// Timestamp y FFI centralizada
 
 // ============================================================================
 // SECCIÓN 1: IDENTIFICADORES OPACOS
@@ -33,25 +35,70 @@ pub opaque type InstanceId {
   InstanceId(String)
 }
 
+/// Errores de formato para InstanceId.
+pub type InstanceIdError {
+  EmptyInstanceId
+  InstanceIdTooLong(max: Int)
+  InstanceIdInvalidChar(char: String)
+}
+
 /// Identificador de traza para correlacionar requests a través del sistema.
 /// Opaco para garantizar que siempre se use el tipo correcto en logging/telemetría.
 pub opaque type TraceId {
   TraceId(String)
 }
 
-
-
 // --- Constructores y conversores de IDs ---
 
-pub fn profile_id(s: String) -> ProfileId { ProfileId(s) }
-pub fn profile_id_to_string(id: ProfileId) -> String { let ProfileId(s) = id s }
+pub fn profile_id(s: String) -> ProfileId {
+  ProfileId(s)
+}
 
-pub fn instance_id(s: String) -> InstanceId { InstanceId(s) }
-pub fn instance_id_to_string(id: InstanceId) -> String { let InstanceId(s) = id s }
+pub fn profile_id_to_string(id: ProfileId) -> String {
+  let ProfileId(s) = id
+  s
+}
 
-pub fn trace_id(s: String) -> TraceId { TraceId(s) }
-pub fn trace_id_to_string(id: TraceId) -> String { let TraceId(s) = id s }
+/// InstanceId valida formato: [A-Za-z0-9_-], longitud 1..64.
+pub fn instance_id(s: String) -> Result(InstanceId, InstanceIdError) {
+  case string.is_empty(s) {
+    True -> Error(EmptyInstanceId)
+    False ->
+      case string.length(s) > 64 {
+        True -> Error(InstanceIdTooLong(max: 64))
+        False ->
+          case
+            s
+            |> string.to_graphemes
+            |> list.find(fn(char) { is_instance_id_char(char) == False })
+          {
+            Ok(char) -> Error(InstanceIdInvalidChar(char))
+            Error(_) -> Ok(InstanceId(s))
+          }
+      }
+  }
+}
 
+pub fn instance_id_to_string(id: InstanceId) -> String {
+  let InstanceId(s) = id
+  s
+}
+
+pub fn trace_id(s: String) -> TraceId {
+  TraceId(s)
+}
+
+pub fn trace_id_to_string(id: TraceId) -> String {
+  let TraceId(s) = id
+  s
+}
+
+fn is_instance_id_char(char: String) -> Bool {
+  string.contains(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_",
+    char,
+  )
+}
 
 // ============================================================================
 // SECCIÓN 2: VALORES TIPADOS (UNIFICADO)
@@ -78,11 +125,13 @@ pub type Value {
 
 /// Alias semántico para valores de configuración.
 /// En runtime es el mismo tipo Value, pero el decoder rechaza ListVal.
-pub type ConfigValue = Value
+pub type ConfigValue =
+  Value
 
 /// Alias semántico para valores de input.
 /// Acepta todos los variantes de Value incluyendo ListVal.
-pub type InputValue = Value
+pub type InputValue =
+  Value
 
 /// Tipo declarado de un parámetro. Usado para validación cruzada en el decoder.
 pub type ValueType {
@@ -162,7 +211,6 @@ pub fn secret_is_empty(secret: SecretValue) -> Bool {
   string.is_empty(inner)
 }
 
-
 // ============================================================================
 // SECCIÓN 3: DEFINICIÓN DE PERFIL (MODELO ESTÁTICO)
 // ============================================================================
@@ -213,7 +261,10 @@ pub fn lifecycle_from_string(s: String) -> Result(Lifecycle, String) {
   case s {
     "transient" -> Ok(Transient)
     "continuous" -> Ok(Continuous)
-    other -> Error("Unknown lifecycle: '" <> other <> "'. Valid: transient, continuous")
+    other ->
+      Error(
+        "Unknown lifecycle: '" <> other <> "'. Valid: transient, continuous",
+      )
   }
 }
 
@@ -227,17 +278,21 @@ pub fn lifecycle_from_string(s: String) -> Result(Lifecycle, String) {
 pub type Parameter {
   /// Valor fijo embebido en el perfil. No requiere resolución externa.
   FixedParam(value: ConfigValue)
-  
+
   /// Referencia a config.toml. Se resuelve en params.resolve().
-  ConfigParam(key: String, default: Option(ConfigValue))
-  
+  ConfigParam(
+    key: String,
+    default: Option(ConfigValue),
+    expected_type: ParamType,
+  )
+
   /// Referencia a secreto (variable de entorno). NUNCA tiene default.
   /// El decoder rechaza secrets con default.
-  /// `expected_type` indica cómo parsear el string del env var.
-  SecretParam(key: String, expected_type: ValueType)
-  
+  /// `expected_type` indica cómo validar el string del env var.
+  SecretParam(key: String, expected_type: ParamType)
+
   /// Proporcionado al crear la instancia. Puede tener default.
-  InitParam(key: String, default: Option(ConfigValue))
+  InitParam(key: String, default: Option(ConfigValue), expected_type: ParamType)
 }
 
 /// Tipo declarado de un parámetro en el perfil JSON.
@@ -329,7 +384,12 @@ pub fn network_mode_from_string(s: String) -> Result(NetworkMode, String) {
   case s {
     "managed_port" -> Ok(ManagedPort)
     "no_network" -> Ok(NoNetwork)
-    other -> Error("Unknown network mode: '" <> other <> "'. Valid: managed_port, no_network")
+    other ->
+      Error(
+        "Unknown network mode: '"
+        <> other
+        <> "'. Valid: managed_port, no_network",
+      )
   }
 }
 
@@ -603,7 +663,6 @@ pub type ResponseMapping {
 //
 // Nota: mantener el contrato de `ui_hint` minimalista; SAD no lo interpreta.
 
-
 // ============================================================================
 // SECCIÓN 4: PAYLOAD DE ENTRADA (TIPADO)
 // ============================================================================
@@ -687,10 +746,7 @@ pub fn derive_helpers(payload: InputPayload) -> SadHelpers {
         |> list.reverse
         |> list.find(fn(m) { m.role == "user" })
         |> option.map(fn(m) { m.content })
-      SadHelpers(
-        last_user_content: last_user_content,
-        last_user_files: [],
-      )
+      SadHelpers(last_user_content: last_user_content, last_user_files: [])
     }
     PayloadFiles(files) -> {
       SadHelpers(last_user_content: None, last_user_files: files)
@@ -702,14 +758,10 @@ pub fn derive_helpers(payload: InputPayload) -> SadHelpers {
         |> list.reverse
         |> list.find(fn(m) { m.role == "user" })
         |> option.map(fn(m) { m.content })
-      SadHelpers(
-        last_user_content: last_user_content,
-        last_user_files: files,
-      )
+      SadHelpers(last_user_content: last_user_content, last_user_files: files)
     }
   }
 }
-
 
 // ============================================================================
 // SECCIÓN 5: CONTEXTO DE REQUEST
@@ -726,7 +778,6 @@ pub type RequestContext {
     extra: Dict(String, String),
   )
 }
-
 
 // ============================================================================
 // SECCIÓN 6: CONTRATO RUNNER (SAD ↔ SCRIPTS)
@@ -848,7 +899,10 @@ pub fn workspace_path_validate(
   }
 }
 
-fn validate_non_empty(root: String, raw: String) -> Result(WorkspacePath, PathError) {
+fn validate_non_empty(
+  root: String,
+  raw: String,
+) -> Result(WorkspacePath, PathError) {
   // 2. Rechazar absolutos
   case string.starts_with(raw, "/") {
     True -> Error(AbsolutePathNotAllowed(raw))
@@ -856,7 +910,10 @@ fn validate_non_empty(root: String, raw: String) -> Result(WorkspacePath, PathEr
   }
 }
 
-fn validate_relative(root: String, raw: String) -> Result(WorkspacePath, PathError) {
+fn validate_relative(
+  root: String,
+  raw: String,
+) -> Result(WorkspacePath, PathError) {
   // 3. Rechazar null bytes
   case string.contains(raw, "\u{0}") {
     True -> Error(InvalidCharacter(raw, "\\0"))
@@ -864,14 +921,20 @@ fn validate_relative(root: String, raw: String) -> Result(WorkspacePath, PathErr
   }
 }
 
-fn validate_no_null(root: String, raw: String) -> Result(WorkspacePath, PathError) {
+fn validate_no_null(
+  root: String,
+  raw: String,
+) -> Result(WorkspacePath, PathError) {
   // 4. Normalizar por segmentos y rechazar traversal real (`..` como segmento).
   // Importante: NO usar `string.contains("..")` (falsos positivos: "my..file").
   // Regla: split por "/" y procesar segmentos.
   // Nota: `root` no participa en esta validación sintáctica; se usa al acceder al FS
   // (p.ej. `workspace.read_file`) para mitigar escapes por symlinks.
   use normalized <- result.try(normalize_path(raw))
-  case normalized { "" -> Error(EmptyPath) _ -> Ok(WorkspacePath(normalized)) }
+  case normalized {
+    "" -> Error(EmptyPath)
+    _ -> Ok(WorkspacePath(normalized))
+  }
 }
 
 /// Normaliza un path por segmentos:
@@ -913,39 +976,35 @@ pub fn workspace_path_to_absolute(root: String, path: WorkspacePath) -> String {
 /// - canonicalizar (`realpath`) `root` y `root/path`, y verificar que el segundo está bajo el primero, y/o
 /// - rechazar symlinks (`read_link_info`) en la ruta objetivo (y, idealmente, en sus directorios),
 /// y además exigir que el target sea un fichero regular.
-
 /// Genera nombre de directorio para una instancia.
 pub fn workspace_dir_name(instance_id: InstanceId) -> String {
   "workspace-" <> instance_id_to_string(instance_id)
 }
 
 /// Construye path completo de workspace para una instancia.
-pub fn workspace_for_instance(base_dir: String, instance_id: InstanceId) -> String {
+pub fn workspace_for_instance(
+  base_dir: String,
+  instance_id: InstanceId,
+) -> String {
   base_dir <> "/" <> workspace_dir_name(instance_id)
 }
 
 pub fn path_error_to_string(err: PathError) -> String {
   case err {
-    PathTraversalDetected(raw) ->
-      "Path traversal detected: '" <> raw <> "'"
+    PathTraversalDetected(raw) -> "Path traversal detected: '" <> raw <> "'"
     PathOutsideWorkspace(raw, root) ->
       "Path '" <> raw <> "' resolves outside workspace '" <> root <> "'"
-    EmptyPath ->
-      "Path cannot be empty"
+    EmptyPath -> "Path cannot be empty"
     InvalidCharacter(raw, char) ->
       "Path '" <> raw <> "' contains invalid character: " <> char
-    AbsolutePathNotAllowed(raw) ->
-      "Absolute path not allowed: '" <> raw <> "'"
+    AbsolutePathNotAllowed(raw) -> "Absolute path not allowed: '" <> raw <> "'"
   }
 }
 
 /// Error reportado por el runner.
 /// Se serializa a JSON con runner_error_to_json().
 pub type RunnerError {
-  RunnerError(
-    kind: ErrorKind,
-    message: String,
-  )
+  RunnerError(kind: ErrorKind, message: String)
 }
 
 /// Tipo de error. Sin fallback: el decoder falla ante valores desconocidos.
@@ -963,7 +1022,12 @@ pub fn error_kind_from_string(s: String) -> Result(ErrorKind, String) {
     "agent_error" -> Ok(AgentError)
     "infra_error" -> Ok(InfraError)
     "bad_request" -> Ok(BadRequest)
-    other -> Error("Unknown error kind: '" <> other <> "'. Valid: agent_error, infra_error, bad_request")
+    other ->
+      Error(
+        "Unknown error kind: '"
+        <> other
+        <> "'. Valid: agent_error, infra_error, bad_request",
+      )
   }
 }
 
@@ -974,7 +1038,6 @@ pub fn error_kind_to_string(kind: ErrorKind) -> String {
     BadRequest -> "bad_request"
   }
 }
-
 
 // ============================================================================
 // SECCIÓN 7: API PÚBLICA (GATEWAY) - WIRE FORMAT
@@ -1076,11 +1139,7 @@ pub type PublicArtifact {
 
 /// Error de interacción (modelo interno).
 pub type InteractionError {
-  InteractionError(
-    kind: ErrorKind,
-    message: String,
-    trace_id: TraceId,
-  )
+  InteractionError(kind: ErrorKind, message: String, trace_id: TraceId)
 }
 
 // --- SERIALIZACIÓN DE RESPONSES ---
@@ -1114,8 +1173,16 @@ pub fn interaction_error_to_problem_details(
   let kind = error_kind_to_string(err.kind)
   let #(status, type_url, title) = case err.kind {
     BadRequest -> #(400, "https://sad/errors/invalid-request", "Bad Request")
-    AgentError -> #(422, "https://sad/errors/upstream-error", "Unprocessable Entity")
-    InfraError -> #(500, "https://sad/errors/infra-error", "Internal Server Error")
+    AgentError -> #(
+      422,
+      "https://sad/errors/upstream-error",
+      "Unprocessable Entity",
+    )
+    InfraError -> #(
+      500,
+      "https://sad/errors/infra-error",
+      "Internal Server Error",
+    )
   }
 
   json.object([
@@ -1124,10 +1191,13 @@ pub fn interaction_error_to_problem_details(
     #("title", json.string(title)),
     #("detail", json.string(err.message)),
     #("instance", json.string(instance)),
-    #("extensions", json.object([
-      #("kind", json.string(kind)),
-      #("trace_id", json.string(trace_id_to_string(err.trace_id))),
-    ])),
+    #(
+      "extensions",
+      json.object([
+        #("kind", json.string(kind)),
+        #("trace_id", json.string(trace_id_to_string(err.trace_id))),
+      ]),
+    ),
   ])
 }
 
@@ -1137,10 +1207,11 @@ fn response_data_to_json(data: ResponseData) -> Json {
     Some(c) -> [#("content", json.string(c))]
     None -> []
   }
-  let metadata_fields = data.metadata
+  let metadata_fields =
+    data.metadata
     |> dict.to_list
     |> list.map(fn(pair) { #(pair.0, pair.1) })
-  
+
   json.object(list.append(content_field, metadata_fields))
 }
 
@@ -1160,7 +1231,6 @@ pub fn runner_error_to_json(err: RunnerError) -> Json {
     #("message", json.string(err.message)),
   ])
 }
-
 
 // ============================================================================
 // SECCIÓN 8: ESTADO DE RUNTIME (ACTORES)
@@ -1182,7 +1252,8 @@ pub type ResolvedValue {
 /// 
 /// IMPORTANTE: Usar `resolved_value_to_env()` para convertir a string.
 /// Nunca iterar y loguear valores directamente.
-pub type ResolvedParams = Dict(String, ResolvedValue)
+pub type ResolvedParams =
+  Dict(String, ResolvedValue)
 
 /// Convierte un ResolvedValue a string para env vars del runner.
 /// Seguro para todos los tipos (secretos incluidos, ya que van a env).
@@ -1213,7 +1284,12 @@ pub type ParamResolutionError {
   /// Parámetro de inicialización no proporcionado y sin default
   MissingInitParam(param_name: String, init_key: String)
   /// Secret presente pero no parseable al tipo esperado
-  SecretParseError(param_name: String, env_key: String, expected: ValueType, got: String)
+  SecretParseError(
+    param_name: String,
+    env_key: String,
+    expected: ValueType,
+    got: String,
+  )
   /// Tipo del valor no coincide con el declarado
   TypeMismatch(param_name: String, expected: ValueType, got: ValueType)
 }
@@ -1222,15 +1298,40 @@ pub type ParamResolutionError {
 pub fn param_resolution_error_to_string(err: ParamResolutionError) -> String {
   case err {
     MissingConfig(param, key) ->
-      "Parameter '" <> param <> "' requires config key '" <> key <> "' which is not defined and has no default"
+      "Parameter '"
+      <> param
+      <> "' requires config key '"
+      <> key
+      <> "' which is not defined and has no default"
     MissingSecret(param, key) ->
-      "Parameter '" <> param <> "' requires environment variable '" <> key <> "' which is not set"
+      "Parameter '"
+      <> param
+      <> "' requires environment variable '"
+      <> key
+      <> "' which is not set"
     MissingInitParam(param, key) ->
-      "Parameter '" <> param <> "' requires init param '" <> key <> "' which was not provided and has no default"
+      "Parameter '"
+      <> param
+      <> "' requires init param '"
+      <> key
+      <> "' which was not provided and has no default"
     SecretParseError(param, key, expected, got) ->
-      "Parameter '" <> param <> "' from env var '" <> key <> "' expected " <> value_type_to_string(expected) <> " but got: '" <> got <> "'"
+      "Parameter '"
+      <> param
+      <> "' from env var '"
+      <> key
+      <> "' expected "
+      <> value_type_to_string(expected)
+      <> " but got: '"
+      <> got
+      <> "'"
     TypeMismatch(param, expected, got) ->
-      "Parameter '" <> param <> "' expected " <> value_type_to_string(expected) <> " but got " <> value_type_to_string(got)
+      "Parameter '"
+      <> param
+      <> "' expected "
+      <> value_type_to_string(expected)
+      <> " but got "
+      <> value_type_to_string(got)
   }
 }
 
@@ -1334,14 +1435,14 @@ pub fn agent_resource_port(resource: AgentResource) -> Port {
 pub type AgentState {
   /// Recién creado, parámetros resueltos, sin provisionar
   Created(params: ResolvedParams)
-  
+
   /// Provisioning en curso
   Provisioning(params: ResolvedParams)
-  
+
   /// Listo para interacciones - agente transient (CLI)
   /// No tiene resource porque se lanza un proceso por interacción
   ReadyTransient(params: ResolvedParams)
-  
+
   /// Listo para interacciones - agente continuous (servidor)
   /// Resource es obligatorio (el servidor está corriendo)
   ReadyContinuous(params: ResolvedParams, resource: AgentResource)
@@ -1349,7 +1450,7 @@ pub type AgentState {
   /// Instancia detenida: no acepta interacciones, pero sigue existiendo y conserva
   /// workspace/artefactos hasta que se ejecute Delete.
   Stopped(params: ResolvedParams)
-  
+
   /// Falló (provision o runtime)
   Failed(reason: String)
 }
@@ -1393,45 +1494,69 @@ pub fn agent_failed(reason: String) -> AgentState {
 // --- Introspección ---
 
 pub fn is_created(state: AgentState) -> Bool {
-  case state { Created(_) -> True _ -> False }
+  case state {
+    Created(_) -> True
+    _ -> False
+  }
 }
 
 pub fn is_provisioning(state: AgentState) -> Bool {
-  case state { Provisioning(_) -> True _ -> False }
+  case state {
+    Provisioning(_) -> True
+    _ -> False
+  }
 }
 
 pub fn is_ready(state: AgentState) -> Bool {
-  case state { 
-    ReadyTransient(_) -> True 
-    ReadyContinuous(_, _) -> True 
-    _ -> False 
+  case state {
+    ReadyTransient(_) -> True
+    ReadyContinuous(_, _) -> True
+    _ -> False
   }
 }
 
 pub fn is_stopped(state: AgentState) -> Bool {
-  case state { Stopped(_) -> True _ -> False }
+  case state {
+    Stopped(_) -> True
+    _ -> False
+  }
 }
 
 pub fn is_ready_transient(state: AgentState) -> Bool {
-  case state { ReadyTransient(_) -> True _ -> False }
+  case state {
+    ReadyTransient(_) -> True
+    _ -> False
+  }
 }
 
 pub fn is_ready_continuous(state: AgentState) -> Bool {
-  case state { ReadyContinuous(_, _) -> True _ -> False }
+  case state {
+    ReadyContinuous(_, _) -> True
+    _ -> False
+  }
 }
 
 pub fn is_failed(state: AgentState) -> Bool {
-  case state { Failed(_) -> True _ -> False }
+  case state {
+    Failed(_) -> True
+    _ -> False
+  }
 }
 
 pub fn get_failure_reason(state: AgentState) -> Option(String) {
-  case state { Failed(r) -> Some(r) _ -> None }
+  case state {
+    Failed(r) -> Some(r)
+    _ -> None
+  }
 }
 
 /// Obtiene el resource de un agente continuous.
 /// Devuelve None para transient o estados no-ready.
 pub fn get_resource(state: AgentState) -> Option(AgentResource) {
-  case state { ReadyContinuous(_, r) -> Some(r) _ -> None }
+  case state {
+    ReadyContinuous(_, r) -> Some(r)
+    _ -> None
+  }
 }
 
 pub fn get_params(state: AgentState) -> Option(ResolvedParams) {
@@ -1444,7 +1569,6 @@ pub fn get_params(state: AgentState) -> Option(ResolvedParams) {
     Failed(_) -> None
   }
 }
-
 
 // ============================================================================
 // SECCIÓN 8.1: CONFIGURACIÓN DEL SISTEMA (SadConfig)
@@ -1466,11 +1590,9 @@ pub type SadConfig {
     server_host: String,
     /// Puerto HTTP
     server_port: Int,
-    
     // --- Auth ---
     /// API key para autenticación (Bearer token)
     api_key: String,
-    
     // --- Timeouts ---
     /// Timeout hard para interacciones (ms).
     /// No se resetea por output continuo del runner (protección contra loops infinitos).
@@ -1483,7 +1605,6 @@ pub type SadConfig {
     health_check_timeout_ms: Int,
     /// Tiempo de gracia para shutdown de agentes (ms)
     shutdown_timeout_ms: Int,
-    
     // --- Profiles/Runners ---
     /// Fuentes de perfiles y runners (dir/git)
     profiles_sources: List(ProfileSource),
@@ -1493,35 +1614,33 @@ pub type SadConfig {
     runners_python_bin: String,
     /// Directorio base para workspaces de instancias
     workspaces_directory: String,
-    
-      // --- Limits ---
-        /// Tamaño máximo del buffer de logs por agente (bytes)
-        log_buffer_bytes: Int,
-        /// Límite duro de bytes leídos desde STDOUT del runner (JSONL) por interacción (bytes).
-        /// Aplica tanto en streaming como en non-streaming: protección contra runners buggy/maliciosos.
-        max_stdout_bytes: Int,
-        /// Límite duro por línea JSONL (runner/streaming).
-        max_runner_event_bytes: Int,
-        /// Límite duro del body que SAD acepta en requests entrantes (bytes).
-        /// Se aplica al leer/parsing de JSON en gateway (Mist: `read_body`).
-        max_request_body_bytes: Int,
-        /// Límite duro del body que SAD acepta desde agentes HTTP en modo non-streaming (bytes).
-        /// Evita OOM si un agente devuelve respuestas enormes.
-        max_http_response_bytes: Int,
-        /// Límite duro de bytes que SAD descargará al construir multipart desde `FileRef` (SAD → agente).
-        /// Protege de URLs que devuelven ficheros gigantes.
-        max_file_fetch_bytes: Int,
-        /// Puerto mínimo para asignar a agentes continuous
-        port_range_min: Int,
-        /// Puerto máximo para asignar a agentes continuous
-        port_range_max: Int,
-        /// Intervalo de keep-alive SSE (ms). 0 desactiva.
-        sse_keep_alive_interval_ms: Int,
-        /// Configuración del stream de logs (SSE de instancia)
-        log_stream: LogStreamConfig,
-      /// Configuración del stream de interacción (SSE de respuesta)
-      interaction_stream: InteractionStreamConfig,
-    
+    // --- Limits ---
+    /// Tamaño máximo del buffer de logs por agente (bytes)
+    log_buffer_bytes: Int,
+    /// Límite duro de bytes leídos desde STDOUT del runner (JSONL) por interacción (bytes).
+    /// Aplica tanto en streaming como en non-streaming: protección contra runners buggy/maliciosos.
+    max_stdout_bytes: Int,
+    /// Límite duro por línea JSONL (runner/streaming).
+    max_runner_event_bytes: Int,
+    /// Límite duro del body que SAD acepta en requests entrantes (bytes).
+    /// Se aplica al leer/parsing de JSON en gateway (Mist: `read_body`).
+    max_request_body_bytes: Int,
+    /// Límite duro del body que SAD acepta desde agentes HTTP en modo non-streaming (bytes).
+    /// Evita OOM si un agente devuelve respuestas enormes.
+    max_http_response_bytes: Int,
+    /// Límite duro de bytes que SAD descargará al construir multipart desde `FileRef` (SAD → agente).
+    /// Protege de URLs que devuelven ficheros gigantes.
+    max_file_fetch_bytes: Int,
+    /// Puerto mínimo para asignar a agentes continuous
+    port_range_min: Int,
+    /// Puerto máximo para asignar a agentes continuous
+    port_range_max: Int,
+    /// Intervalo de keep-alive SSE (ms). 0 desactiva.
+    sse_keep_alive_interval_ms: Int,
+    /// Configuración del stream de logs (SSE de instancia)
+    log_stream: LogStreamConfig,
+    /// Configuración del stream de interacción (SSE de respuesta)
+    interaction_stream: InteractionStreamConfig,
     // --- Network ---
     /// Host inyectado para managed_port
     managed_port_host: String,
@@ -1534,29 +1653,32 @@ pub fn default_sad_config() -> SadConfig {
   SadConfig(
     server_host: "0.0.0.0",
     server_port: 8080,
-    api_key: "",  // Debe sobrescribirse
+    api_key: "",
+    // Debe sobrescribirse
     call_timeout_ms: 30_000,
-    status_timeout_ms: 5_000,
-    registry_timeout_ms: 5_000,
+    status_timeout_ms: 5000,
+    registry_timeout_ms: 5000,
     health_check_timeout_ms: 10_000,
     shutdown_timeout_ms: 10_000,
     profiles_sources: [ProfileSourceDir(path: ".")],
     profiles_git_cache_dir: "./.sad/cache/git",
     runners_python_bin: "python3",
     workspaces_directory: "./workspaces",
-      log_buffer_bytes: 1_048_576,  // 1MB
-        max_stdout_bytes: 10_485_760,  // 10MB - límite de stdout acumulado
-        max_runner_event_bytes: 262_144,
-        max_request_body_bytes: 1_048_576,  // 1MB - límite de body entrante (JSON)
-        max_http_response_bytes: 10_485_760,  // 10MB - límite de body HTTP non-streaming
-        max_file_fetch_bytes: 52_428_800,  // 50MB - límite de fetch para multipart via URL
-        port_range_min: 9000,
-        port_range_max: 9999,
-        sse_keep_alive_interval_ms: 15_000,
-        log_stream: LogStreamConfig(
-          batch_byte_size: 4096,
-          flush_interval_ms: 50,
-      ),
+    log_buffer_bytes: 1_048_576,
+    // 1MB
+    max_stdout_bytes: 10_485_760,
+    // 10MB - límite de stdout acumulado
+    max_runner_event_bytes: 262_144,
+    max_request_body_bytes: 1_048_576,
+    // 1MB - límite de body entrante (JSON)
+    max_http_response_bytes: 10_485_760,
+    // 10MB - límite de body HTTP non-streaming
+    max_file_fetch_bytes: 52_428_800,
+    // 50MB - límite de fetch para multipart via URL
+    port_range_min: 9000,
+    port_range_max: 9999,
+    sse_keep_alive_interval_ms: 15_000,
+    log_stream: LogStreamConfig(batch_byte_size: 4096, flush_interval_ms: 50),
     interaction_stream: InteractionStreamConfig(
       batch_byte_size: 4096,
       flush_interval_ms: 25,
@@ -1606,8 +1728,9 @@ pub fn resolve_call_timeout_for(
 // ============================================================================
 // FILE: sad/core/messages.gleam (mensajería OTP; Subject/Pid/Monitor/Selector)
 // ============================================================================
-import gleam/erlang/process.{type Pid, type Subject, type Selector, type Monitor, type Down}
-
+import gleam/erlang/process.{
+  type Down, type Monitor, type Pid, type Selector, type Subject,
+}
 
 // ============================================================================
 // SECCIÓN 9: ESTADO DEL ACTOR (ADT EXPLÍCITO)
@@ -1650,12 +1773,15 @@ pub type AgentRequest {
 /// No es opaco porque no tiene invariantes - es simplemente un Subject tipado.
 /// El tipo largo se documenta aquí para claridad; usar ReplyChannel en firmas.
 // Ubicación: sad/core/messages.gleam
-pub type ReplyChannel = Subject(Result(InteractionResult, InteractionError))
+
+pub type ReplyChannel =
+  Subject(Result(InteractionResult, InteractionError))
 
 /// Handle para una interacción en curso.
 /// Incluye el PID del worker y un monitor para detectar si muere.
 /// Opaco para encapsular detalles de implementación.
 // Ubicación: sad/core/messages.gleam
+
 pub opaque type InteractionHandle {
   InteractionHandle(
     /// PID del proceso worker que ejecuta la interacción
@@ -1667,18 +1793,21 @@ pub opaque type InteractionHandle {
 
 /// Crea un handle de interacción con su monitor.
 // Ubicación: sad/core/messages.gleam
+
 pub fn interaction_handle(pid: Pid, monitor: Monitor) -> InteractionHandle {
   InteractionHandle(pid, monitor)
 }
 
 /// Obtiene el PID del worker.
 // Ubicación: sad/core/messages.gleam
+
 pub fn interaction_handle_pid(handle: InteractionHandle) -> Pid {
   handle.pid
 }
 
 /// Obtiene el monitor del worker.
 // Ubicación: sad/core/messages.gleam
+
 pub fn interaction_handle_monitor(handle: InteractionHandle) -> Monitor {
   handle.monitor
 }
@@ -1696,7 +1825,6 @@ pub type StopReason {
 // - `AgentStatusView` y `AgentInfoView` viven en `sad/types.gleam` y son serializables (sin OTP/secrets).
 // Introspección interna:
 // - `AgentRuntimeState` (record de estado del actor) + `ActorMode` viven en `sad/core/agent.gleam` y NO se exponen por HTTP.
-
 
 // ============================================================================
 // SECCIÓN 10: LOGGING
@@ -1806,20 +1934,20 @@ pub fn system_log(
   instance_id: InstanceId,
 ) -> LogEvent {
   let kind_str = "kind=" <> system_log_kind_to_string(kind)
-  
-  let labels_str = labels
+
+  let labels_str =
+    labels
     |> dict.to_list
     |> list.map(fn(pair) { pair.0 <> "=" <> pair.1 })
     |> string.join(" ")
-  
+
   let line = case labels_str {
     "" -> kind_str
     _ -> kind_str <> " " <> labels_str
   }
-  
+
   log_event(SystemLog, line, trace_id, instance_id)
 }
-
 
 // ============================================================================
 // SECCIÓN 11: STREAMING (GENÉRICO)
@@ -1845,25 +1973,15 @@ pub type StreamEvent {
     /// Timestamp en milliseconds
     timestamp: Int,
   )
-  
+
   /// Inicio de ejecución.
-  StreamStarted(
-    trace_id: TraceId,
-    timestamp: Int,
-  )
-  
+  StreamStarted(trace_id: TraceId, timestamp: Int)
+
   /// Fin exitoso de ejecución.
-  StreamFinished(
-    trace_id: TraceId,
-    timestamp: Int,
-  )
-  
+  StreamFinished(trace_id: TraceId, timestamp: Int)
+
   /// Error durante ejecución.
-  StreamError(
-    trace_id: TraceId,
-    error: InteractionError,
-    timestamp: Int,
-  )
+  StreamError(trace_id: TraceId, error: InteractionError, timestamp: Int)
 }
 
 // --- Constructores de eventos ---
@@ -1965,7 +2083,6 @@ pub fn current_message_id(ctx: StreamContext) -> Option(String) {
 pub fn generate_message_id() -> String {
   "msg-" <> uuid.v7_string()
 }
-
 
 // ============================================================================
 // SECCIÓN 12: UTILIDADES DE TIEMPO

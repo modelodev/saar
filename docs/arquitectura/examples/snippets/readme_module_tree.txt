@@ -8,6 +8,7 @@ src/
     ├── decoders.gleam        # JSON → tipos (config/perfiles/wire)
     ├── runner_contract.gleam # Tipos wire del runner (eventos JSONL)
     ├── response_mapping.gleam# JSON pointers para mapear respuestas a `ResponseData`
+    ├── json_pointer.gleam    # JSON Pointer RFC6901 + json/dynamic helpers
 	├── sse.gleam             # Helpers SSE: `line`, `comment`, `named_event`
 	├── otp/
 	│   └── safe_call.gleam    # Safe-call (reply+monitor) para bordes HTTP/SSE (no panic)

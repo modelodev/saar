@@ -1,8 +1,25 @@
+//// Decoders for user-provided dynamic inputs.
+////
+//// Mission: decode `gleam/dynamic.Dynamic` values into SAD's strongly-typed
+//// domain models (profiles, runners, interfaces, inputs).
+////
+//// Responsibilities:
+//// - Provide stable public entrypoints that return `Result(_, List(DecodeError))`.
+//// - Enforce domain constraints at the decoding boundary (e.g. enum defaults).
+////
+//// Non-responsibilities:
+//// - Executing runners or applying business logic beyond decoding/validation.
+//// - Performing I/O.
+////
+//// Relationships:
+//// - Produces values from `sad/types/*`.
+//// - Uses `gleam/dynamic/decode` for composable decoders.
+
 import gleam/dict
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import sad/types/core as types_core
@@ -11,24 +28,72 @@ import sad/types/input as types_input
 import sad/types/profile as types_profile
 import sad/types/runner as types_runner
 
+/// Decodes a profile definition from dynamic input.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dynamic/decode
+/// import gleam/json
+/// import sad/decoders
+///
+/// let payload = "{\"meta\":{\"id\":\"x\",\"lifecycle\":\"transient\",\"description\":\"d\"},\"parameters\":{},\"runner\":{\"type\":\"echo\",\"tool_config\":{\"script\":\"echo.py\"}},\"interface\":{\"protocol\":\"runner\",\"capabilities\":{}}}"
+/// let assert Ok(value) = json.parse(payload, decode.dynamic)
+/// decoders.decode_profile(value)
+/// ```
 pub fn decode_profile(
   value: Dynamic,
 ) -> Result(types_profile.Profile, List(decode.DecodeError)) {
   decode.run(value, profile_decoder())
 }
 
+/// Decodes a runner definition from dynamic input.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dynamic/decode
+/// import gleam/json
+/// import sad/decoders
+///
+/// let payload = "{\"type\":\"echo\",\"tool_config\":{\"script\":\"echo.py\"}}"
+/// let assert Ok(value) = json.parse(payload, decode.dynamic)
+/// decoders.decode_runner(value)
+/// ```
 pub fn decode_runner(
   value: Dynamic,
 ) -> Result(types_runner.Runner, List(decode.DecodeError)) {
   decode.run(value, runner_decoder())
 }
 
+/// Decodes an interface definition from dynamic input.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dynamic/decode
+/// import gleam/json
+/// import sad/decoders
+///
+/// let payload = "{\"protocol\":\"runner\",\"capabilities\":{}}"
+/// let assert Ok(value) = json.parse(payload, decode.dynamic)
+/// decoders.decode_interface(value)
+/// ```
 pub fn decode_interface(
   value: Dynamic,
 ) -> Result(types_profile.Interface, List(decode.DecodeError)) {
   decode.run(value, interface_decoder())
 }
 
+/// Decodes runner capabilities from dynamic input.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dynamic/decode
+/// import gleam/json
+/// import sad/decoders
+///
+/// let payload = "{\"echo\":{\"input_schema\":\"std:chat\",\"streaming\":false}}"
+/// let assert Ok(value) = json.parse(payload, decode.dynamic)
+/// decoders.decode_capabilities(value)
+/// ```
 pub fn decode_capabilities(
   value: Dynamic,
 ) -> Result(
@@ -38,18 +103,66 @@ pub fn decode_capabilities(
   decode.run(value, runner_capabilities_decoder())
 }
 
+/// Decodes an input schema from dynamic input.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dynamic/decode
+/// import gleam/json
+/// import sad/decoders
+///
+/// let assert Ok(value) = json.parse("\"std:chat\"", decode.dynamic)
+/// decoders.decode_input_schema(value)
+/// ```
 pub fn decode_input_schema(
   value: Dynamic,
 ) -> Result(types_profile.InputSchema, List(decode.DecodeError)) {
   decode.run(value, input_schema_decoder())
 }
 
+/// Decodes an instance id from dynamic input.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dynamic
+/// import sad/decoders
+///
+/// decoders.decode_instance_id(dynamic.string("inst-1"))
+/// ```
+pub fn decode_instance_id(
+  value: Dynamic,
+) -> Result(types_core.InstanceId, List(decode.DecodeError)) {
+  decode.run(value, instance_id_decoder())
+}
+
+/// Decodes a network mode from dynamic input.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dynamic
+/// import sad/decoders
+///
+/// decoders.decode_network_mode(dynamic.string("managed_port"))
+/// ```
 pub fn decode_network_mode(
   value: Dynamic,
 ) -> Result(types_runner.NetworkMode, List(decode.DecodeError)) {
   decode.run(value, network_mode_decoder())
 }
 
+/// Decodes the standard chat payload.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dynamic/decode
+/// import gleam/json
+/// import gleam/dict
+/// import sad/decoders
+///
+/// let payload = "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+/// let assert Ok(inputs) = json.parse(payload, decode.dynamic)
+/// decoders.decode_payload_std_chat(inputs, dict.new())
+/// ```
 pub fn decode_payload_std_chat(
   inputs: Dynamic,
   extra_fields: dict.Dict(String, types_profile.ExtraFieldDef),
@@ -64,6 +177,18 @@ pub fn decode_payload_std_chat(
   Ok(types_input.PayloadChat(messages, extra))
 }
 
+/// Decodes the standard files payload.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dynamic/decode
+/// import gleam/json
+/// import sad/decoders
+///
+/// let payload = "{\"files\":[{\"name\":\"doc.txt\",\"url\":\"https://example.com/doc.txt\",\"mime\":\"text/plain\"}]}"
+/// let assert Ok(inputs) = json.parse(payload, decode.dynamic)
+/// decoders.decode_payload_std_files(inputs)
+/// ```
 pub fn decode_payload_std_files(
   inputs: Dynamic,
 ) -> Result(types_input.InputPayload, List(decode.DecodeError)) {
@@ -76,6 +201,19 @@ pub fn decode_payload_std_files(
   Ok(types_input.PayloadFiles(files))
 }
 
+/// Decodes a payload that contains both chat messages and file references.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dynamic/decode
+/// import gleam/json
+/// import gleam/dict
+/// import sad/decoders
+///
+/// let payload = "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"files\":[{\"name\":\"doc.txt\",\"url\":\"https://example.com/doc.txt\",\"mime\":\"text/plain\"}]}"
+/// let assert Ok(inputs) = json.parse(payload, decode.dynamic)
+/// decoders.decode_payload_mixed(inputs, dict.new())
+/// ```
 pub fn decode_payload_mixed(
   inputs: Dynamic,
   extra_fields: dict.Dict(String, types_profile.ExtraFieldDef),
@@ -95,6 +233,35 @@ pub fn decode_payload_mixed(
   Ok(types_input.PayloadMixed(messages, files, extra))
 }
 
+/// Decodes the configured extra fields from a payload.
+///
+/// This is useful for interfaces that need extra, schema-defined inputs.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dict
+/// import gleam/dynamic/decode
+/// import gleam/json
+/// import gleam/option.{None, Some}
+/// import sad/decoders
+/// import sad/types/profile as types_profile
+///
+/// let defs =
+///   dict.from_list([
+///     #(
+///       "tone",
+///       types_profile.ExtraFieldDef(
+///         type_: types_profile.FieldString,
+///         enum_values: Some(["formal", "casual"]),
+///         default: None,
+///       ),
+///     ),
+///   ])
+///
+/// let payload = "{\"tone\":\"formal\"}"
+/// let assert Ok(inputs) = json.parse(payload, decode.dynamic)
+/// decoders.decode_extra_fields(defs, inputs)
+/// ```
 pub fn decode_extra_fields(
   extra_fields: dict.Dict(String, types_profile.ExtraFieldDef),
   inputs: Dynamic,
@@ -103,6 +270,19 @@ pub fn decode_extra_fields(
   decode_extra_fields_from_fields(extra_fields, fields)
 }
 
+/// Returns a decoder for `types_profile.Profile`.
+///
+/// This is typically used when parsing JSON profiles from disk.
+///
+/// Example:
+/// ```gleam
+/// import gleam/json
+/// import sad/decoders
+///
+/// let assert Ok(profile) =
+///   json.parse("{\"meta\":{\"id\":\"x\",\"lifecycle\":\"transient\",\"description\":\"d\"},\"parameters\":{},\"runner\":{\"type\":\"echo\",\"tool_config\":{\"script\":\"echo.py\"}},\"interface\":{\"protocol\":\"runner\",\"capabilities\":{}}}", decoders.profile_decoder())
+/// profile
+/// ```
 pub fn profile_decoder() -> decode.Decoder(types_profile.Profile) {
   let decoder = {
     use meta <- decode.field("meta", profile_meta_decoder())
@@ -174,6 +354,26 @@ fn parameter_decoder() -> decode.Decoder(types_profile.Parameter) {
   decoder
 }
 
+fn instance_id_decoder() -> decode.Decoder(types_core.InstanceId) {
+  let assert Ok(placeholder) = types_core.instance_id("instance-1")
+
+  let decoder = {
+    use raw <- decode.then(decode.string)
+    case types_core.instance_id(raw) {
+      Ok(id) -> decode.success(id)
+      Error(err) ->
+        decode.failure(
+          placeholder,
+          expected: "InstanceId("
+            <> types_core.instance_id_error_to_string(err)
+            <> ")",
+        )
+    }
+  }
+
+  decoder
+}
+
 fn fixed_param_decoder() -> decode.Decoder(types_profile.Parameter) {
   let decoder = {
     use expected <- decode.field("type", value_type_decoder())
@@ -233,6 +433,17 @@ fn parameter_placeholder() -> types_profile.Parameter {
   types_profile.FixedParam(types_core.StringVal(""))
 }
 
+/// Returns a decoder for `types_runner.Runner`.
+///
+/// Example:
+/// ```gleam
+/// import gleam/json
+/// import sad/decoders
+///
+/// let assert Ok(runner) =
+///   json.parse("{\"type\":\"echo\",\"tool_config\":{\"script\":\"echo.py\"}}", decoders.runner_decoder())
+/// runner
+/// ```
 pub fn runner_decoder() -> decode.Decoder(types_runner.Runner) {
   let decoder = {
     use type_ <- decode.field("type", decode.string)
@@ -365,6 +576,17 @@ fn string_list_or_single_decoder() -> decode.Decoder(List(String)) {
   ])
 }
 
+/// Returns a decoder for `types_profile.Interface`.
+///
+/// Example:
+/// ```gleam
+/// import gleam/json
+/// import sad/decoders
+///
+/// let assert Ok(interface) =
+///   json.parse("{\"protocol\":\"runner\",\"capabilities\":{}}", decoders.interface_decoder())
+/// interface
+/// ```
 pub fn interface_decoder() -> decode.Decoder(types_profile.Interface) {
   let decoder = {
     use protocol <- decode.field("protocol", decode.string)
@@ -635,52 +857,68 @@ fn extra_field_def_decoder() -> decode.Decoder(types_profile.ExtraFieldDef) {
       None,
       decode.optional(extra_field_value_decoder(type_)),
     )
-    case enum_values {
-      Some(values) ->
-        case type_ {
-          types_profile.FieldString ->
-            case default {
-              Some(types_core.StringVal(value)) ->
-                case list.contains(values, value) {
-                  True ->
-                    decode.success(types_profile.ExtraFieldDef(
-                      type_: type_,
-                      enum_values: enum_values,
-                      default: default,
-                    ))
-                  False ->
-                    decode.failure(
-                      extra_field_def_placeholder(),
-                      expected: "EnumDefault",
-                    )
-                }
-              Some(_) ->
-                decode.failure(
-                  extra_field_def_placeholder(),
-                  expected: "EnumDefault",
-                )
-              None ->
-                decode.success(types_profile.ExtraFieldDef(
-                  type_: type_,
-                  enum_values: enum_values,
-                  default: default,
-                ))
-            }
-          _ ->
-            decode.failure(
-              extra_field_def_placeholder(),
-              expected: "EnumString",
-            )
-        }
-      None ->
-        decode.success(types_profile.ExtraFieldDef(
-          type_: type_,
-          enum_values: enum_values,
-          default: default,
-        ))
-    }
+
+    validate_extra_field_def(type_, enum_values, default)
   }
   decoder
+}
+
+fn validate_extra_field_def(
+  type_: types_profile.ExtraFieldType,
+  enum_values: Option(List(String)),
+  default: Option(types_input.InputValue),
+) -> decode.Decoder(types_profile.ExtraFieldDef) {
+  case enum_values {
+    None -> decode.success(extra_field_def(type_, enum_values, default))
+    Some(values) -> validate_string_enum(type_, values, enum_values, default)
+  }
+}
+
+fn validate_string_enum(
+  type_: types_profile.ExtraFieldType,
+  values: List(String),
+  enum_values: Option(List(String)),
+  default: Option(types_input.InputValue),
+) -> decode.Decoder(types_profile.ExtraFieldDef) {
+  case type_ {
+    types_profile.FieldString ->
+      validate_enum_default(type_, values, enum_values, default)
+
+    _ -> decode.failure(extra_field_def_placeholder(), expected: "EnumString")
+  }
+}
+
+fn validate_enum_default(
+  type_: types_profile.ExtraFieldType,
+  values: List(String),
+  enum_values: Option(List(String)),
+  default: Option(types_input.InputValue),
+) -> decode.Decoder(types_profile.ExtraFieldDef) {
+  case default {
+    None -> decode.success(extra_field_def(type_, enum_values, default))
+
+    Some(types_core.StringVal(value)) ->
+      case list.contains(values, value) {
+        True -> decode.success(extra_field_def(type_, enum_values, default))
+        False ->
+          decode.failure(extra_field_def_placeholder(), expected: "EnumDefault")
+      }
+
+    Some(_) ->
+      decode.failure(extra_field_def_placeholder(), expected: "EnumDefault")
+  }
+}
+
+fn extra_field_def(
+  type_: types_profile.ExtraFieldType,
+  enum_values: Option(List(String)),
+  default: Option(types_input.InputValue),
+) -> types_profile.ExtraFieldDef {
+  types_profile.ExtraFieldDef(
+    type_: type_,
+    enum_values: enum_values,
+    default: default,
+  )
 }
 
 fn extra_field_def_placeholder() -> types_profile.ExtraFieldDef {
@@ -723,30 +961,29 @@ fn number_value_decoder() -> decode.Decoder(types_core.Value) {
   decode.one_of(int_decoder, or: [float_decoder])
 }
 
-fn value_type_decoder() -> decode.Decoder(types_core.ValueType) {
+fn value_type_decoder() -> decode.Decoder(types_profile.ParamType) {
   let decoder = {
     use value <- decode.then(decode.string)
     case value {
-      "string" -> decode.success(types_core.TypeString)
-      "int" -> decode.success(types_core.TypeInt)
-      "float" -> decode.success(types_core.TypeFloat)
-      "bool" -> decode.success(types_core.TypeBool)
-      _ -> decode.failure(types_core.TypeString, expected: "ValueType")
+      "string" -> decode.success(types_profile.ParamString)
+      "int" -> decode.success(types_profile.ParamInt)
+      "float" -> decode.success(types_profile.ParamFloat)
+      "bool" -> decode.success(types_profile.ParamBool)
+      _ -> decode.failure(types_profile.ParamString, expected: "ParamType")
     }
   }
   decoder
 }
 
 fn value_decoder(
-  expected: types_core.ValueType,
+  expected: types_profile.ParamType,
 ) -> decode.Decoder(types_core.Value) {
   case expected {
-    types_core.TypeString -> decode.string |> decode.map(types_core.StringVal)
-    types_core.TypeInt -> decode.int |> decode.map(types_core.IntVal)
-    types_core.TypeFloat -> decode.float |> decode.map(types_core.FloatVal)
-    types_core.TypeBool -> decode.bool |> decode.map(types_core.BoolVal)
-    types_core.TypeList ->
-      decode.list(of: decode.string) |> decode.map(types_core.ListVal)
+    types_profile.ParamString ->
+      decode.string |> decode.map(types_core.StringVal)
+    types_profile.ParamInt -> decode.int |> decode.map(types_core.IntVal)
+    types_profile.ParamFloat -> decode.float |> decode.map(types_core.FloatVal)
+    types_profile.ParamBool -> decode.bool |> decode.map(types_core.BoolVal)
   }
 }
 
@@ -831,24 +1068,21 @@ fn decode_extra_field_value(
   def: types_profile.ExtraFieldDef,
   value: Dynamic,
 ) -> Result(types_input.InputValue, List(decode.DecodeError)) {
-  let types_profile.ExtraFieldDef(
-    type_: type_,
-    enum_values: enum_values,
-    default: _,
-  ) = def
+  let types_profile.ExtraFieldDef(type_: type_, enum_values: enum_values, ..) =
+    def
 
   use decoded <- result.try(decode.run(value, extra_field_value_decoder(type_)))
-  case enum_values {
-    None -> Ok(decoded)
-    Some(values) ->
-      case decoded {
-        types_core.StringVal(s) ->
-          case list.contains(values, s) {
-            True -> Ok(decoded)
-            False -> Error([enum_value_error(s)])
-          }
-        _ -> Error([enum_value_error("non-string")])
+
+  case enum_values, decoded {
+    None, _ -> Ok(decoded)
+
+    Some(values), types_core.StringVal(s) ->
+      case list.contains(values, s) {
+        True -> Ok(decoded)
+        False -> Error([enum_value_error(s)])
       }
+
+    Some(_), _ -> Error([enum_value_error("non-string")])
   }
 }
 

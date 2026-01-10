@@ -186,12 +186,12 @@ Para cada parámetro:
 ### 2.4 Errores
 
 ```gleam
-pub type ParamResolutionError {
-  MissingConfig(param_name: String, config_key: String)
-  MissingSecret(param_name: String, env_key: String)
-  MissingInitParam(param_name: String, init_key: String)
-  TypeMismatch(param_name: String, expected: ValueType, got: String)
-}
+  pub type ParamResolutionError {
+    MissingConfig(param_name: String, config_key: String)
+    MissingSecret(param_name: String, env_key: String)
+    MissingInitParam(param_name: String, init_key: String)
+    TypeMismatch(param_name: String, expected: ValueType, got: ValueType)
+  }
 ```
 
 ### 2.5 Flujo
@@ -283,6 +283,8 @@ Esto reduce complejidad y evita comportamientos no portables (contenedores, PID 
 
 ### 3.7 Configuración en `config.toml` (runtime)
 
+Defaults canonicos: `docs/plan/limits.toml` (tabla generada en `docs/plan/limits.md`).
+
 | Clave | Descripción | Default recomendado |
 |-------|-------------|---------------------|
 | `server.host` / `server.port` | Bind HTTP del gateway. | `0.0.0.0` / `8080` |
@@ -307,10 +309,13 @@ Esto reduce complejidad y evita comportamientos no portables (contenedores, PID 
 #### 3.7.1 Port pool (`managed_port`) — semántica v0
 
 - SAD mantiene un **port pool en memoria** basado en el rango `[limits.port_range_min, limits.port_range_max]`.
+- El helper puro es *best-effort* respecto al SO; para garantía real se usa `allocate_checked` con bind-check.
 - En agentes `continuous` con `network_mode=managed_port`, el puerto se **reserva durante provisioning** y se expone en `AgentStatusView.assigned_port`.
 - **Release (v0):** el puerto reservado se libera en `stop`, `delete`, `rollback` y `terminate` (idempotente).
 - **Exhaustión:** si no hay puertos libres, el provisioning falla con un error estable `PORT_POOL_EXHAUSTED` y la instancia transita a `Failed` (visible en status). La mitigación es ampliar el rango o ejecutar deletes de instancias antiguas/paradas.
-- **No persistencia (v0):** el pool no se persiste entre reinicios. La operativa asume que el rango está dedicado a SAD y que procesos externos no lo ocupan.
+- **Puerto ocupado:** si el bind-check detecta que el puerto está en uso, el provisioning falla con `PORT_IN_USE` (fail-fast, sin reintentos).
+- **Bind-check fallido:** si el bind-check falla por un error real del sistema, el provisioning falla con `PORT_BIND_FAILED`.
+- **No persistencia (v0):** el pool no se persiste entre reinicios. Aunque hay bind-check, se recomienda que el rango esté dedicado a SAD.
 
 #### Ejemplo `config.toml`
 

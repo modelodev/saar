@@ -1,5 +1,6 @@
 import gleam/list
 import gleam/option.{None}
+import gleam/string
 import gleeunit
 import gleeunit/should
 import sad/types
@@ -58,18 +59,41 @@ pub fn resolved_value_to_env_unwraps_test() {
   |> should.equal("top-secret")
 }
 
+pub fn failure_reason_helpers_test() {
+  types.failure_reason_port_pool_exhausted()
+  |> should.equal("PORT_POOL_EXHAUSTED")
+
+  types.failure_reason_port_in_use()
+  |> should.equal("PORT_IN_USE")
+
+  types.failure_reason_port_bind_failed()
+  |> should.equal("PORT_BIND_FAILED")
+}
+
 pub fn id_roundtrip_test() {
   let profile = types_core.profile_id("profile-1")
   types_core.profile_id_to_string(profile)
   |> should.equal("profile-1")
 
-  let instance = types_core.instance_id("instance-1")
+  let assert Ok(instance) = types_core.instance_id("instance-1")
   types_core.instance_id_to_string(instance)
   |> should.equal("instance-1")
 
   let trace = types_core.trace_id("trace-1")
   types_core.trace_id_to_string(trace)
   |> should.equal("trace-1")
+}
+
+pub fn instance_id_validation_test() {
+  types_core.instance_id("")
+  |> should.equal(Error(types_core.EmptyInstanceId))
+
+  types_core.instance_id("bad/1")
+  |> should.equal(Error(types_core.InstanceIdInvalidChar("/")))
+
+  let too_long = string.repeat("a", times: 65)
+  types_core.instance_id(too_long)
+  |> should.equal(Error(types_core.InstanceIdTooLong(max: 64)))
 }
 
 pub fn default_config_invariants_test() {

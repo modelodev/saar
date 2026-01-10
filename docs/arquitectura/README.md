@@ -123,7 +123,7 @@ SAD es **infraestructura**, no un producto para usuario final. Sus usuarios son:
 
 - Plan vigente: `docs/plan/README.md`
 - Decisiones cerradas: `docs/plan/decisions.md`
-- Config keys/defaults: `docs/plan/limits.md`
+- Config keys/defaults: `docs/plan/limits.toml` (tabla generada en `docs/plan/limits.md`)
 
 ### 2.1 Checklist de implementación (v0)
 

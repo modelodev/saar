@@ -169,7 +169,9 @@ Authorization: Bearer <api_key>
 
 **Notas:**
 - `instance_id` lo genera el cliente (SAM), no SAD
+- Formato `instance_id`: slug ASCII `[A-Za-z0-9_-]`, longitud 1..64
 - `init_params` son `Dict(String, ConfigValue)` (solo escalares)
+- instance_id invalido => 400 (bad_request)
 - El perfil se resuelve contra el `ProfilesActor` (en memoria, sin IO). El IO de cargar perfiles desde disco ocurre en `/sys/reload-profiles` o durante el arranque.
 
 **Respuesta exitosa (201):**
@@ -188,7 +190,7 @@ Authorization: Bearer <api_key>
 
 **Semántica:** `201` indica que la instancia (actor) se creó correctamente y SAD inició el provisioning de forma asíncrona.
 El provisioning puede tardar; consultar `GET /sys/agents/:instance_id/status` (o `GET /sys/agents`) para ver transición a `ready` o `failed`.
-Un ejemplo típico de fallo asíncrono es `PORT_POOL_EXHAUSTED` (continuous con `managed_port` sin puertos libres), que se observa como `phase=failed` + `failure_reason` en status.
+Un ejemplo típico de fallo asíncrono es `PORT_POOL_EXHAUSTED` (continuous con `managed_port` sin puertos libres), que se observa como `phase=failed` + `failure_reason` en status. Otros fallos posibles de provisioning son `PORT_IN_USE` (puerto ya ocupado en el SO) y `PORT_BIND_FAILED` (bind-check fallido).
 
 **Errores:**
 - `400` - Parámetros inválidos o faltantes (incluye lista de errores)
@@ -330,6 +332,8 @@ Authorization: Bearer <api_key>
 - Si la instancia está `Stopped` o `Failed`, `start` la transita a `Provisioning` y vuelve a intentar arrancar (en continuous: asigna un `managed_port` y arranca el servidor; en transient: habilita el estado `ReadyTransient`).
 - Si la instancia ya está `Provisioning`/`Ready*`, responde `202` igualmente (no-op).
 - Si el port pool está exhausto (continuous con `managed_port`), el arranque termina en `Failed` con `failure_reason=PORT_POOL_EXHAUSTED`.
+- Si el puerto está ocupado en el SO, el arranque termina en `Failed` con `failure_reason=PORT_IN_USE`.
+- Si el bind-check falla por error del sistema, el arranque termina en `Failed` con `failure_reason=PORT_BIND_FAILED`.
 
 **Respuesta (202):**
 

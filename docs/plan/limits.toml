@@ -1,0 +1,197 @@
+# SSOT for limits/defaults; generate docs/plan/limits.md from this file.
+
+[[limits]]
+key = "server.host"
+type = "string"
+default = "0.0.0.0"
+sprint = "S02/S13"
+use = "bind HTTP"
+
+[[limits]]
+key = "server.port"
+type = "int"
+default = 8080
+sprint = "S02/S13"
+use = "bind HTTP"
+
+[[limits]]
+key = "auth.api_key"
+type = "string"
+default = '""'
+sprint = "S02/S13"
+use = "auth middleware (required en loader)"
+
+[[limits]]
+key = "profiles.sources"
+type = "array"
+default = '[{type="dir", path="."}]'
+sprint = "S02/S13"
+use = "cargar perfiles/runners"
+
+[[limits]]
+key = "profiles.git_cache_dir"
+type = "string"
+default = "./.sad/cache/git"
+sprint = "S02/S13"
+use = "checkout repos"
+
+[[limits]]
+key = "runners.python_bin"
+type = "string"
+default = "python3"
+sprint = "S02/S13"
+use = "ejecutar scripts .py"
+
+[[limits]]
+key = "workspaces.directory"
+type = "string"
+default = "./workspaces"
+sprint = "S02/S04/S13"
+use = "cwd runner + cleanup"
+
+[[limits]]
+key = "limits.call_timeout_ms"
+type = "int"
+default = 30000
+sprint = "S02/S14"
+use = "timeout interaccion"
+
+[[limits]]
+key = "limits.status_timeout_ms"
+type = "int"
+default = 5000
+sprint = "S02"
+use = "status calls"
+
+[[limits]]
+key = "limits.registry_timeout_ms"
+type = "int"
+default = 5000
+sprint = "S02"
+use = "registry calls"
+
+[[limits]]
+key = "limits.health_check_timeout_ms"
+type = "int"
+default = 10000
+sprint = "S02/S08"
+use = "health check continuous"
+
+[[limits]]
+key = "limits.shutdown_timeout_ms"
+type = "int"
+default = 10000
+sprint = "S02/S03"
+use = "stop escalation"
+
+[[limits]]
+key = "limits.log_buffer_bytes"
+type = "int"
+default = 1048576
+sprint = "S02/S11"
+use = "ring buffer logs"
+
+[[limits]]
+key = "limits.max_stdout_bytes"
+type = "int"
+default = 10485760
+sprint = "S02/S04"
+use = "guardrail OOM"
+
+[[limits]]
+key = "limits.max_runner_event_bytes"
+type = "int"
+default = 262144
+sprint = "S02/S03"
+use = "JSONL line limit"
+
+[[limits]]
+key = "limits.max_request_body_bytes"
+type = "int"
+default = 1048576
+sprint = "S02/S13"
+use = "mist.read_body -> 413"
+
+[[limits]]
+key = "limits.max_http_response_bytes"
+type = "int"
+default = 10485760
+sprint = "S02/S08"
+use = "HTTP non-streaming"
+
+[[limits]]
+key = "limits.max_file_fetch_bytes"
+type = "int"
+default = 52428800
+sprint = "S02/S08"
+use = "fetch FileRef (si aplica)"
+
+[[limits]]
+key = "limits.sse_keep_alive_interval_ms"
+type = "int"
+default = 15000
+sprint = "S02/S09"
+use = "SSE keep-alive"
+
+[[limits]]
+key = "limits.port_range_min"
+type = "int"
+default = 9000
+sprint = "S02/S07"
+use = "managed_port pool"
+
+[[limits]]
+key = "limits.port_range_max"
+type = "int"
+default = 9999
+sprint = "S02/S07"
+use = "managed_port pool"
+
+[[limits]]
+key = "network.managed_port_host"
+type = "string"
+default = "127.0.0.1"
+sprint = "S02/S07"
+use = "runner.host injection"
+
+[[limits]]
+key = "log_stream.batch_byte_size"
+type = "int"
+default = 4096
+sprint = "S02/S09"
+use = "SSE logs batching"
+
+[[limits]]
+key = "log_stream.flush_interval_ms"
+type = "int"
+default = 50
+sprint = "S02/S09"
+use = "SSE logs flushing"
+
+[[limits]]
+key = "interaction_stream.batch_byte_size"
+type = "int"
+default = 4096
+sprint = "S02/S09"
+use = "streaming interact"
+
+[[limits]]
+key = "interaction_stream.flush_interval_ms"
+type = "int"
+default = 25
+sprint = "S02/S09"
+use = "streaming interact"
+
+[[limits]]
+key = "interaction_stream.push_timeout_ms"
+type = "int"
+default = 250
+sprint = "S02/S09"
+use = "ACK timeout"
+
+[[limits]]
+key = "security.landlock_mode"
+type = "string"
+default = "best_effort"
+sprint = "S20"
+use = "landlock: best_effort|enforced|off"

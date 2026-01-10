@@ -87,7 +87,7 @@ startest = "~> 0.2"
 
 **Qué requiere FFI:**
 - `now_ms()` — timestamps
- - **Ports básicos (open, send, close)** mediante un shim Erlang mínimo (`sad_ffi.erl`) invocado vía `@external` en `sad/ffi.gleam`.
+ - **Ports básicos (open, send, close, receive)** mediante un shim Erlang mínimo (`sad_ffi.erl`) invocado vía `@external` en `sad/ffi.gleam`.
 
 **Qué NO requiere FFI:**
 - UUIDs → `youid`
@@ -95,7 +95,7 @@ startest = "~> 0.2"
 - Base64 → `gleam_stdlib`
 
 **Decisión para ports:**
-- FFI mínima para `open_port`/send/close, encapsulada detrás de un módulo frontera (`sad/bridge/port_process.gleam`) para que el resto del sistema no dependa de Erlang.
+- FFI mínima para `open_port`/send/close/receive, encapsulada detrás de un módulo frontera (`sad/bridge/port_process.gleam`) para que el resto del sistema no dependa de Erlang.
 
 ### ADR-003: Métricas via logs
 

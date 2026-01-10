@@ -1,4 +1,4 @@
-.PHONY: ci fmt test coverage wrapper e2e-echo e2e-transient
+.PHONY: ci fmt test coverage wrapper e2e-echo e2e-transient docs-limits
 
 fmt:
 	gleam format --check src test
@@ -26,3 +26,6 @@ e2e-transient: wrapper
 	gleam test
 
 e2e-echo: e2e-transient
+
+docs-limits:
+	gleam run -m sad/tools/limits_md

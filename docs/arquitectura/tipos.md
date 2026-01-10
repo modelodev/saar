@@ -6,6 +6,9 @@ Este documento concentra las definiciones de tipos usadas en SAD. Sigue los prin
 - **Dynamic solo en fronteras** (wire format)
 - **Fail-fast**: sin fallbacks silenciosos
 
+Contrato de IDs:
+- **InstanceId**: slug ASCII `[A-Za-z0-9_-]`, longitud 1..64; constructor valida formato y retorna `Result(InstanceId, InstanceIdError)`.
+
 **Nota de alcance (importante):** este documento incluye tanto tipos de **dominio/wire** (sin tipos OTP)
 como tipos de **mensajería OTP interna** (que sí usan `Subject`/`Pid`). En el repo:
 - `sad/types.gleam`: dominio + wire (sin `Subject`/`Pid`/`Monitor`)
@@ -309,11 +312,24 @@ Extracto (v0):
 pub type PortPoolError {
   PoolExhausted
   InvalidRange
+  PortInUse
+  BindCheckFailed(reason: String)
+  NoAvailablePortAfterRetries(attempts: Int)
+}
+
+pub type PortCheckError {
+  CheckPortInUse
+  CheckBindFailed(reason: String)
 }
 
 pub fn allocate(pool: PortPool, instance_id: InstanceId) -> Result(#(PortPool, Int), PortPoolError)
+pub fn allocate_checked(pool: PortPool, instance_id: InstanceId, check: fn(Int) -> Result(Nil, PortCheckError)) -> Result(#(PortPool, Int), PortPoolError)
 pub fn release(pool: PortPool, instance_id: InstanceId) -> PortPool
 ```
+
+**Nota de disponibilidad (v0):**
+- `allocate` es *best-effort* respecto al SO (solo respeta reservas en memoria).
+- `allocate_checked` permite inyectar un bind-check real; si todos los candidatos están ocupados retorna `PortInUse` (un solo candidato) o `NoAvailablePortAfterRetries`, y si el check falla retorna `BindCheckFailed`.
 
 ## 13.7 PortPoolMsg - Protocolo del PortPoolActor (si `managed_port`)
 
@@ -336,6 +352,9 @@ pub type PortPoolMsg {
 
 **Semántica v0:**
 - `PoolExhausted` MUST traducirse a un fallo estable `PORT_POOL_EXHAUSTED` (safe-to-log) durante provisioning.
+- `PortInUse` MUST traducirse a un fallo estable `PORT_IN_USE` (safe-to-log) durante provisioning.
+- `BindCheckFailed` MUST traducirse a un fallo estable `PORT_BIND_FAILED` (safe-to-log) durante provisioning.
+- Si el puerto se ocupa entre el bind-check y el arranque real, el provisioning falla **rápido** con `PORT_IN_USE` (sin reintentos).
 - En v0, el puerto reservado se libera en `delete` (y en rollback/terminate), no en `stop`.
 
 ## 14. SSE (`sad/sse.gleam`)

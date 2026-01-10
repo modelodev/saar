@@ -14,7 +14,7 @@ Objetivo: que un agente se integre en SAD **sin modificar SAD**, usando (1) un p
 - **Schemas cerrados**: `input_schema` ∈ {`std:chat`, `std:files`, `std:chat` + `extra_fields`}. SAD valida antes de invocar runners.
 - **Interpolación strict**: cualquier `{{namespace.key}}` faltante falla temprano (ver `arquitectura/bridge.md` §3).
 - **`managed_port`**: en HTTP continuous no existe `static_port`; SAD asigna host/port y los inyecta por env.
-- **Respuesta declarativa**: `ResponseMapping` usa JSON Pointers (`text_pointer`, etc.) en vez de código.
+- **Respuesta declarativa**: `ResponseMapping` usa JSON Pointers (`text_pointer`, etc.) en vez de código; resolucion interna sobre Dynamic para evitar conversion Json/Dynamic repetida.
 - **Entrega de ficheros (CLI runners)**: SAD pasa URLs (`FileRef.url`). Si un runner necesita rutas locales, descarga/copia dentro del workspace.
 
 ## 3. Contrato de streaming (v0)

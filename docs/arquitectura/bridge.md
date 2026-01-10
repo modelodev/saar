@@ -110,6 +110,10 @@ pub fn request_context_to_json(ctx: RequestContext) -> Json {
 /// Contexto para resolver plantillas {{namespace.key}}.
 /// Todos los campos son tipados, no Dynamic.
 /// Los params ya vienen resueltos de params.resolve().
+pub type RunnerAddress {
+  RunnerAddress(host: Option(String), port: Option(Int))
+}
+
 pub type InterpContext {
   InterpContext(
     /// Parámetros resueltos del perfil (ya resueltos por params.gleam).
@@ -119,12 +123,8 @@ pub type InterpContext {
     input: InputPayload,
     /// Contexto de trazabilidad
     context: RequestContext,
-    /// Helpers derivados (solo para schemas estándar)
-    helpers: Option(SadHelpers),
-    /// Host del runner (para continuous)
-    runner_host: Option(String),
-    /// Puerto del runner (para continuous)
-    runner_port: Option(Int),
+    /// Host/puerto del runner (para continuous)
+    runner: RunnerAddress,
   )
 }
 
@@ -141,9 +141,7 @@ pub fn build_context(
     params: params,
     input: input,
     context: context,
-    helpers: Some(derive_helpers(input)),
-    runner_host: runner_host,
-    runner_port: runner_port,
+    runner: RunnerAddress(host: runner_host, port: runner_port),
   )
 }
 ```
@@ -159,6 +157,10 @@ pub type InterpolationError {
   UnknownKey(namespace: String, key: String)
   /// Intentar interpolar un valor no escalar en un string
   ValueNotScalar(key: String)
+  /// JSON pointer inválido (ej: $from)
+  InvalidPointer(pointer: String)
+  /// Placeholder con sintaxis inválida
+  InvalidPlaceholder(placeholder: String)
 }
 
 pub fn interpolation_error_to_string(err: InterpolationError) -> String {
@@ -169,6 +171,10 @@ pub fn interpolation_error_to_string(err: InterpolationError) -> String {
       "Interpolation failed: Unknown key '{{" <> ns <> "." <> key <> "}}'"
     ValueNotScalar(key) ->
       "Interpolation failed: Value for '" <> key <> "' is not scalar"
+    InvalidPointer(pointer) ->
+      "Interpolation failed: Invalid JSON pointer '" <> pointer <> "'"
+    InvalidPlaceholder(placeholder) ->
+      "Interpolation failed: Invalid placeholder '{{" <> placeholder <> "}}'"
   }
 }
 ```
@@ -474,13 +480,17 @@ SAD asigna puertos para agentes `continuous` con `network_mode=managed_port` usa
 
 **Contrato v0 (simple y testeable):**
 - `allocate(instance_id)` devuelve un puerto libre dentro del rango, o `Error(PoolExhausted)`.
+- `allocate_checked(instance_id, check)` valida disponibilidad en el SO y puede devolver `PortInUse`, `NoAvailablePortAfterRetries` o `BindCheckFailed`.
 - `release(instance_id)` libera el puerto reservado (idempotente si no existe).
-- El bridge debe pedir `allocate` **antes** de arrancar el servidor (port/wrapper) y, si falla, emitir `ProvisioningDone(Error("PORT_POOL_EXHAUSTED: ..."))`.
+- El bridge debe pedir `allocate_checked` **antes** de arrancar el servidor (port/wrapper). Si falla:
+  - `PoolExhausted` → `ProvisioningDone(Error("PORT_POOL_EXHAUSTED: ..."))`
+  - `PortInUse` → `ProvisioningDone(Error("PORT_IN_USE: ..."))` (fail-fast)
+  - `BindCheckFailed` → `ProvisioningDone(Error("PORT_BIND_FAILED: ..."))`
 - El release ocurre al completar `stop` y en `delete` (y en rollback/terminate/failure). Si la instancia se vuelve a arrancar (`start`), se reasigna puerto durante provisioning (puede cambiar).
 
 Referencia (API): `arquitectura/examples/snippets/port_pool_api_public.gleam`.
 
-Esto mantiene el core BEAM simple: sin probing de puertos del SO, sin persistencia, sin GC automático.
+Esto mantiene el core BEAM simple: sin persistencia, sin GC automático; cuando se requiere garantía real, se usa `allocate_checked` con bind-check explícito.
 
 **Nota:** `assigned_port` se almacena en `BridgeCtx` (derivado del estado del actor) solo para agentes continuous, asignado durante el provisioning.
 
@@ -731,7 +741,7 @@ Centraliza la interoperabilidad con Erlang que **no está cubierta** por librer�
 | UUIDs | `youid` | No |
 | HTTP requests | `httpp/send` | No |
 | HTTP streaming (SSE) | `httpp/sse` | No |
-| Timestamps | `erlang:system_time/1` | **Sí** |
+| Timestamps | `erlang:monotonic_time/1` | **Sí** |
 | Ports (spawn) | `erlang:open_port/2` (shim Erlang mínimo) | **Sí** |
 | Signals (kill) | `os:cmd("kill")` | **No** (se delega al wrapper) |
 
@@ -743,43 +753,59 @@ Para que el resto del bridge y el core sean testeables y no “se enteren” de 
 
 - `sad/bridge/port_process.gleam`: API de alto nivel para arrancar y controlar el proceso externo (runner/wrapper).
 
-Implementación (v0): **FFI mínima** (`sad/ffi.gleam` + `sad_ffi.erl`) para `open_port`/send/close.
+Implementación (v0): **FFI mínima** (`sad/ffi.gleam` + `sad_ffi.erl`) para `open_port`/send/close/receive.
 
 ### 13.2 API FFI
 
 ```gleam
 // sad/ffi.gleam
 
-/// Timestamp actual en milliseconds since epoch.
+/// Timestamp actual en monotonic milliseconds.
 pub fn now_ms() -> Int
 
-/// Abre un port hacia un proceso externo.
-pub fn open_port(opts: PortOpts) -> PortResult
+/// Abre un port hacia un proceso externo con límite por línea.
+pub fn open_port(
+  command: String,
+  args: List(String),
+  env: List(#(String, String)),
+  cd: String,
+  max_runner_event_bytes: Int,
+) -> Result(Port, String)
 
 /// Envía datos por stdin al port.
 pub fn port_send(port: Port, data: String) -> Nil
 
 /// Cierra el port.
 pub fn port_close(port: Port) -> Nil
+
+/// Recibe mensajes del port con timeout.
+pub fn port_receive(port: Port, timeout_ms: Int) -> Result(PortMessage, Nil)
 ```
 
 ### 13.3 Módulo Erlang (`sad_ffi.erl`)
 
 ```erlang
 -module(sad_ffi).
--export([open_port/5, port_send/2, port_close/1]).
+-export([now_ms/0, open_port/5, port_send/2, port_close/1, port_receive/2]).
 
 open_port(Command, Args, Env, Cd, MaxRunnerEventBytes) ->
-    %% Contrato runner: STDOUT es JSONL (1 evento por línea). Usar `line` para recibir líneas completas.
+    %% Contrato runner: STDOUT es JSONL (1 evento por línea). SAD hace framing propio por '\n'.
     %% STDERR queda fuera de contrato (diagnóstico local); SAD no depende de capturarlo.
-    %% `line` impone un límite por evento; si el runner excede el máximo o el port entrega fragmentos,
-    %% port_process debe tratarlo como violación de contrato (InfraError) con mensaje claro.
+    %% El port usa opción `line` para aplicar el límite por evento.
     %% MaxRunnerEventBytes viene de SadConfig.limits.max_runner_event_bytes (default 262144).
-    Opts = [{args, Args}, {env, Env}, {cd, Cd}, binary, exit_status, use_stdio, {line, MaxRunnerEventBytes}],
+    Opts = [
+        {args, Args},
+        {env, Env},
+        {cd, Cd},
+        {line, MaxRunnerEventBytes},
+        binary,
+        exit_status,
+        use_stdio
+    ],
     try
         Port = erlang:open_port({spawn_executable, Command}, Opts),
-        {port_ok, Port}
-    catch _:Reason -> {port_error, format_error(Reason)}
+        {ok, Port}
+    catch _:Reason -> {error, format_error(Reason)}
     end.
 ```
 

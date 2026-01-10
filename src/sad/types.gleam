@@ -26,3 +26,11 @@ pub fn resolved_value_inspect(value: ResolvedValue) -> String {
 pub fn failure_reason_port_pool_exhausted() -> String {
   "PORT_POOL_EXHAUSTED"
 }
+
+pub fn failure_reason_port_in_use() -> String {
+  "PORT_IN_USE"
+}
+
+pub fn failure_reason_port_bind_failed() -> String {
+  "PORT_BIND_FAILED"
+}

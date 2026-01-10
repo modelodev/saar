@@ -1,4 +1,4 @@
-import gleam/json
+import gleam/dynamic
 import gleam/list
 import gleam/option.{None, Some}
 import gleeunit
@@ -18,7 +18,10 @@ pub fn response_mapping_text_pointer_ok_test() {
       artifacts_pointer: None,
     )
 
-  let body = json.object([#("answer", json.string("ok"))])
+  let body =
+    dynamic.properties([
+      #(dynamic.string("answer"), dynamic.string("ok")),
+    ])
 
   let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =
     response_mapping.apply_response_mapping(Some(mapping), body)
@@ -34,7 +37,10 @@ pub fn response_mapping_text_pointer_missing_test() {
       artifacts_pointer: None,
     )
 
-  let body = json.object([#("answer", json.string("ok"))])
+  let body =
+    dynamic.properties([
+      #(dynamic.string("answer"), dynamic.string("ok")),
+    ])
 
   let assert Ok(response_mapping.MappingResult(text: text, artifacts: _)) =
     response_mapping.apply_response_mapping(Some(mapping), body)
@@ -49,7 +55,10 @@ pub fn response_mapping_pointer_invalid_test() {
       artifacts_pointer: None,
     )
 
-  let body = json.object([#("answer", json.string("ok"))])
+  let body =
+    dynamic.properties([
+      #(dynamic.string("answer"), dynamic.string("ok")),
+    ])
 
   let assert Error(response_mapping.MappingError(kind: kind, message: _)) =
     response_mapping.apply_response_mapping(Some(mapping), body)
@@ -64,7 +73,10 @@ pub fn response_mapping_text_pointer_wrong_type_test() {
       artifacts_pointer: None,
     )
 
-  let body = json.object([#("answer", json.int(42))])
+  let body =
+    dynamic.properties([
+      #(dynamic.string("answer"), dynamic.int(42)),
+    ])
 
   let assert Error(response_mapping.MappingError(kind: kind, message: _)) =
     response_mapping.apply_response_mapping(Some(mapping), body)
@@ -79,7 +91,10 @@ pub fn response_mapping_artifacts_pointer_wrong_type_test() {
       artifacts_pointer: Some("/files"),
     )
 
-  let body = json.object([#("files", json.string("nope"))])
+  let body =
+    dynamic.properties([
+      #(dynamic.string("files"), dynamic.string("nope")),
+    ])
 
   let assert Error(response_mapping.MappingError(kind: kind, message: _)) =
     response_mapping.apply_response_mapping(Some(mapping), body)
@@ -95,8 +110,11 @@ pub fn response_mapping_artifacts_pointer_test() {
     )
 
   let body =
-    json.object([
-      #("files", json.array(["a", "b"], json.string)),
+    dynamic.properties([
+      #(dynamic.string("files"), dynamic.list([
+        dynamic.string("a"),
+        dynamic.string("b"),
+      ])),
     ])
 
   let assert Ok(response_mapping.MappingResult(text: _, artifacts: artifacts)) =
@@ -114,9 +132,9 @@ pub fn response_mapping_both_pointers_test() {
     )
 
   let body =
-    json.object([
-      #("answer", json.string("ok")),
-      #("files", json.array(["a"], json.string)),
+    dynamic.properties([
+      #(dynamic.string("answer"), dynamic.string("ok")),
+      #(dynamic.string("files"), dynamic.list([dynamic.string("a")])),
     ])
 
   let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =
@@ -128,7 +146,10 @@ pub fn response_mapping_both_pointers_test() {
 }
 
 pub fn response_mapping_none_test() {
-  let body = json.object([#("answer", json.string("ok"))])
+  let body =
+    dynamic.properties([
+      #(dynamic.string("answer"), dynamic.string("ok")),
+    ])
 
   let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =
     response_mapping.apply_response_mapping(None, body)

@@ -149,7 +149,7 @@ fn setup_sse_connection(ctx: BridgeCtx, req: AgentRequest) -> Result(SseConnecti
           let interp_ctx = build_interp_context(ctx, req.inputs, req.context)
 
           use url <- result.try(
-            interpolate_string_strict(base_url <> capability.path, interp_ctx)
+            interpolate_string(base_url <> capability.path, interp_ctx)
             |> result.map_error(fn(e) { InteractionError(InfraError, e, req.trace_id) })
           )
 
@@ -299,7 +299,7 @@ fn execute_capability(
   
   // Interpolar URL
   use url <- result.try(
-    interpolate_string_strict(base_url <> cap.path, interp_ctx)
+    interpolate_string(base_url <> cap.path, interp_ctx)
     |> result.map_error(fn(e) { InteractionError(InfraError, e, req.trace_id) })
   )
   

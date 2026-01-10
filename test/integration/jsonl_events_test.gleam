@@ -16,7 +16,9 @@ pub fn rejects_noeol_fragment_test() {
     "import sys, time; sys.stdout.write('{\"t\":\"result\",\"status\":\"success\"}'); sys.stdout.flush(); time.sleep(0.2)"
   let process = start_process("python3", ["-c", script], 500, 200)
 
-  port_helpers.read_noeol_fragment(process, read_timeout_ms, 10)
+  let #(process, fragment_result) =
+    port_helpers.read_noeol_fragment(process, read_timeout_ms, 20)
+  fragment_result
   |> should.equal(Ok("{\"t\":\"result\",\"status\":\"success\"}"))
 
   port_helpers.wait_for_exit(process, read_timeout_ms, 10)
@@ -27,9 +29,11 @@ pub fn rejects_oversize_line_test() {
     "import json, sys; sys.stdout.write(json.dumps({'t':'log','level':'info','message':'x'*200}) + '\\n'); sys.stdout.flush()"
   let process = start_process("python3", ["-c", script], 500, 50)
 
-  case port_helpers.read_noeol_fragment(process, read_timeout_ms, 10) {
-    Ok(_) -> Nil
-    Error(_) -> panic as "Expected NoeolFragment"
+  let #(process, read_result) = port_process.read_line(process, read_timeout_ms)
+
+  case read_result {
+    Error(port_process.OversizedEvent(_, _)) -> Nil
+    _ -> panic as "Expected OversizedEvent"
   }
 
   port_helpers.wait_for_exit(process, read_timeout_ms, 10)
@@ -78,7 +82,7 @@ fn read_until_exceeded(
     0 -> Error("Timed out waiting for stdout limit")
     _ ->
       case port_process.read_line(process, read_timeout_ms) {
-        Ok(line) ->
+        #(process, Ok(line)) ->
           case
             runner_contract.enforce_max_stdout_bytes(
               total,
@@ -87,13 +91,18 @@ fn read_until_exceeded(
             )
           {
             Ok(next) ->
-              read_until_exceeded(process, max_stdout_bytes, next, attempts - 1)
+              read_until_exceeded(
+                process,
+                max_stdout_bytes,
+                next,
+                attempts - 1,
+              )
             Error(_) -> Ok(Nil)
           }
 
-        Error(port_process.Timeout) ->
+        #(process, Error(port_process.Timeout)) ->
           read_until_exceeded(process, max_stdout_bytes, total, attempts - 1)
-        Error(error) ->
+        #(_, Error(error)) ->
           Error("Unexpected read error: " <> int.to_string(error_code(error)))
       }
   }
@@ -101,6 +110,7 @@ fn read_until_exceeded(
 
 fn error_code(error: port_process.PortReadError) -> Int {
   case error {
+    port_process.OversizedEvent(_, _) -> 2
     port_process.NoeolFragment(_) -> 1
     port_process.PortExited(code) -> code
     port_process.Timeout -> 0

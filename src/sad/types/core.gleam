@@ -1,5 +1,6 @@
 import gleam/float
 import gleam/int
+import gleam/list
 import gleam/string
 
 pub opaque type ProfileId {
@@ -8,6 +9,12 @@ pub opaque type ProfileId {
 
 pub opaque type InstanceId {
   InstanceId(String)
+}
+
+pub type InstanceIdError {
+  EmptyInstanceId
+  InstanceIdTooLong(max: Int)
+  InstanceIdInvalidChar(char: String)
 }
 
 pub opaque type TraceId {
@@ -23,8 +30,31 @@ pub fn profile_id_to_string(id: ProfileId) -> String {
   s
 }
 
-pub fn instance_id(s: String) -> InstanceId {
-  InstanceId(s)
+pub fn instance_id(s: String) -> Result(InstanceId, InstanceIdError) {
+  case string.is_empty(s) {
+    True -> Error(EmptyInstanceId)
+    False ->
+      case string.length(s) > 64 {
+        True -> Error(InstanceIdTooLong(max: 64))
+        False ->
+          case
+            s
+            |> string.to_graphemes
+            |> list.find(fn(char) { is_instance_id_char(char) == False })
+          {
+            Ok(char) -> Error(InstanceIdInvalidChar(char))
+            Error(_) -> Ok(InstanceId(s))
+          }
+      }
+  }
+}
+
+pub fn instance_id_error_to_string(err: InstanceIdError) -> String {
+  case err {
+    EmptyInstanceId -> "empty"
+    InstanceIdTooLong(max) -> "too_long:" <> int.to_string(max)
+    InstanceIdInvalidChar(char) -> "invalid_char:" <> char
+  }
 }
 
 pub fn instance_id_to_string(id: InstanceId) -> String {
@@ -111,4 +141,11 @@ pub fn secret_inspect(_secret: SecretValue) -> String {
 pub fn secret_is_empty(secret: SecretValue) -> Bool {
   let SecretValue(inner) = secret
   string.is_empty(inner)
+}
+
+fn is_instance_id_char(char: String) -> Bool {
+  string.contains(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_",
+    char,
+  )
 }

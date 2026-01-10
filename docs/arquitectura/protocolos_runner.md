@@ -5,7 +5,7 @@
 - Wrapper crea PID+user namespace, lanza el runner y gestiona control por stdin (JSONL):
   - `{"t":"input","payload":<SAD_INPUT_JSON>}` (línea única): reenvía el `payload` al runner por stdin y luego cierra su stdin.
   - `{"t":"stop"}` (línea única) o EOF → SIGTERM → timeout → SIGKILL a la subtree.
-- SAD no necesita FFI de señales ni conocer `os_pid`; la FFI solo cubre open/send/close del port (idealmente vía `sad/bridge/port_process.gleam`).
+- SAD no necesita FFI de señales ni conocer `os_pid`; la FFI solo cubre open/send/close/receive del port (idealmente vía `sad/bridge/port_process.gleam`).
  - **Wrapper recomendado:** binario compilado tipo “init PID1” (C/Rust/Go). Evitar bash como wrapper: no es fiable para reaping/propagación de señales.
 
 ### Entradas y salidas

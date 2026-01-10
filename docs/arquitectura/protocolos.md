@@ -789,7 +789,7 @@ Ver también `integracion.md` para el contrato completo de integración (perfil+
 - `interface.protocol` ∈ {`runner`, `http`}; `http` usa solo `managed_port` (host/port asignados por SAD y pasados via env).
 - `input_schema` cerrado: `std:chat`, `std:files` o chat extendido con `extra_fields` tipados.
 - `limits` por capability sobrescriben `SadConfig`.
-- `response` usa JSON Pointers (`text_pointer`, `artifacts_pointer`).
+- `response` usa JSON Pointers (`text_pointer`, `artifacts_pointer`); resolucion interna sobre Dynamic para evitar conversion Json/Dynamic repetida.
 - `ui_hint` es Json opaco; SAD no lo interpreta.
 - Ver también `protocolos_runner.md` para el contrato de ejecución/provisioning/stop de runners.
 
@@ -826,7 +826,7 @@ Ver también `integracion.md` para el contrato completo de integración (perfil+
 - `interface.protocol=http` usa solo `managed_port` (no `static_port`); SAD asigna host/port y los inyecta via env.
 - `input_schema` es cerrado: `std:chat`, `std:files` o `chat` extendido con `extra_fields` tipados.
 - `limits` por capability (timeouts, etc.) sobrescriben `SadConfig`.
-- `response` usa JSON Pointers (`text_pointer`, `artifacts_pointer`).
+- `response` usa JSON Pointers (`text_pointer`, `artifacts_pointer`); resolucion interna sobre Dynamic para evitar conversion Json/Dynamic repetida.
 - `ui_hint` es Json opaco; SAD no lo interpreta.
 
 ### 4.1 Entrega de ficheros (solo runners CLI)
@@ -880,6 +880,8 @@ SAD soporta dos modos de request body para capabilities HTTP:
   - strings con `{{namespace.key}}` (strict, solo escalares), y
   - inserciones estructuradas `{"$from": "/json/pointer"}` (strict, RFC 6901) contra `SAD_INPUT_JSON` (útil para arrays/objetos).
 - `multipart`: campos string interpolados + ficheros tomados del input vía `source_pointer`.
+
+Nota: la resolucion de `$from` se hace sobre Dynamic interno; conversion Json/Dynamic solo en limites.
 
 **Aclaración:** este `multipart` es **SAD → agente** (SAD construye la request HTTP al agente).
 Los ficheros se originan en `InputPayload` como `FileRef` (URLs, no bytes inline). Para construir `multipart`, SAD debe poder leer/stream-ear el contenido desde esa URL (p.ej. URL pública o pre-firmada).

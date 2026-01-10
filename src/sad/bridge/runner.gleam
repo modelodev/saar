@@ -48,7 +48,6 @@ pub fn execute_transient(
     max_read_attempts,
     shutdown_timeout_ms,
     wrapper,
-    artifact_base_path,
   ) = runner_settings(config)
 
   use events <- result.try(run_and_collect_events(
@@ -82,7 +81,6 @@ pub fn execute_transient(
       runner_response_to_interaction_result(
         response,
         input.runner_def.artifact_config,
-        artifact_base_path,
         input.context.trace_id,
       )
     Error(error) -> Error(error)
@@ -105,7 +103,6 @@ pub fn run_provision(
     max_read_attempts,
     shutdown_timeout_ms,
     wrapper,
-    _,
   ) = runner_settings(config)
   let args = list.append(runner_args, ["--provision"])
 
@@ -294,7 +291,9 @@ fn read_event(
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let ReadState(events: events, ..) = state
 
-  case port_process.read_line(process, read_timeout_ms) {
+  let #(process, read_result) = port_process.read_line(process, read_timeout_ms)
+
+  case read_result {
     Ok(line) ->
       handle_read_line(
         process,
@@ -323,6 +322,15 @@ fn read_event(
       )
     Error(port_process.NoeolFragment(fragment)) ->
       Error(interaction_error(trace_id, "Fragmented output: " <> fragment))
+    Error(port_process.OversizedEvent(size, max)) ->
+      Error(interaction_error(
+        trace_id,
+        "Runner event too large ("
+          <> int.to_string(size)
+          <> " > "
+          <> int.to_string(max)
+          <> " bytes)",
+      ))
     Error(port_process.PortExited(code)) ->
       handle_port_exit(code, events, trace_id, call_deadline)
   }
@@ -504,7 +512,6 @@ fn provision_result_from_events(
 fn runner_response_to_interaction_result(
   response: types_runner.RunnerResponse,
   artifact_config: types_runner.ArtifactConfig,
-  artifact_base_path: String,
   trace_id: types_core.TraceId,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   case response.status {
@@ -526,11 +533,7 @@ fn runner_response_to_interaction_result(
     types_runner.StatusSuccess -> {
       let data = response_data_from_runner(response.data)
       let artifacts =
-        artifacts.collect(
-          response.artifacts,
-          artifact_config,
-          artifact_base_path,
-        )
+        artifacts.collect(response.artifacts, artifact_config)
         |> result.map_error(fn(err) {
           interaction_error(
             trace_id,
@@ -576,14 +579,13 @@ fn interaction_error(
 
 fn runner_settings(
   config: types_config.SadConfig,
-) -> #(Int, Int, Int, Int, Int, types_config.WrapperConfig, String) {
+) -> #(Int, Int, Int, Int, Int, types_config.WrapperConfig) {
   let types_config.SadConfig(
     max_runner_event_bytes: max_runner_event_bytes,
     max_stdout_bytes: max_stdout_bytes,
     runner_io: runner_io,
     shutdown_timeout_ms: shutdown_timeout_ms,
     wrapper: wrapper,
-    artifacts: artifacts,
     ..,
   ) = config
 
@@ -592,8 +594,6 @@ fn runner_settings(
     max_read_attempts: max_read_attempts,
   ) = runner_io
 
-  let types_config.ArtifactStoreConfig(base_path: base_path) = artifacts
-
   #(
     max_runner_event_bytes,
     max_stdout_bytes,
@@ -601,7 +601,6 @@ fn runner_settings(
     max_read_attempts,
     shutdown_timeout_ms,
     wrapper,
-    base_path,
   )
 }
 

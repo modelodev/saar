@@ -10,11 +10,13 @@ pub fn base_input(
   payload: types_input.InputPayload,
   artifact_config: types_runner.ArtifactConfig,
 ) -> types_input.SadInput {
+  let assert Ok(instance_id) = types_core.instance_id("inst-1")
+
   types_input.SadInput(
     meta: types_input.SadInputMeta(
       spec_version: "v0",
       profile_id: types_core.profile_id("profile-1"),
-      instance_id: option.Some(types_core.instance_id("inst-1")),
+      instance_id: option.Some(instance_id),
       mode: types_enums.Transient,
     ),
     params: dict.from_list([

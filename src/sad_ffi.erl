@@ -1,5 +1,11 @@
 -module(sad_ffi).
--export([now_ms/0, open_port/5, port_send/2, port_close/1, port_receive/2, priv_dir/0]).
+-export([
+    now_ms/0,
+    open_port/5,
+    port_send/2,
+    port_close/1,
+    port_receive/2
+]).
 
 now_ms() ->
     erlang:monotonic_time(millisecond).
@@ -9,15 +15,14 @@ open_port(Command, Args, Env, Cd, MaxRunnerEventBytes) ->
     ArgsList = arg_list(Args),
     CommandList = to_list(Command),
     CdList = to_list(Cd),
-    LineLimit = line_limit(MaxRunnerEventBytes),
     Opts = [
         {args, ArgsList},
         {env, EnvList},
         {cd, CdList},
+        {line, MaxRunnerEventBytes},
         binary,
         exit_status,
-        use_stdio,
-        {line, LineLimit}
+        use_stdio
     ],
     try
         Port = erlang:open_port({spawn_executable, CommandList}, Opts),
@@ -36,20 +41,14 @@ port_close(Port) ->
 
 port_receive(Port, TimeoutMs) ->
     receive
-        {Port, {data, {eol, Line}}} -> {ok, {port_data_eol, Line}};
-        {Port, {data, {noeol, Line}}} -> {ok, {port_data_noeol, Line}};
-        {Port, {data, Line}} -> {ok, {port_data_noeol, Line}};
-        {Port, {exit_status, Status}} -> {ok, {port_exit, Status}};
-        {'EXIT', Port, normal} -> {ok, {port_exit, 0}};
-        {'EXIT', Port, _} -> {ok, {port_exit, 1}}
+        {Port, {data, {eol, Line}}} -> {ok, {port_data_chunk, append_newline(Line)}};
+        {Port, {data, {noeol, Line}}} -> {ok, {port_data_chunk, Line}};
+        {Port, {data, Line}} -> {ok, {port_data_chunk, Line}};
+        {Port, {exit_status, Status}} -> maybe_return_exit_after_data(Port, Status);
+        {'EXIT', Port, normal} -> maybe_return_exit_after_data(Port, 0);
+        {'EXIT', Port, _} -> maybe_return_exit_after_data(Port, 1)
     after
         TimeoutMs -> {error, nil}
-    end.
-
-priv_dir() ->
-    case code:priv_dir(sad) of
-        {error, Reason} -> {error, format_error(Reason)};
-        Dir -> {ok, list_to_binary(Dir)}
     end.
 
 env_pairs(Env) ->
@@ -66,10 +65,22 @@ to_list(Value) when is_binary(Value) ->
 to_list(Value) when is_list(Value) ->
     Value.
 
-line_limit(MaxRunnerEventBytes) when is_integer(MaxRunnerEventBytes), MaxRunnerEventBytes > 0 ->
-    case MaxRunnerEventBytes > 65535 of
-        true -> 65535;
-        false -> MaxRunnerEventBytes
-    end;
-line_limit(_) ->
-    65535.
+append_newline(Line) when is_binary(Line) ->
+    <<Line/binary, "\n">>;
+append_newline(Line) when is_list(Line) ->
+    Line ++ "\n".
+
+maybe_return_exit_after_data(Port, Status) ->
+    receive
+        {Port, {data, {eol, Line}}} ->
+            self() ! {Port, {exit_status, Status}},
+            {ok, {port_data_chunk, append_newline(Line)}};
+        {Port, {data, {noeol, Line}}} ->
+            self() ! {Port, {exit_status, Status}},
+            {ok, {port_data_chunk, Line}};
+        {Port, {data, Line}} ->
+            self() ! {Port, {exit_status, Status}},
+            {ok, {port_data_chunk, Line}}
+    after
+        0 -> {ok, {port_exit, Status}}
+    end.

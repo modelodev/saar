@@ -44,12 +44,29 @@ pub fn prop_id_roundtrip_test() {
     types_core.profile_id_to_string(profile)
     |> should.equal(raw)
 
-    let instance = types_core.instance_id(raw)
-    types_core.instance_id_to_string(instance)
-    |> should.equal(raw)
-
     let trace = types_core.trace_id(raw)
     types_core.trace_id_to_string(trace)
     |> should.equal(raw)
   })
+
+  let id_generator = instance_id_generator()
+
+  qcheck.run(config, id_generator, fn(raw) {
+    let assert Ok(instance) = types_core.instance_id(raw)
+    types_core.instance_id_to_string(instance)
+    |> should.equal(raw)
+  })
+}
+
+fn instance_id_generator() -> qcheck.Generator(String) {
+  let allowed_chars =
+    qcheck.from_weighted_generators(
+      #(62, qcheck.alphanumeric_ascii_codepoint()),
+      [#(2, qcheck.codepoint_from_ints(45, [95]))],
+    )
+
+  qcheck.generic_string(
+    codepoints_from: allowed_chars,
+    length_from: qcheck.bounded_int(1, 64),
+  )
 }

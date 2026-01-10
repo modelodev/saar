@@ -1,3 +1,22 @@
+//// Artifact collection and glob filtering.
+////
+//// Mission: take runner-provided artifact references and produce public-facing
+//// artifact metadata after validating paths and applying include/exclude globs.
+////
+//// Responsibilities:
+//// - Validate artifact paths against workspace rules.
+//// - Apply glob filtering (`*`, `?`, `**`) over path segments.
+//// - Produce `types_output.PublicArtifact` values with generated IDs.
+////
+//// Non-responsibilities:
+//// - Reading artifact contents or uploading files.
+//// - Resolving URLs; `url` stays `None`.
+////
+//// Relationships:
+//// - Consumes `types_runner.ArtifactRef` and `types_runner.ArtifactConfig`.
+//// - Produces `types_output.PublicArtifact`.
+//// - Delegates path safety to `sad/workspace`.
+
 import gleam/list
 import gleam/option
 import gleam/result
@@ -8,14 +27,29 @@ import sad/types/runner as types_runner
 import sad/workspace
 import youid/uuid
 
+/// Errors that can occur while collecting public artifacts.
+///
+/// `InvalidPath` indicates a workspace path validation failure.
 pub type ArtifactError {
   InvalidPath(String)
 }
 
+/// Collects public artifacts from runner references.
+///
+/// The function validates each artifact `path` using `sad/workspace` and then
+/// filters it using `config.include` and `config.exclude` globs.
+///
+/// - If `config.include` is empty, the result is `Ok([])`.
+/// - A path is included when it matches any `include` pattern and matches no
+///   `exclude` pattern.
+///
+/// Example:
+/// ```gleam
+/// collect(artifacts, config)
+/// ```
 pub fn collect(
   artifacts: List(types_runner.ArtifactRef),
   config: types_runner.ArtifactConfig,
-  _base_path: String,
 ) -> Result(List(types_output.PublicArtifact), ArtifactError) {
   case config.include {
     [] -> Ok([])
@@ -70,24 +104,27 @@ fn glob_match(pattern: String, path: String) -> Bool {
 }
 
 fn match_segments(patterns: List(String), paths: List(String)) -> Bool {
-  case patterns {
-    [] -> paths == []
-    ["**", ..rest] ->
-      case rest {
-        [] -> True
-        _ ->
-          match_segments(rest, paths)
-          || case paths {
-            [] -> False
-            [_, ..tail] -> match_segments(patterns, tail)
-          }
-      }
-    [pattern, ..rest] ->
-      case paths {
-        [] -> False
-        [segment, ..tail] ->
-          match_segment(pattern, segment) && match_segments(rest, tail)
-      }
+  case patterns, paths {
+    [], _ -> paths == []
+    ["**", ..rest], _ -> match_double_star(rest, paths)
+    [pattern, ..rest], [segment, ..tail] ->
+      match_segment(pattern, segment) && match_segments(rest, tail)
+    [_pattern, ..], [] -> False
+  }
+}
+
+fn match_double_star(rest: List(String), paths: List(String)) -> Bool {
+  case rest {
+    [] -> True
+    _ -> match_double_star_step(rest, paths)
+  }
+}
+
+fn match_double_star_step(rest: List(String), paths: List(String)) -> Bool {
+  case match_segments(rest, paths), paths {
+    True, _ -> True
+    False, [] -> False
+    False, [_head, ..tail] -> match_double_star(rest, tail)
   }
 }
 

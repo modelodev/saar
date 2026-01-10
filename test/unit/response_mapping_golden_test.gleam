@@ -1,4 +1,5 @@
 import gleam/dict
+import gleam/dynamic
 import gleam/json
 import gleam/list
 import gleam/option.{Some}
@@ -28,9 +29,12 @@ pub fn response_mapping_profile_fixture_test() {
   let assert Some(mapping) = response
 
   let body =
-    json.object([
-      #("answer", json.string("ok")),
-      #("files", json.array(["a", "b"], json.string)),
+    dynamic.properties([
+      #(dynamic.string("answer"), dynamic.string("ok")),
+      #(dynamic.string("files"), dynamic.list([
+        dynamic.string("a"),
+        dynamic.string("b"),
+      ])),
     ])
 
   let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =

@@ -68,15 +68,15 @@ pub fn read_line_with_retries(
   process: port_process.PortProcess,
   timeout_ms: Int,
   attempts: Int,
-) -> Result(String, port_process.PortReadError) {
+) -> #(port_process.PortProcess, Result(String, port_process.PortReadError)) {
   case attempts {
-    0 -> Error(port_process.Timeout)
+    0 -> #(process, Error(port_process.Timeout))
     _ ->
       case port_process.read_line(process, timeout_ms) {
-        Ok(line) -> Ok(line)
-        Error(port_process.Timeout) ->
-          read_line_with_retries(process, timeout_ms, attempts - 1)
-        Error(error) -> Error(error)
+        #(next_process, Ok(line)) -> #(next_process, Ok(line))
+        #(next_process, Error(port_process.Timeout)) ->
+          read_line_with_retries(next_process, timeout_ms, attempts - 1)
+        #(next_process, Error(error)) -> #(next_process, Error(error))
       }
   }
 }
@@ -85,16 +85,18 @@ pub fn read_noeol_fragment(
   process: port_process.PortProcess,
   timeout_ms: Int,
   attempts: Int,
-) -> Result(String, Nil) {
+) -> #(port_process.PortProcess, Result(String, port_process.PortReadError)) {
   case attempts {
-    0 -> Error(Nil)
+    0 -> #(process, Error(port_process.Timeout))
     _ ->
-      case port_process.receive(process, timeout_ms) {
-        Ok(port_process.PortNoeol(fragment)) -> Ok(fragment)
-        Ok(port_process.PortExit(_)) ->
-          read_noeol_fragment(process, timeout_ms, attempts - 1)
-        Ok(_) -> Error(Nil)
-        Error(_) -> read_noeol_fragment(process, timeout_ms, attempts - 1)
+      case port_process.read_line(process, timeout_ms) {
+        #(next_process, Error(port_process.NoeolFragment(fragment))) ->
+          #(next_process, Ok(fragment))
+        #(next_process, Error(port_process.Timeout)) ->
+          read_noeol_fragment(next_process, timeout_ms, attempts - 1)
+        #(next_process, Ok(_)) ->
+          read_noeol_fragment(next_process, timeout_ms, attempts - 1)
+        #(next_process, Error(error)) -> #(next_process, Error(error))
       }
   }
 }

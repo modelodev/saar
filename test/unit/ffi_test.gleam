@@ -29,10 +29,10 @@ pub fn ffi_open_port_line_mode_test() {
   let result = read_until_message(port, 5)
 
   case result {
-    Ok(ffi.PortDataEol(line)) ->
+    Ok(ffi.PortDataChunk(line)) -> {
       string.contains(line, "hello") |> should.equal(True)
-    Ok(ffi.PortDataNoeol(_)) ->
-      panic as "Expected line mode, got noeol fragment"
+      string.ends_with(line, "\n") |> should.equal(True)
+    }
     Ok(ffi.PortExit(_)) -> panic as "Port exited before emitting line"
     Error(_) -> panic as "Timed out waiting for port data"
   }

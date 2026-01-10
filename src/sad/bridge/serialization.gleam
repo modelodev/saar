@@ -14,9 +14,33 @@ pub fn sad_input_to_json(input: types_input.SadInput) -> Json {
     #("params", params_to_json(input.params)),
     #("input", input_payload_to_json(input.input)),
     #("context", request_context_to_json(input.context)),
-    #("helpers", json.null()),
+    #("helpers", helpers_to_json(input.helpers, input.input)),
     #("runner_def", runner_to_json(input.runner_def)),
   ])
+}
+
+fn helpers_to_json(
+  helpers: option.Option(types_input.SadHelpers),
+  payload: types_input.InputPayload,
+) -> Json {
+  let resolved_helpers = case helpers {
+    option.Some(value) -> value
+    option.None -> types_input.derive_helpers(payload)
+  }
+
+  case resolved_helpers {
+    types_input.SadHelpers(last_user_content, last_user_files) ->
+      json.object([
+        #("last_user_content", case last_user_content {
+          option.Some(content) -> json.string(content)
+          option.None -> json.null()
+        }),
+        #(
+          "last_user_files",
+          json.array(last_user_files, file_ref_to_json),
+        ),
+      ])
+  }
 }
 
 pub fn sad_input_to_string(input: types_input.SadInput) -> String {

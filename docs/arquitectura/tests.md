@@ -763,6 +763,8 @@ Estos checks existen para que el plan TDD sea ejecutable: el doc no puede sugeri
 |-------|-------------|
 | `docs_do_not_reference_nonexistent_apis` | CI falla si aparecen patrones como `process.try_call`, `process.select_after`, `process.select(selector)` |
 | `docs_actor_stop_usage_is_valid` | CI falla si aparece `actor.stop(process.Normal)`; usar `actor.stop()`/`actor.stop_abnormal(...)` |
+| `docs_defaults_match_config` | CI falla si los defaults en `docs/plan/limits.toml` o `docs/arquitectura/config.md` no coinciden con `SadConfig.default_*` |
+| `docs_limits_md_matches_toml` | CI falla si `docs/plan/limits.md` no refleja `docs/plan/limits.toml` |
 
 ### Core (unit tests)
 
@@ -785,9 +787,9 @@ Estos checks existen para que el plan TDD sea ejecutable: el doc no puede sugeri
 | `cli.gleam` | parsing de comandos y flags | - | 9 |
 | `artifact_registry.gleam` | registro y lookup de artefactos | - | 7 |
 | `response_mapping.gleam` | JSON pointers para respuestas | - | 7 |
-| `port_pool.gleam` | asignación de puertos | - | 7 |
+| `port_pool.gleam` | asignación de puertos | - | 14 |
 
-**Total Core:** ~185 tests + ~21 properties
+**Total Core:** ~192 tests + ~21 properties
 
 ### Bordes (integración)
 
@@ -807,7 +809,7 @@ Estos checks existen para que el plan TDD sea ejecutable: el doc no puede sugeri
 
 **Total Bordes:** ~84 tests + ~3 properties
 
-### Total general: ~269 tests + ~24 properties (~300 con margin)
+### Total general: ~276 tests + ~24 properties (~300 con margin)
 
 ---
 
@@ -992,6 +994,12 @@ test/
 | Test | Descripción |
 |------|-------------|
 | `port_pool_allocate_returns_port` | Allocate → puerto en rango configurado |
+| `port_pool_allocate_checked_returns_port` | Allocate con check OK → puerto reservado |
+| `port_pool_allocate_checked_skips_in_use` | Check `CheckPortInUse` salta al siguiente puerto |
+| `port_pool_allocate_checked_port_in_use_error` | Un solo candidato ocupado → `PortInUse` |
+| `port_pool_allocate_checked_no_available_after_retries` | Varios candidatos ocupados → `NoAvailablePortAfterRetries` |
+| `port_pool_allocate_checked_bind_check_failed` | Check fatal → `BindCheckFailed` |
+| `port_pool_allocate_checked_pool_exhausted` | Pool lleno → `PoolExhausted` aunque el check sea OK |
 | `port_pool_allocate_unique` | N allocates → N puertos distintos |
 | `port_pool_release_frees_port` | Release → puerto disponible de nuevo |
 | `port_pool_exhausted_error` | Pool lleno → `Error(PoolExhausted)` |
@@ -1002,13 +1010,41 @@ test/
 
 ---
 
-### 7.11.1 `managed_port`: semántica de exhaustión (`test/integration/managed_port_semantics_test.gleam` - agregar)
+### 7.11.1 Port check (bind-check real) (`test/integration/port_check_test.gleam` - agregar)
+
+**Framework:** gleeunit (integración; usa sockets reales)
+
+| Test | Descripción |
+|------|-------------|
+| `port_check_reports_in_use` | Puerto ocupado → `CheckPortInUse` |
+| `port_check_invalid_host_returns_bind_failed` | Host inválido → `CheckBindFailed` |
+
+---
+
+### 7.11.2 Port pool con bind-check (`test/unit/port_pool_checked_test.gleam`, `test/integration/port_pool_checked_test.gleam` - agregar)
+
+**Framework:** gleeunit
+
+| Test | Descripción |
+|------|-------------|
+| `allocate_checked_with_success` | Check OK + uso OK → reserva exitosa |
+| `allocate_checked_with_in_use_fails_fast` | Uso detecta puerto ocupado → `PortInUse` |
+| `allocate_checked_with_bind_failed` | Uso falla → `BindCheckFailed` |
+| `port_pool_checked_in_use_returns_error` | Puerto ocupado → `PortInUse` (integración) |
+| `port_pool_checked_race_fails_fast` | Carrera entre check/uso → `PortInUse` (integración) |
+
+---
+
+### 7.11.3 `managed_port`: semántica de exhaustión (`test/integration/managed_port_semantics_test.gleam` - agregar)
 
 **Framework:** gleeunit (integración; usa un zoo agent `continuous` y `limits.port_range_min/max` pequeño)
 
 | Test | Descripción |
 |------|-------------|
 | `managed_port_exhaustion_transitions_to_failed` | Con rango de 1 puerto, 2 instancias continuous → una queda `Failed` con `failure_reason` estable `PORT_POOL_EXHAUSTED` |
+| `managed_port_in_use_transitions_to_failed` | Puerto ocupado en el SO → `Failed` con `PORT_IN_USE` |
+| `managed_port_bind_failed_transitions_to_failed` | Bind-check falla → `Failed` con `PORT_BIND_FAILED` |
+| `managed_port_race_fails_fast` | Puerto se ocupa tras check → `Failed` con `PORT_IN_USE` (fail-fast) |
 | `stop_releases_managed_port` | `stop` en continuous con `managed_port` libera el puerto al completar: crear otra instancia en rango 1 pasa |
 | `start_after_stop_reallocates_managed_port` | stop → start vuelve a provisioning y reasigna puerto (puede ser el mismo si está libre) |
 | `start_after_stop_can_fail_if_pool_taken` | stop(inst1) libera; create(inst2) ocupa; start(inst1) termina en `Failed` con `PORT_POOL_EXHAUSTED` |
@@ -1083,7 +1119,7 @@ Los casos “agresivos” de traversal (Windows separators, `%2e%2e`, null bytes
 | `port_process_exit_status_propagated` | Proceso sale con código !=0 → `PortExit(code)` correcto |
 | `stderr_noise_does_not_break_stdout` | Runner escribe mucho en STDERR + stdout válido → SAD no lo bufferiza ni falla por ello |
 | `port_process_rejects_oversized_event_line` | Runner emite 1 evento JSONL > 262_144 bytes → error de contrato (InfraError) claro |
-| `port_process_noeol_fragmentation_is_contract_error` | Runner emite línea sin `\\n` (port `{line, N}` devuelve `noeol`) → error de contrato claro (sin reensamblar) |
+| `port_process_noeol_fragmentation_is_contract_error` | Runner emite línea sin `\\n` y termina → error de contrato claro (sin reensamblar) |
 | `port_process_invalid_json_line_is_contract_error` | Runner emite una línea con `\\n` pero JSON inválido → error de contrato estable (no panic; no intenta “adivinar”) |
 | `wrapper_eof_triggers_stop` | Cerrar stdin → wrapper aplica stop y el port termina en tiempo |
 | `wrapper_stop_timeout_escalates_to_sigkill` | Runner ignora SIGTERM/stop → wrapper aplica SIGKILL tras grace y el port termina (sin quedar huérfanos) |

@@ -52,7 +52,9 @@ pub fn rejects_null_byte_test() {
 }
 
 pub fn workspace_dir_name_format_test() {
-  types_core.instance_id("abc123")
+  let assert Ok(instance_id) = types_core.instance_id("abc123")
+
+  instance_id
   |> workspace.workspace_dir_name
   |> should.equal("workspace-abc123")
 }

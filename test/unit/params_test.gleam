@@ -15,7 +15,10 @@ pub fn main() {
 pub fn secret_without_default_is_required_test() {
   let params =
     dict.from_list([
-      #("api_key", types_profile.SecretParam("API_KEY", types_core.TypeString)),
+      #(
+        "api_key",
+        types_profile.SecretParam("API_KEY", types_profile.ParamString),
+      ),
     ])
 
   let result =
@@ -52,7 +55,7 @@ pub fn defaults_applied_test() {
         types_profile.ConfigParam(
           "model",
           Some(types_core.StringVal("gpt-4")),
-          types_core.TypeString,
+          types_profile.ParamString,
         ),
       ),
       #(
@@ -60,7 +63,7 @@ pub fn defaults_applied_test() {
         types_profile.InitParam(
           "timeout",
           Some(types_core.IntVal(30)),
-          types_core.TypeInt,
+          types_profile.ParamInt,
         ),
       ),
     ])
@@ -80,11 +83,11 @@ pub fn missing_config_accumulates_test() {
     dict.from_list([
       #(
         "model",
-        types_profile.ConfigParam("model", None, types_core.TypeString),
+        types_profile.ConfigParam("model", None, types_profile.ParamString),
       ),
       #(
         "region",
-        types_profile.ConfigParam("region", None, types_core.TypeString),
+        types_profile.ConfigParam("region", None, types_profile.ParamString),
       ),
     ])
 
@@ -99,7 +102,7 @@ pub fn missing_config_accumulates_test() {
 pub fn type_mismatch_in_secret_test() {
   let params =
     dict.from_list([
-      #("count", types_profile.SecretParam("COUNT", types_core.TypeInt)),
+      #("count", types_profile.SecretParam("COUNT", types_profile.ParamInt)),
     ])
 
   let result =

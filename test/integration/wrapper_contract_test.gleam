@@ -58,7 +58,9 @@ pub fn wrapper_stop_timing_respects_double_shutdown_test() {
 pub fn wrapper_noeol_fragment_is_infra_error_test() {
   let process = start_child("partial_line", [], 500, max_event_bytes)
 
-  port_helpers.read_noeol_fragment(process, read_timeout_ms, 10)
+  let #(process, fragment_result) =
+    port_helpers.read_noeol_fragment(process, read_timeout_ms, 20)
+  fragment_result
   |> should.equal(Ok("HELLO"))
 
   port_helpers.wait_for_exit_optional(process, read_timeout_ms, 20)
@@ -69,9 +71,11 @@ pub fn wrapper_rejects_oversize_line_test() {
   let process =
     start_child("long_line", [int.to_string(small_max + 10)], 500, small_max)
 
-  case port_helpers.read_noeol_fragment(process, read_timeout_ms, 10) {
-    Ok(_) -> Nil
-    Error(_) -> panic as "Expected NoeolFragment"
+  let #(process, read_result) = port_process.read_line(process, read_timeout_ms)
+
+  case read_result {
+    Error(port_process.OversizedEvent(_, _)) -> Nil
+    _ -> panic as "Expected OversizedEvent"
   }
 
   port_helpers.wait_for_exit_optional(process, read_timeout_ms, 20)
@@ -140,7 +144,7 @@ fn read_until_exceeded(
     0 -> Error("Timed out waiting for stdout limit")
     _ ->
       case port_process.read_line(process, read_timeout_ms) {
-        Ok(line) ->
+        #(process, Ok(line)) ->
           case
             runner_contract.enforce_max_stdout_bytes(
               total,
@@ -149,13 +153,18 @@ fn read_until_exceeded(
             )
           {
             Ok(next) ->
-              read_until_exceeded(process, max_stdout_bytes, next, attempts - 1)
+              read_until_exceeded(
+                process,
+                max_stdout_bytes,
+                next,
+                attempts - 1,
+              )
             Error(_) -> Ok(Nil)
           }
 
-        Error(port_process.Timeout) ->
+        #(process, Error(port_process.Timeout)) ->
           read_until_exceeded(process, max_stdout_bytes, total, attempts - 1)
-        Error(error) ->
+        #(_, Error(error)) ->
           Error("Unexpected read error: " <> int.to_string(error_code(error)))
       }
   }
@@ -163,6 +172,7 @@ fn read_until_exceeded(
 
 fn error_code(error: port_process.PortReadError) -> Int {
   case error {
+    port_process.OversizedEvent(_, _) -> 2
     port_process.NoeolFragment(_) -> 1
     port_process.PortExited(code) -> code
     port_process.Timeout -> 0

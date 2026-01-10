@@ -54,7 +54,7 @@ pub fn runner_def_always_present_test() {
   |> should.equal(False)
 }
 
-pub fn helpers_is_null_in_s04_test() {
+pub fn helpers_include_last_user_content_test() {
   let input =
     runner_fixtures.base_input(
       load_chat_payload(),
@@ -63,12 +63,37 @@ pub fn helpers_is_null_in_s04_test() {
   let body = serialization.sad_input_to_string(input)
 
   let decoder = {
-    use helpers <- decode.field("helpers", decode.optional(decode.dynamic))
+    use helpers <- decode.field("helpers", helpers_decoder())
     decode.success(helpers)
   }
 
   json.parse(body, decoder)
-  |> should.equal(Ok(option.None))
+  |> should.equal(Ok(#(option.Some("Hello"), [])))
+}
+
+pub fn helpers_include_last_user_files_test() {
+  let input =
+    runner_fixtures.base_input(
+      load_files_payload(),
+      types_runner.ArtifactConfig(include: [], exclude: []),
+    )
+  let body = serialization.sad_input_to_string(input)
+
+  let decoder = {
+    use helpers <- decode.field("helpers", helpers_decoder())
+    decode.success(helpers)
+  }
+
+  let assert Ok(#(last_user_content, files)) = json.parse(body, decoder)
+  last_user_content |> should.equal(option.None)
+  files |> should.equal([
+    types_input.FileRef(
+      url: "https://example.com/doc.pdf",
+      mime: "application/pdf",
+      name: "doc.pdf",
+      context: option.None,
+    ),
+  ])
 }
 
 fn load_chat_payload() -> types_input.InputPayload {
@@ -95,4 +120,55 @@ fn chat_message_decoder() -> decode.Decoder(types_input.ChatMessage) {
   }
 
   decoder
+}
+
+fn helpers_decoder(
+) -> decode.Decoder(#(option.Option(String), List(types_input.FileRef))) {
+  let decoder = {
+    use last_user_content <- decode.field(
+      "last_user_content",
+      decode.optional(decode.string),
+    )
+    use last_user_files <- decode.field(
+      "last_user_files",
+      decode.list(of: file_ref_decoder()),
+    )
+    decode.success(#(last_user_content, last_user_files))
+  }
+
+  decoder
+}
+
+fn file_ref_decoder() -> decode.Decoder(types_input.FileRef) {
+  let decoder = {
+    use url <- decode.field("url", decode.string)
+    use mime <- decode.field("mime", decode.string)
+    use name <- decode.field("name", decode.string)
+    use context <- decode.optional_field(
+      "context",
+      option.None,
+      decode.optional(decode.string),
+    )
+    decode.success(types_input.FileRef(
+      url: url,
+      mime: mime,
+      name: name,
+      context: context,
+    ))
+  }
+
+  decoder
+}
+
+fn load_files_payload() -> types_input.InputPayload {
+  let assert Ok(contents) =
+    simplifile.read(from: "test/fixtures/payloads/files_single.json")
+
+  let decoder = {
+    use files <- decode.field("files", decode.list(of: file_ref_decoder()))
+    decode.success(files)
+  }
+
+  let assert Ok(files) = json.parse(contents, decoder)
+  types_input.PayloadFiles(files)
 }

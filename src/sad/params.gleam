@@ -1,3 +1,22 @@
+//// Parameter resolution for runner profiles.
+////
+//// Mission: resolve profile parameters (`types_profile.Parameter`) into concrete
+//// values (`types.ResolvedParams`) using config values, init params, and
+//// environment lookups.
+////
+//// Responsibilities:
+//// - Resolve each parameter source (fixed/config/init/secret) at the boundary.
+//// - Enforce declared value types and report mismatches.
+//// - Accumulate per-parameter errors rather than failing fast.
+////
+//// Non-responsibilities:
+//// - Fetching config values; callers provide `config_values`.
+//// - Managing secret storage; callers provide `env_lookup`.
+////
+//// Relationships:
+//// - Consumes `types_profile.Parameter` from profile decoding.
+//// - Produces `types.ResolvedParams` for interpolation/execution.
+
 import gleam/dict
 import gleam/float
 import gleam/int
@@ -9,10 +28,15 @@ import sad/types
 import sad/types/core as types_core
 import sad/types/profile as types_profile
 
+/// Errors that can occur while resolving parameters.
 pub type ParamResolutionError {
+  /// A config-backed parameter was missing from `config_values` and had no default.
   MissingConfig(param_name: String, config_key: String)
+  /// A secret-backed parameter was missing from the environment and has no default.
   MissingSecret(param_name: String, env_key: String)
+  /// An init-backed parameter was missing from `init_params` and had no default.
   MissingInitParam(param_name: String, init_key: String)
+  /// A parameter value did not match its declared `ValueType`.
   TypeMismatch(
     param_name: String,
     expected: types_core.ValueType,
@@ -20,6 +44,29 @@ pub type ParamResolutionError {
   )
 }
 
+/// Resolves all parameters to concrete values.
+///
+/// The function resolves parameters in a deterministic order (by name) and
+/// accumulates all resolution errors.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dict
+/// import sad/params
+/// import sad/types/core as types_core
+/// import sad/types/profile as types_profile
+///
+/// let parameters =
+///   dict.from_list([
+///     #("model", types_profile.ConfigParam("model", None, types_profile.ParamString)),
+///     #("api_key", types_profile.SecretParam("API_KEY", types_profile.ParamString)),
+///   ])
+///
+/// let config_values = dict.from_list([#("model", types_core.StringVal("gpt-4"))])
+/// let env_lookup = fn(key) { Error(Nil) }
+///
+/// params.resolve_params(parameters, config_values, env_lookup, dict.new())
+/// ```
 pub fn resolve_params(
   parameters: dict.Dict(String, types_profile.Parameter),
   config_values: dict.Dict(String, types_core.Value),
@@ -87,40 +134,57 @@ fn resolve_param(
       )
 
     types_profile.SecretParam(key, expected_type) ->
-      case env_lookup(key) {
-        Ok(raw) ->
-          case parse_env_value(param_name, expected_type, raw) {
-            Ok(_) -> Ok(types.SecretVal(types_core.secret_value(raw)))
-            Error(err) -> Error(err)
-          }
-        Error(_) -> Error(MissingSecret(param_name, key))
-      }
+      resolve_secret_param(param_name, key, expected_type, env_lookup)
   }
+}
+
+fn resolve_secret_param(
+  param_name: String,
+  key: String,
+  expected_type: types_profile.ParamType,
+  env_lookup: fn(String) -> Result(String, Nil),
+) -> Result(types.ResolvedValue, ParamResolutionError) {
+  use raw <- result.try(
+    env_lookup(key)
+    |> result.map_error(fn(_) { MissingSecret(param_name, key) }),
+  )
+
+  use _ <- result.try(validate_secret_literal(
+    param_name: param_name,
+    env_key: key,
+    expected: expected_type,
+    raw: raw,
+  ))
+
+  Ok(types.SecretVal(types_core.secret_value(raw)))
 }
 
 fn resolve_from_dict(
   param_name param_name: String,
   source_key source_key: String,
-  expected_type expected_type: types_core.ValueType,
+  expected_type expected_type: types_profile.ParamType,
   values values: dict.Dict(String, types_core.Value),
   default default: Option(types_core.Value),
   on_missing on_missing: fn() -> ParamResolutionError,
 ) -> Result(types.ResolvedValue, ParamResolutionError) {
+  let expected_value_type =
+    types_profile.param_type_to_value_type(expected_type)
+
+  let validate = fn(value: types_core.Value) {
+    use checked <- result.try(ensure_type(
+      param_name,
+      expected_value_type,
+      value,
+    ))
+    Ok(types.NormalValue(checked))
+  }
+
   case dict.get(values, source_key) {
-    Ok(value) -> {
-      use checked <- result.try(ensure_type(param_name, expected_type, value))
-      Ok(types.NormalValue(checked))
-    }
+    Ok(value) -> validate(value)
+
     Error(_) ->
       case default {
-        Some(value) -> {
-          use checked <- result.try(ensure_type(
-            param_name,
-            expected_type,
-            value,
-          ))
-          Ok(types.NormalValue(checked))
-        }
+        Some(value) -> validate(value)
         None -> Error(on_missing())
       }
   }
@@ -138,32 +202,41 @@ fn ensure_type(
   }
 }
 
-fn parse_env_value(
-  param_name: String,
-  expected: types_core.ValueType,
-  raw: String,
-) -> Result(types_core.Value, ParamResolutionError) {
+fn validate_secret_literal(
+  param_name param_name: String,
+  env_key _env_key: String,
+  expected expected: types_profile.ParamType,
+  raw raw: String,
+) -> Result(Nil, ParamResolutionError) {
+  let expected_value_type = types_profile.param_type_to_value_type(expected)
+
+  let invalid = fn() {
+    TypeMismatch(
+      param_name: param_name,
+      expected: expected_value_type,
+      got: types_core.TypeString,
+    )
+  }
+
   case expected {
-    types_core.TypeString -> Ok(types_core.StringVal(raw))
-    types_core.TypeInt ->
+    types_profile.ParamString -> Ok(Nil)
+
+    types_profile.ParamInt ->
       case int.parse(raw) {
-        Ok(value) -> Ok(types_core.IntVal(value))
-        Error(_) ->
-          Error(TypeMismatch(param_name, expected, types_core.TypeString))
+        Ok(_) -> Ok(Nil)
+        Error(_) -> Error(invalid())
       }
-    types_core.TypeFloat ->
+
+    types_profile.ParamFloat ->
       case float.parse(raw) {
-        Ok(value) -> Ok(types_core.FloatVal(value))
-        Error(_) ->
-          Error(TypeMismatch(param_name, expected, types_core.TypeString))
+        Ok(_) -> Ok(Nil)
+        Error(_) -> Error(invalid())
       }
-    types_core.TypeBool ->
+
+    types_profile.ParamBool ->
       case string.lowercase(raw) {
-        "true" -> Ok(types_core.BoolVal(True))
-        "false" -> Ok(types_core.BoolVal(False))
-        _ -> Error(TypeMismatch(param_name, expected, types_core.TypeString))
+        "true" | "false" -> Ok(Nil)
+        _ -> Error(invalid())
       }
-    types_core.TypeList ->
-      Error(TypeMismatch(param_name, expected, types_core.TypeString))
   }
 }

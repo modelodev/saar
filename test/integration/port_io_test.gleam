@@ -16,19 +16,19 @@ pub fn main() {
 pub fn port_open_reads_lines_test() {
   let process = start_child("print_lines", [], 500, max_event_bytes)
 
-  let line1 =
+  let #(process, line1_result) =
     port_helpers.read_line_with_retries(process, read_timeout_ms, 10)
-    |> test_assertions.assert_ok
+  let line1 = test_assertions.assert_ok(line1_result)
   line1 |> should.equal("hello")
 
-  let line2 =
+  let #(process, line2_result) =
     port_helpers.read_line_with_retries(process, read_timeout_ms, 10)
-    |> test_assertions.assert_ok
+  let line2 = test_assertions.assert_ok(line2_result)
   line2 |> should.equal("world")
 
-  let line3 =
+  let #(process, line3_result) =
     port_helpers.read_line_with_retries(process, read_timeout_ms, 10)
-    |> test_assertions.assert_ok
+  let line3 = test_assertions.assert_ok(line3_result)
   line3 |> should.equal("")
 
   port_helpers.wait_for_exit_optional(process, read_timeout_ms, 20)
@@ -55,8 +55,8 @@ pub fn port_missing_binary_exits_nonzero_test() {
 pub fn port_process_stays_alive_without_input_test() {
   let process = start_child("wait_stdin", [], 500, max_event_bytes)
 
-  port_process.read_line(process, read_timeout_ms)
-  |> should.equal(Error(port_process.Timeout))
+  let #(_, read_result) = port_process.read_line(process, read_timeout_ms)
+  read_result |> should.equal(Error(port_process.Timeout))
 
   port_process.close(process)
   port_helpers.wait_for_exit(process, read_timeout_ms, 20)
@@ -86,8 +86,8 @@ pub fn port_exit_code_nonzero_reported_test() {
 pub fn port_read_timeout_does_not_kill_test() {
   let process = start_child("wait_stdin", [], 500, max_event_bytes)
 
-  port_process.read_line(process, read_timeout_ms)
-  |> should.equal(Error(port_process.Timeout))
+  let #(_, read_result) = port_process.read_line(process, read_timeout_ms)
+  read_result |> should.equal(Error(port_process.Timeout))
 
   case port_process.receive(process, read_timeout_ms) {
     Ok(port_process.PortExit(_)) -> panic as "Expected process to stay alive"
@@ -98,19 +98,44 @@ pub fn port_read_timeout_does_not_kill_test() {
   port_helpers.wait_for_exit(process, read_timeout_ms, 20)
 }
 
+pub fn port_read_handles_chunked_line_test() {
+  let script =
+    "import sys, time; sys.stdout.write('hello'); sys.stdout.flush(); time.sleep(0.05); sys.stdout.write('world\\n'); sys.stdout.flush()"
+  let process = start_child("python3", ["-c", script], 500, max_event_bytes)
+
+  let #(process, line_result) =
+    port_helpers.read_line_with_retries(process, read_timeout_ms, 10)
+  let line = test_assertions.assert_ok(line_result)
+
+  line |> should.equal("helloworld")
+
+  port_helpers.wait_for_exit_optional(process, read_timeout_ms, 20)
+}
+
 fn start_child(
   mode: String,
   extra_args: List(String),
   shutdown_ms: Int,
   max_event_bytes: Int,
 ) -> port_process.PortProcess {
-  port_helpers.start_process(
-    "python3",
-    child_args(mode, extra_args),
-    shutdown_ms,
-    ".",
-    max_event_bytes,
-  )
+  case mode {
+    "python3" ->
+      port_helpers.start_process(
+        "python3",
+        extra_args,
+        shutdown_ms,
+        ".",
+        max_event_bytes,
+      )
+    _ ->
+      port_helpers.start_process(
+        "python3",
+        child_args(mode, extra_args),
+        shutdown_ms,
+        ".",
+        max_event_bytes,
+      )
+  }
 }
 
 fn child_args(mode: String, extra_args: List(String)) -> List(String) {

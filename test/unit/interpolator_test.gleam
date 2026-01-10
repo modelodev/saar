@@ -69,7 +69,7 @@ pub fn interpolate_params_test() {
 
   let ctx = base_context(params)
 
-  interpolator.interpolate_string_strict("hi {{params.name}}", ctx)
+  interpolator.interpolate_string("hi {{params.name}}", ctx)
   |> should.equal(Ok("hi Ada"))
 }
 
@@ -81,22 +81,22 @@ pub fn interpolate_hyphenated_key_test() {
 
   let ctx = base_context(params)
 
-  interpolator.interpolate_string_strict("key={{params.api-key}}", ctx)
+  interpolator.interpolate_string("key={{params.api-key}}", ctx)
   |> should.equal(Ok("key=token"))
 }
 
 pub fn interpolate_missing_test() {
   let ctx = base_context(dict.new())
 
-  interpolator.interpolate_string_strict("{{params.missing}}", ctx)
+  interpolator.interpolate_string("{{params.missing}}", ctx)
   |> should.equal(Error(interpolator.UnknownKey("params", "missing")))
 }
 
 pub fn interpolate_invalid_placeholder_literal_test() {
   let ctx = base_context(dict.new())
 
-  interpolator.interpolate_string_strict("keep {{bad..key}}", ctx)
-  |> should.equal(Ok("keep {{bad..key}}"))
+  interpolator.interpolate_string("keep {{bad..key}}", ctx)
+  |> should.equal(Error(interpolator.InvalidPlaceholder("bad..key")))
 }
 
 pub fn interpolate_json_nested_objects_test() {
@@ -293,14 +293,14 @@ pub fn interpolate_helpers_test() {
 
   let ctx = context_with_input(dict.new(), input)
 
-  interpolator.interpolate_string_strict("{{helpers.last_user_content}}", ctx)
+  interpolator.interpolate_string("{{helpers.last_user_content}}", ctx)
   |> should.equal(Ok(""))
 }
 
 pub fn interpolate_context_test() {
   let ctx = base_context(dict.new())
 
-  interpolator.interpolate_string_strict("{{context.trace_id}}", ctx)
+  interpolator.interpolate_string("{{context.trace_id}}", ctx)
   |> should.equal(Ok("trace-1"))
 }
 
@@ -313,12 +313,12 @@ pub fn interpolate_runner_test() {
       Some(8080),
     )
 
-  interpolator.interpolate_string_strict("{{runner.host}}:{{runner.port}}", ctx)
+  interpolator.interpolate_string("{{runner.host}}:{{runner.port}}", ctx)
   |> should.equal(Ok("127.0.0.1:8080"))
 
   let transient_ctx = base_context(dict.new())
 
-  interpolator.interpolate_string_strict("{{runner.host}}", transient_ctx)
+  interpolator.interpolate_string("{{runner.host}}", transient_ctx)
   |> should.equal(Error(interpolator.UnknownKey("runner", "host")))
 }
 
@@ -328,7 +328,7 @@ pub fn interpolate_input_extra_params_test() {
   let input = types_input.PayloadChat([], extra)
   let ctx = context_with_input(dict.new(), input)
 
-  interpolator.interpolate_string_strict("{{input.mode}}", ctx)
+  interpolator.interpolate_string("{{input.mode}}", ctx)
   |> should.equal(Ok("fast"))
 }
 
@@ -338,7 +338,7 @@ pub fn interpolate_value_not_scalar_test() {
   let input = types_input.PayloadChat([], extra)
   let ctx = context_with_input(dict.new(), input)
 
-  interpolator.interpolate_string_strict("{{input.files}}", ctx)
+  interpolator.interpolate_string("{{input.files}}", ctx)
   |> should.equal(Error(interpolator.ValueNotScalar("input.files")))
 
   let files_input =
@@ -353,7 +353,7 @@ pub fn interpolate_value_not_scalar_test() {
 
   let files_ctx = context_with_input(dict.new(), files_input)
 
-  interpolator.interpolate_string_strict(
+  interpolator.interpolate_string(
     "{{helpers.last_user_files}}",
     files_ctx,
   )

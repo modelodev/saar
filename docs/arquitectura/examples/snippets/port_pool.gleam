@@ -9,6 +9,14 @@ import sad/types.{type InstanceId}
 pub type PortPoolError {
   InvalidRange
   PoolExhausted
+  PortInUse
+  BindCheckFailed(reason: String)
+  NoAvailablePortAfterRetries(attempts: Int)
+}
+
+pub type PortCheckError {
+  CheckPortInUse
+  CheckBindFailed(reason: String)
 }
 
 pub type PortPool {
@@ -34,9 +42,20 @@ pub fn allocate(pool: PortPool, instance_id: InstanceId) -> Result(#(PortPool, I
   ...
 }
 
+/// Reserva un puerto solo si `check` confirma que se puede bindear.
+/// - Si el pool está lleno, devuelve `PoolExhausted`.
+/// - Si todos los candidatos están en uso, devuelve `PortInUse` (1) o `NoAvailablePortAfterRetries`.
+/// - Si el check falla de forma no recuperable, devuelve `BindCheckFailed`.
+pub fn allocate_checked(
+  pool: PortPool,
+  instance_id: InstanceId,
+  check: fn(Int) -> Result(Nil, PortCheckError),
+) -> Result(#(PortPool, Int), PortPoolError) {
+  ...
+}
+
 /// Libera el puerto de una instancia.
 /// - Idempotente: si no existía reserva, no cambia el pool.
 pub fn release(pool: PortPool, instance_id: InstanceId) -> PortPool {
   ...
 }
-

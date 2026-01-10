@@ -1,25 +1,44 @@
 import gleam/dict.{type Dict}
 import gleam/dynamic
 import gleam/dynamic/decode
+import gleam/float
 import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import sad/json_pointer
 import sad/types
 import sad/types/core as types_core
 import sad/types/input as types_input
+
+pub type RunnerAddress {
+  RunnerAddress(host: Option(String), port: Option(Int))
+}
 
 pub type InterpContext {
   InterpContext(
     params: types.ResolvedParams,
     input: types_input.InputPayload,
     context: types_input.RequestContext,
-    helpers: Option(types_input.SadHelpers),
-    runner_host: Option(String),
-    runner_port: Option(Int),
+    runner: RunnerAddress,
   )
+}
+
+pub type InterpValue {
+  Null
+  Str(String)
+  Int(Int)
+  Float(Float)
+  Bool(Bool)
+  Array(List(InterpValue))
+  Object(Dict(String, InterpValue))
+}
+
+type Token {
+  Literal(String)
+  Placeholder(namespace: String, key: String)
 }
 
 pub type InterpolationError {
@@ -27,6 +46,7 @@ pub type InterpolationError {
   UnknownKey(namespace: String, key: String)
   ValueNotScalar(key: String)
   InvalidPointer(pointer: String)
+  InvalidPlaceholder(placeholder: String)
 }
 
 pub fn interpolation_error_to_string(err: InterpolationError) -> String {
@@ -39,35 +59,27 @@ pub fn interpolation_error_to_string(err: InterpolationError) -> String {
       "Interpolation failed: Value for '" <> key <> "' is not scalar"
     InvalidPointer(pointer) ->
       "Interpolation failed: Invalid JSON pointer '" <> pointer <> "'"
+    InvalidPlaceholder(placeholder) ->
+      "Interpolation failed: Invalid placeholder '{{" <> placeholder <> "}}'"
   }
 }
 
-pub fn interpolate_string_strict(
+pub fn interpolate_string(
   template: String,
   ctx: InterpContext,
 ) -> Result(String, InterpolationError) {
-  case string.split(template, "{{") {
-    [] -> Ok(template)
-    [head, ..tail] -> {
-      tail
-      |> list.try_fold(head, fn(acc, part) {
-        case string.split(part, "}}") {
-          [] -> Ok(acc <> "{{" <> part)
-          [inside] -> Ok(acc <> "{{" <> inside)
-          [inside, ..rest] -> {
-            let remainder = string.join(rest, "}}")
-            case parse_placeholder(inside) {
-              Some(#(namespace, key)) -> {
-                use value <- result.try(resolve_placeholder(namespace, key, ctx))
-                Ok(acc <> value <> remainder)
-              }
-              None -> Ok(acc <> "{{" <> inside <> "}}" <> remainder)
-            }
-          }
-        }
-      })
-    }
-  }
+  let context = string_context_value(ctx)
+  use tokens <- result.try(tokenize(template))
+  use parts <- result.try(
+    list.try_map(tokens, fn(token) {
+      case token {
+        Literal(text) -> Ok(text)
+        Placeholder(namespace, key) ->
+          resolve_placeholder_with_context(namespace, key, context)
+      }
+    }),
+  )
+  Ok(string.join(parts, with: ""))
 }
 
 pub fn build_context(
@@ -81,9 +93,7 @@ pub fn build_context(
     params: params,
     input: input,
     context: context,
-    helpers: Some(types_input.derive_helpers(input)),
-    runner_host: runner_host,
-    runner_port: runner_port,
+    runner: RunnerAddress(host: runner_host, port: runner_port),
   )
 }
 
@@ -95,7 +105,7 @@ pub fn interpolate_dict(
   |> dict.to_list
   |> list.try_map(fn(pair) {
     let #(k, v) = pair
-    use interpolated <- result.try(interpolate_string_strict(v, ctx))
+    use interpolated <- result.try(interpolate_string(v, ctx))
     Ok(#(k, interpolated))
   })
   |> result.map(dict.from_list)
@@ -105,26 +115,30 @@ pub fn interpolate_list(
   templates: List(String),
   ctx: InterpContext,
 ) -> Result(List(String), InterpolationError) {
-  list.try_map(templates, fn(t) { interpolate_string_strict(t, ctx) })
+  list.try_map(templates, fn(t) { interpolate_string(t, ctx) })
 }
 
 pub fn interpolate_json(
   template: json.Json,
   ctx: InterpContext,
 ) -> Result(json.Json, InterpolationError) {
-  let dynamic_template = json_to_dynamic(template)
-  use interpolated <- result.try(interpolate_dynamic(dynamic_template, ctx))
-  Ok(dynamic_to_json(interpolated))
+  let value = json_to_value(template)
+  let string_context = string_context_value(ctx)
+  let pointer_context = pointer_context_value(ctx)
+
+  use interpolated <- result.try(
+    interpolate_value(value, string_context, pointer_context),
+  )
+  Ok(value_to_json(interpolated))
 }
 
 pub fn resolve_json_pointer(
   pointer: String,
   value: json.Json,
 ) -> Result(json.Json, InterpolationError) {
-  use segments <- result.try(parse_json_pointer(pointer))
-  let root = json_to_dynamic(value)
-  use resolved <- result.try(resolve_dynamic_pointer(segments, root, pointer))
-  Ok(dynamic_to_json(resolved))
+  let root = json_to_value(value)
+  use resolved <- result.try(resolve_pointer(pointer, root))
+  Ok(value_to_json(resolved))
 }
 
 pub fn resolve_placeholder(
@@ -132,398 +146,516 @@ pub fn resolve_placeholder(
   key: String,
   ctx: InterpContext,
 ) -> Result(String, InterpolationError) {
-  case namespace {
-    "params" -> resolve_params(key, ctx.params)
-    "helpers" -> resolve_helpers(key, ctx.helpers)
-    "context" -> resolve_context(key, ctx.context)
-    "runner" -> resolve_runner(key, ctx.runner_host, ctx.runner_port)
-    "input" -> resolve_input(key, ctx.input)
+  resolve_placeholder_with_context(namespace, key, string_context_value(ctx))
+}
+
+fn resolve_placeholder_with_context(
+  namespace: String,
+  key: String,
+  context: InterpValue,
+) -> Result(String, InterpolationError) {
+  case context {
+    Object(namespaces) ->
+      case dict.get(namespaces, namespace) {
+        Ok(value) -> resolve_value_key(namespace, key, value)
+        Error(_) -> Error(UnknownNamespace(namespace, key))
+      }
     _ -> Error(UnknownNamespace(namespace, key))
   }
 }
 
-fn resolve_params(
+fn resolve_value_key(
+  namespace: String,
   key: String,
-  params: types.ResolvedParams,
+  value: InterpValue,
 ) -> Result(String, InterpolationError) {
-  case dict.get(params, key) {
-    Ok(value) -> Ok(types.resolved_value_to_env(value))
-    Error(_) -> Error(UnknownKey("params", key))
-  }
-}
-
-fn resolve_helpers(
-  key: String,
-  helpers: Option(types_input.SadHelpers),
-) -> Result(String, InterpolationError) {
-  case helpers {
-    None -> Error(UnknownKey("helpers", key))
-    Some(types_input.SadHelpers(last_user_content, _)) ->
-      case key {
-        "last_user_content" ->
-          case last_user_content {
-            Some(content) -> Ok(content)
-            None -> Ok("")
-          }
-        "last_user_files" -> Error(ValueNotScalar("helpers.last_user_files"))
-        _ -> Error(UnknownKey("helpers", key))
-      }
-  }
-}
-
-fn resolve_context(
-  key: String,
-  ctx: types_input.RequestContext,
-) -> Result(String, InterpolationError) {
-  case key {
-    "trace_id" -> Ok(types_core.trace_id_to_string(ctx.trace_id))
-    _ -> Error(UnknownKey("context", key))
-  }
-}
-
-fn resolve_runner(
-  key: String,
-  host: Option(String),
-  port: Option(Int),
-) -> Result(String, InterpolationError) {
-  case key {
-    "host" ->
-      case host {
-        Some(value) -> Ok(value)
-        None -> Error(UnknownKey("runner", "host"))
-      }
-    "port" ->
-      case port {
-        Some(value) -> Ok(int.to_string(value))
-        None -> Error(UnknownKey("runner", "port"))
-      }
-    _ -> Error(UnknownKey("runner", key))
-  }
-}
-
-fn resolve_input(
-  key: String,
-  input: types_input.InputPayload,
-) -> Result(String, InterpolationError) {
-  case input {
-    types_input.PayloadChat(_, extra) | types_input.PayloadMixed(_, _, extra) ->
-      case dict.get(extra, key) {
-        Ok(value) ->
-          case is_scalar_value(value) {
-            True -> Ok(types_core.value_to_string(value))
-            False -> Error(ValueNotScalar("input." <> key))
-          }
-        Error(_) -> Error(UnknownKey("input", key))
-      }
-    types_input.PayloadFiles(_) -> Error(UnknownKey("input", key))
-  }
-}
-
-fn is_scalar_value(value: types_input.InputValue) -> Bool {
   case value {
-    types_core.ListVal(_) -> False
-    _ -> True
+    Object(fields) ->
+      case dict.get(fields, key) {
+        Ok(field) -> value_to_string(field, namespace <> "." <> key)
+        Error(_) -> Error(UnknownKey(namespace, key))
+      }
+    _ -> Error(UnknownKey(namespace, key))
   }
 }
 
-fn interpolate_dynamic(
-  value: dynamic.Dynamic,
-  ctx: InterpContext,
-) -> Result(dynamic.Dynamic, InterpolationError) {
-  case decode.run(value, decode.dict(decode.string, decode.dynamic)) {
-    Ok(fields) -> {
+fn value_to_string(
+  value: InterpValue,
+  full_key: String,
+) -> Result(String, InterpolationError) {
+  case value {
+    Str(text) -> Ok(text)
+    Int(number) -> Ok(int.to_string(number))
+    Float(number) -> Ok(float.to_string(number))
+    Bool(True) -> Ok("true")
+    Bool(False) -> Ok("false")
+    Null -> Ok("")
+    _ -> Error(ValueNotScalar(full_key))
+  }
+}
+
+fn string_context_value(ctx: InterpContext) -> InterpValue {
+  Object(
+    dict.from_list([
+      #("params", params_to_value(ctx.params)),
+      #("input", input_extra_to_value(ctx.input)),
+      #("context", context_to_value(ctx.context, False)),
+      #("helpers", helpers_to_value(ctx.input)),
+      #("runner", runner_to_value(ctx.runner)),
+    ]),
+  )
+}
+
+fn pointer_context_value(ctx: InterpContext) -> InterpValue {
+  Object(
+    dict.from_list([
+      #("params", params_to_value(ctx.params)),
+      #("input", input_full_to_value(ctx.input)),
+      #("context", context_to_value(ctx.context, True)),
+      #("helpers", helpers_to_value(ctx.input)),
+      #("runner", runner_to_value(ctx.runner)),
+    ]),
+  )
+}
+
+fn params_to_value(params: types.ResolvedParams) -> InterpValue {
+  params
+  |> dict.to_list
+  |> list.map(fn(pair) {
+    #(
+      pair.0,
+      Str(types.resolved_value_to_env(pair.1)),
+    )
+  })
+  |> dict.from_list
+  |> Object
+}
+
+fn input_extra_to_value(payload: types_input.InputPayload) -> InterpValue {
+  case payload {
+    types_input.PayloadChat(_, extra) | types_input.PayloadMixed(_, _, extra) ->
+      extra
+      |> dict.to_list
+      |> list.map(fn(pair) { #(pair.0, input_value_to_value(pair.1)) })
+      |> dict.from_list
+      |> Object
+
+    types_input.PayloadFiles(_) -> Object(dict.new())
+  }
+}
+
+fn input_full_to_value(payload: types_input.InputPayload) -> InterpValue {
+  case payload {
+    types_input.PayloadChat(messages, extra) -> {
+      let base = [
+        #(
+          "messages",
+          Array(list.map(messages, chat_message_to_value)),
+        ),
+      ]
+      let extra_fields =
+        extra
+        |> dict.to_list
+        |> list.map(fn(pair) { #(pair.0, input_value_to_value(pair.1)) })
+
+      dict.from_list(list.append(base, extra_fields))
+      |> Object
+    }
+
+    types_input.PayloadFiles(files) ->
+      Object(
+        dict.from_list([
+          #("files", Array(list.map(files, file_ref_to_value))),
+        ]),
+      )
+
+    types_input.PayloadMixed(messages, files, extra) -> {
+      let base = [
+        #(
+          "messages",
+          Array(list.map(messages, chat_message_to_value)),
+        ),
+        #(
+          "files",
+          Array(list.map(files, file_ref_to_value)),
+        ),
+      ]
+      let extra_fields =
+        extra
+        |> dict.to_list
+        |> list.map(fn(pair) { #(pair.0, input_value_to_value(pair.1)) })
+
+      dict.from_list(list.append(base, extra_fields))
+      |> Object
+    }
+  }
+}
+
+fn helpers_to_value(payload: types_input.InputPayload) -> InterpValue {
+  let types_input.SadHelpers(last_user_content, last_user_files) =
+    types_input.derive_helpers(payload)
+
+  Object(
+    dict.from_list([
+      #("last_user_content", case last_user_content {
+        Some(content) -> Str(content)
+        None -> Null
+      }),
+      #(
+        "last_user_files",
+        Array(list.map(last_user_files, file_ref_to_value)),
+      ),
+    ]),
+  )
+}
+
+fn context_to_value(
+  ctx: types_input.RequestContext,
+  include_extra: Bool,
+) -> InterpValue {
+  case include_extra {
+    True ->
+      ctx.extra
+      |> dict.fold(dict.new(), fn(fields, key, value) {
+        dict.insert(fields, key, Str(value))
+      })
+      |> dict.insert(
+        "trace_id",
+        Str(types_core.trace_id_to_string(ctx.trace_id)),
+      )
+      |> Object
+
+    False ->
+      dict.from_list([
+        #("trace_id", Str(types_core.trace_id_to_string(ctx.trace_id))),
+      ])
+      |> Object
+  }
+}
+
+fn runner_to_value(runner: RunnerAddress) -> InterpValue {
+  let RunnerAddress(host:, port:) = runner
+  let fields = dict.new()
+
+  let fields = case host {
+    Some(value) -> dict.insert(fields, "host", Str(value))
+    None -> fields
+  }
+
+  let fields = case port {
+    Some(value) -> dict.insert(fields, "port", Int(value))
+    None -> fields
+  }
+
+  Object(fields)
+}
+
+fn chat_message_to_value(message: types_input.ChatMessage) -> InterpValue {
+  Object(
+    dict.from_list([
+      #("role", Str(message.role)),
+      #("content", Str(message.content)),
+    ]),
+  )
+}
+
+fn file_ref_to_value(file: types_input.FileRef) -> InterpValue {
+  Object(
+    dict.from_list([
+      #("url", Str(file.url)),
+      #("mime", Str(file.mime)),
+      #("name", Str(file.name)),
+      #("context", case file.context {
+        Some(ctx) -> Str(ctx)
+        None -> Null
+      }),
+    ]),
+  )
+}
+
+fn input_value_to_value(value: types_input.InputValue) -> InterpValue {
+  case value {
+    types_core.StringVal(s) -> Str(s)
+    types_core.IntVal(i) -> Int(i)
+    types_core.FloatVal(f) -> Float(f)
+    types_core.BoolVal(b) -> Bool(b)
+    types_core.ListVal(items) -> Array(list.map(items, Str))
+  }
+}
+
+fn interpolate_value(
+  value: InterpValue,
+  string_context: InterpValue,
+  pointer_context: InterpValue,
+) -> Result(InterpValue, InterpolationError) {
+  case value {
+    Object(fields) ->
       case extract_from_pointer(fields) {
-        Some(pointer) -> {
-          use resolved <- result.try(resolve_json_pointer(
-            pointer,
-            interp_context_to_json(ctx),
-          ))
-          Ok(json_to_dynamic(resolved))
-        }
-        None -> {
+        Some(pointer) -> resolve_pointer(pointer, pointer_context)
+        None ->
           fields
           |> dict.to_list
           |> list.try_map(fn(pair) {
             let #(key, field_value) = pair
-            use interpolated <- result.try(interpolate_dynamic(field_value, ctx))
-            Ok(#(dynamic.string(key), interpolated))
+            use interpolated <- result.try(
+              interpolate_value(field_value, string_context, pointer_context),
+            )
+            Ok(#(key, interpolated))
           })
-          |> result.map(dynamic.properties)
-        }
+          |> result.map(fn(entries) { Object(dict.from_list(entries)) })
       }
-    }
-    Error(_) ->
-      case decode.run(value, decode.list(of: decode.dynamic)) {
-        Ok(items) -> {
-          items
-          |> list.try_map(fn(item) { interpolate_dynamic(item, ctx) })
-          |> result.map(dynamic.list)
-        }
-        Error(_) ->
-          case decode.run(value, decode.string) {
-            Ok(text) -> {
-              use interpolated <- result.try(interpolate_string_strict(
-                text,
-                ctx,
-              ))
-              Ok(dynamic.string(interpolated))
-            }
-            Error(_) -> Ok(value)
-          }
-      }
+
+    Array(items) ->
+      items
+      |> list.try_map(fn(item) {
+        interpolate_value(item, string_context, pointer_context)
+      })
+      |> result.map(Array)
+
+    Str(text) ->
+      interpolate_string_with_context(text, string_context)
+      |> result.map(Str)
+
+    _ -> Ok(value)
   }
 }
 
-fn extract_from_pointer(fields: Dict(String, dynamic.Dynamic)) -> Option(String) {
+fn interpolate_string_with_context(
+  template: String,
+  context: InterpValue,
+) -> Result(String, InterpolationError) {
+  use tokens <- result.try(tokenize(template))
+  use parts <- result.try(
+    list.try_map(tokens, fn(token) {
+      case token {
+        Literal(text) -> Ok(text)
+        Placeholder(namespace, key) ->
+          resolve_placeholder_with_context(namespace, key, context)
+      }
+    }),
+  )
+  Ok(string.join(parts, with: ""))
+}
+
+fn extract_from_pointer(fields: Dict(String, InterpValue)) -> Option(String) {
   case dict.size(fields) == 1 {
     False -> None
     True ->
       case dict.get(fields, "$from") {
         Ok(value) ->
-          case decode.run(value, decode.string) {
-            Ok(pointer) -> Some(pointer)
-            Error(_) -> None
+          case value {
+            Str(pointer) -> Some(pointer)
+            _ -> None
           }
         Error(_) -> None
       }
   }
 }
 
-fn interp_context_to_json(ctx: InterpContext) -> json.Json {
-  json.object([
-    #("params", params_to_json(ctx.params)),
-    #("input", input_payload_to_json(ctx.input)),
-    #("context", request_context_to_json(ctx.context)),
-    #("helpers", helpers_to_json(ctx.helpers)),
-  ])
-}
+fn resolve_pointer(
+  pointer: String,
+  root: InterpValue,
+) -> Result(InterpValue, InterpolationError) {
+  use parsed_pointer <- result.try(
+    json_pointer.parse(pointer)
+    |> result.map_error(fn(_) { InvalidPointer(pointer) }),
+  )
 
-fn params_to_json(params: types.ResolvedParams) -> json.Json {
-  params
-  |> dict.to_list
-  |> list.map(fn(pair) {
-    #(pair.0, json.string(types.resolved_value_to_env(pair.1)))
-  })
-  |> json.object
-}
-
-fn request_context_to_json(ctx: types_input.RequestContext) -> json.Json {
-  let base =
-    ctx.extra
-    |> dict.insert("trace_id", types_core.trace_id_to_string(ctx.trace_id))
-    |> dict.to_list
-    |> list.map(fn(pair) { #(pair.0, json.string(pair.1)) })
-
-  json.object(base)
-}
-
-fn helpers_to_json(helpers: Option(types_input.SadHelpers)) -> json.Json {
-  case helpers {
-    None -> json.null()
-    Some(types_input.SadHelpers(last_user_content, last_user_files)) ->
-      json.object([
-        #("last_user_content", case last_user_content {
-          Some(content) -> json.string(content)
-          None -> json.null()
-        }),
-        #("last_user_files", json.array(last_user_files, file_ref_to_json)),
-      ])
+  case resolve_segments(json_pointer.segments(parsed_pointer), root) {
+    Some(resolved) -> Ok(resolved)
+    None -> Error(InvalidPointer(pointer))
   }
 }
 
-fn input_payload_to_json(payload: types_input.InputPayload) -> json.Json {
-  case payload {
-    types_input.PayloadChat(messages, extra) -> {
-      let base = [#("messages", json.array(messages, chat_message_to_json))]
-      let extra_fields =
-        extra
-        |> dict.to_list
-        |> list.map(fn(pair) { #(pair.0, input_value_to_json(pair.1)) })
-      json.object(list.append(base, extra_fields))
-    }
-    types_input.PayloadFiles(files) ->
-      json.object([#("files", json.array(files, file_ref_to_json))])
-    types_input.PayloadMixed(messages, files, extra) -> {
-      let base = [
-        #("messages", json.array(messages, chat_message_to_json)),
-        #("files", json.array(files, file_ref_to_json)),
-      ]
-      let extra_fields =
-        extra
-        |> dict.to_list
-        |> list.map(fn(pair) { #(pair.0, input_value_to_json(pair.1)) })
-      json.object(list.append(base, extra_fields))
-    }
+fn resolve_segments(
+  segments: List(String),
+  current: InterpValue,
+) -> Option(InterpValue) {
+  case segments {
+    [] -> Some(current)
+    [segment, ..rest] ->
+      case current {
+        Object(fields) ->
+          case dict.get(fields, segment) {
+            Ok(next) -> resolve_segments(rest, next)
+            Error(_) -> None
+          }
+        Array(items) -> resolve_list_segment(segment, rest, items)
+        _ -> None
+      }
   }
 }
 
-fn chat_message_to_json(message: types_input.ChatMessage) -> json.Json {
-  json.object([
-    #("role", json.string(message.role)),
-    #("content", json.string(message.content)),
-  ])
-}
-
-fn file_ref_to_json(file: types_input.FileRef) -> json.Json {
-  json.object([
-    #("url", json.string(file.url)),
-    #("mime", json.string(file.mime)),
-    #("name", json.string(file.name)),
-    #("context", case file.context {
-      Some(ctx) -> json.string(ctx)
-      None -> json.null()
-    }),
-  ])
-}
-
-fn input_value_to_json(value: types_input.InputValue) -> json.Json {
-  case value {
-    types_core.StringVal(s) -> json.string(s)
-    types_core.IntVal(i) -> json.int(i)
-    types_core.FloatVal(f) -> json.float(f)
-    types_core.BoolVal(b) -> json.bool(b)
-    types_core.ListVal(items) -> json.array(items, json.string)
+fn resolve_list_segment(
+  segment: String,
+  rest: List(String),
+  items: List(InterpValue),
+) -> Option(InterpValue) {
+  case int.parse(segment) {
+    Ok(index) ->
+      case index < 0 {
+        True -> None
+        False ->
+          case list.drop(items, index) |> list.first {
+            Ok(value) -> resolve_segments(rest, value)
+            Error(_) -> None
+          }
+      }
+    Error(_) -> None
   }
 }
 
-fn json_to_dynamic(value: json.Json) -> dynamic.Dynamic {
+fn json_to_value(value: json.Json) -> InterpValue {
   let assert Ok(dynamic_value) =
     json.to_string(value)
     |> json.parse(using: decode.dynamic)
-  dynamic_value
+  dynamic_to_value(dynamic_value)
 }
 
-fn dynamic_to_json(value: dynamic.Dynamic) -> json.Json {
+fn dynamic_to_value(value: dynamic.Dynamic) -> InterpValue {
   case decode.run(value, decode.optional(decode.dynamic)) {
-    Ok(None) -> json.null()
-    Ok(Some(inner)) -> dynamic_to_json_non_null(inner)
-    Error(_) -> json.null()
+    Ok(None) -> Null
+    Ok(Some(inner)) -> dynamic_to_value_non_null(inner)
+    Error(_) -> Null
   }
 }
 
-fn dynamic_to_json_non_null(value: dynamic.Dynamic) -> json.Json {
+fn dynamic_to_value_non_null(value: dynamic.Dynamic) -> InterpValue {
+  case first_some(value, [
+    try_decode_dict,
+    try_decode_list,
+    try_decode_string,
+    try_decode_bool,
+    try_decode_int,
+    try_decode_float,
+  ]) {
+    Some(decoded) -> decoded
+    None -> Null
+  }
+}
+
+fn first_some(
+  value: dynamic.Dynamic,
+  decoders: List(fn(dynamic.Dynamic) -> Option(InterpValue)),
+) -> Option(InterpValue) {
+  case decoders {
+    [] -> None
+    [decoder, ..rest] ->
+      case decoder(value) {
+        Some(decoded) -> Some(decoded)
+        None -> first_some(value, rest)
+      }
+  }
+}
+
+fn try_decode_dict(value: dynamic.Dynamic) -> Option(InterpValue) {
   case decode.run(value, decode.dict(decode.string, decode.dynamic)) {
     Ok(entries) ->
       entries
       |> dict.to_list
-      |> list.map(fn(pair) { #(pair.0, dynamic_to_json(pair.1)) })
+      |> list.map(fn(pair) { #(pair.0, dynamic_to_value(pair.1)) })
+      |> dict.from_list
+      |> Object
+      |> Some
+    Error(_) -> None
+  }
+}
+
+fn try_decode_list(value: dynamic.Dynamic) -> Option(InterpValue) {
+  case decode.run(value, decode.list(of: decode.dynamic)) {
+    Ok(items) ->
+      items
+      |> list.map(dynamic_to_value)
+      |> Array
+      |> Some
+    Error(_) -> None
+  }
+}
+
+fn try_decode_string(value: dynamic.Dynamic) -> Option(InterpValue) {
+  case decode.run(value, decode.string) {
+    Ok(text) -> Some(Str(text))
+    Error(_) -> None
+  }
+}
+
+fn try_decode_bool(value: dynamic.Dynamic) -> Option(InterpValue) {
+  case decode.run(value, decode.bool) {
+    Ok(flag) -> Some(Bool(flag))
+    Error(_) -> None
+  }
+}
+
+fn try_decode_int(value: dynamic.Dynamic) -> Option(InterpValue) {
+  case decode.run(value, decode.int) {
+    Ok(number) -> Some(Int(number))
+    Error(_) -> None
+  }
+}
+
+fn try_decode_float(value: dynamic.Dynamic) -> Option(InterpValue) {
+  case decode.run(value, decode.float) {
+    Ok(number) -> Some(Float(number))
+    Error(_) -> None
+  }
+}
+
+fn value_to_json(value: InterpValue) -> json.Json {
+  case value {
+    Null -> json.null()
+    Str(text) -> json.string(text)
+    Int(number) -> json.int(number)
+    Float(number) -> json.float(number)
+    Bool(flag) -> json.bool(flag)
+    Array(items) -> json.array(items, value_to_json)
+    Object(fields) ->
+      fields
+      |> dict.to_list
+      |> list.map(fn(pair) { #(pair.0, value_to_json(pair.1)) })
       |> json.object
+  }
+}
+
+fn tokenize(template: String) -> Result(List(Token), InterpolationError) {
+  do_tokenize(template, [])
+}
+
+fn do_tokenize(
+  remaining: String,
+  tokens: List(Token),
+) -> Result(List(Token), InterpolationError) {
+  case string.split_once(remaining, on: "{{") {
     Error(_) ->
-      case decode.run(value, decode.list(of: decode.dynamic)) {
-        Ok(items) -> json.array(items, dynamic_to_json)
-        Error(_) ->
-          case decode.run(value, decode.string) {
-            Ok(text) -> json.string(text)
-            Error(_) ->
-              case decode.run(value, decode.bool) {
-                Ok(flag) -> json.bool(flag)
-                Error(_) ->
-                  case decode.run(value, decode.int) {
-                    Ok(number) -> json.int(number)
-                    Error(_) ->
-                      case decode.run(value, decode.float) {
-                        Ok(number) -> json.float(number)
-                        Error(_) -> json.null()
-                      }
-                  }
-              }
-          }
-      }
-  }
-}
+      Ok(list.reverse(add_literal_token(tokens, remaining)))
 
-fn parse_json_pointer(
-  pointer: String,
-) -> Result(List(String), InterpolationError) {
-  case pointer {
-    "" -> Ok([])
-    _ ->
-      case string.split(pointer, "/") {
-        ["", ..segments] ->
-          list.try_map(segments, fn(segment) {
-            decode_pointer_segment(segment, pointer)
-          })
-        _ -> Error(InvalidPointer(pointer))
-      }
-  }
-}
-
-fn decode_pointer_segment(
-  segment: String,
-  pointer: String,
-) -> Result(String, InterpolationError) {
-  segment
-  |> string.to_graphemes
-  |> decode_pointer_chars(pointer, [])
-}
-
-fn decode_pointer_chars(
-  chars: List(String),
-  pointer: String,
-  acc: List(String),
-) -> Result(String, InterpolationError) {
-  case chars {
-    [] -> Ok(acc |> list.reverse |> string.join(""))
-    ["~"] -> Error(InvalidPointer(pointer))
-    ["~", "0", ..rest] -> decode_pointer_chars(rest, pointer, ["~", ..acc])
-    ["~", "1", ..rest] -> decode_pointer_chars(rest, pointer, ["/", ..acc])
-    ["~", _, ..] -> Error(InvalidPointer(pointer))
-    [char, ..rest] -> decode_pointer_chars(rest, pointer, [char, ..acc])
-  }
-}
-
-fn resolve_dynamic_pointer(
-  segments: List(String),
-  current: dynamic.Dynamic,
-  pointer: String,
-) -> Result(dynamic.Dynamic, InterpolationError) {
-  case segments {
-    [] -> Ok(current)
-    [segment, ..rest] ->
-      case decode.run(current, decode.dict(decode.string, decode.dynamic)) {
-        Ok(fields) ->
-          case dict.get(fields, segment) {
-            Ok(next) -> resolve_dynamic_pointer(rest, next, pointer)
-            Error(_) -> Error(InvalidPointer(pointer))
-          }
-        Error(_) ->
-          case decode.run(current, decode.list(of: decode.dynamic)) {
-            Ok(items) -> resolve_list_pointer(segment, rest, items, pointer)
-            Error(_) -> Error(InvalidPointer(pointer))
-          }
-      }
-  }
-}
-
-fn resolve_list_pointer(
-  segment: String,
-  rest: List(String),
-  items: List(dynamic.Dynamic),
-  pointer: String,
-) -> Result(dynamic.Dynamic, InterpolationError) {
-  case int.parse(segment) {
-    Ok(index) ->
-      case index < 0 {
-        True -> Error(InvalidPointer(pointer))
-        False ->
-          case list.drop(items, index) |> list.first {
-            Ok(value) -> resolve_dynamic_pointer(rest, value, pointer)
-            Error(_) -> Error(InvalidPointer(pointer))
-          }
-      }
-    Error(_) -> Error(InvalidPointer(pointer))
-  }
-}
-
-fn parse_placeholder(raw: String) -> Option(#(String, String)) {
-  case string.split(raw, ".") {
-    [namespace, key] -> {
-      case is_valid_namespace(namespace), is_valid_key(key) {
-        True, True -> Some(#(namespace, key))
-        _, _ -> None
+    Ok(#(before, after_open)) -> {
+      let tokens = add_literal_token(tokens, before)
+      case string.split_once(after_open, on: "}}") {
+        Error(_) -> Error(InvalidPlaceholder(after_open))
+        Ok(#(raw, rest)) -> {
+          use placeholder <- result.try(parse_placeholder(raw))
+          do_tokenize(rest, [placeholder, ..tokens])
+        }
       }
     }
-    _ -> None
+  }
+}
+
+fn add_literal_token(tokens: List(Token), text: String) -> List(Token) {
+  case string.is_empty(text) {
+    True -> tokens
+    False -> [Literal(text), ..tokens]
+  }
+}
+
+fn parse_placeholder(raw: String) -> Result(Token, InterpolationError) {
+  case string.split(raw, ".") {
+    [namespace, key] ->
+      case is_valid_namespace(namespace), is_valid_key(key) {
+        True, True -> Ok(Placeholder(namespace: namespace, key: key))
+        _, _ -> Error(InvalidPlaceholder(raw))
+      }
+    _ -> Error(InvalidPlaceholder(raw))
   }
 }
 

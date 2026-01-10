@@ -25,7 +25,8 @@ Esta carpeta define el plan de ejecucion auditable (inputs -> outputs -> evidenc
 ## Estructura
 - README.md: reglas y convenciones
 - deps.md: dependencias y camino critico
-- limits.md: tabla canonica de config y defaults
+- limits.toml: SSOT machine-readable de config y defaults
+- limits.md: tabla generada desde limits.toml (make docs-limits)
 - decisions.md: deltas explicitos respecto SSOT
 - security_model.md: modelo de seguridad operativo (v0)
 - sprints/: backlog y gates por sprint

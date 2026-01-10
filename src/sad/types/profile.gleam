@@ -22,19 +22,35 @@ pub type ProfileMeta {
   )
 }
 
+/// The allowed value types for profile parameters.
+///
+/// This is a strict subset of `core.ValueType`.
+pub type ParamType {
+  ParamString
+  ParamInt
+  ParamFloat
+  ParamBool
+}
+
+/// Converts a profile `ParamType` into a `core.ValueType`.
+pub fn param_type_to_value_type(param_type: ParamType) -> core.ValueType {
+  case param_type {
+    ParamString -> core.TypeString
+    ParamInt -> core.TypeInt
+    ParamFloat -> core.TypeFloat
+    ParamBool -> core.TypeBool
+  }
+}
+
 pub type Parameter {
   FixedParam(value: core.Value)
   ConfigParam(
     key: String,
     default: Option(core.Value),
-    expected_type: core.ValueType,
+    expected_type: ParamType,
   )
-  SecretParam(key: String, expected_type: core.ValueType)
-  InitParam(
-    key: String,
-    default: Option(core.Value),
-    expected_type: core.ValueType,
-  )
+  SecretParam(key: String, expected_type: ParamType)
+  InitParam(key: String, default: Option(core.Value), expected_type: ParamType)
 }
 
 pub type InputSchema {

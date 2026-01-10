@@ -78,6 +78,22 @@ pub fn decode_input_schema_forms_test() {
   |> should.equal(True)
 }
 
+pub fn decode_instance_id_ok_test() {
+  let assert Ok(instance_id) =
+    decoders.decode_instance_id(dynamic.string("inst-1"))
+
+  types_core.instance_id_to_string(instance_id)
+  |> should.equal("inst-1")
+}
+
+pub fn decode_instance_id_invalid_test() {
+  decoders.decode_instance_id(dynamic.string(""))
+  |> should.be_error
+
+  decoders.decode_instance_id(dynamic.string("bad/1"))
+  |> should.be_error
+}
+
 pub fn decode_extra_fields_only_for_std_chat_test() {
   let assert Ok(invalid) =
     json.parse(

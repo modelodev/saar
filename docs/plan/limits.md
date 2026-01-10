@@ -2,6 +2,9 @@
 
 Plan version: v2.1
 
+Generated from docs/plan/limits.toml. Do not edit by hand.
+Regenerate: `make docs-limits`.
+
 ## Precedencia
 1) Flags CLI (si aplica)
 2) Env vars del proceso (solo ruta config y api key)
