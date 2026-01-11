@@ -1,6 +1,7 @@
 -module(sad_ffi).
 -export([
     now_ms/0,
+    message_queue_len/1,
     open_port/5,
     port_send/2,
     port_close/1,
@@ -9,6 +10,12 @@
 
 now_ms() ->
     erlang:monotonic_time(millisecond).
+
+message_queue_len(Pid) ->
+    case erlang:process_info(Pid, message_queue_len) of
+        {message_queue_len, Len} -> Len;
+        _ -> 0
+    end.
 
 open_port(Command, Args, Env, Cd, MaxRunnerEventBytes) ->
     EnvList = env_pairs(Env),

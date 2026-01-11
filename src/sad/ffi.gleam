@@ -18,6 +18,7 @@
 ////   function signatures exactly.
 
 import gleam/erlang/port.{type Port}
+import gleam/erlang/process.{type Pid}
 
 /// Messages returned by `port_receive`.
 ///
@@ -48,6 +49,16 @@ pub fn now_ms() -> Int {
 
 @external(erlang, "sad_ffi", "now_ms")
 fn now_ms_ffi() -> Int
+
+/// Returns the mailbox length for a process.
+///
+/// This is intended for tests and diagnostics.
+pub fn message_queue_len(pid: Pid) -> Int {
+  message_queue_len_ffi(pid)
+}
+
+@external(erlang, "sad_ffi", "message_queue_len")
+fn message_queue_len_ffi(pid: Pid) -> Int
 
 /// Opens an Erlang port running a command.
 ///
