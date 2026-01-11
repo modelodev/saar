@@ -1,7 +1,7 @@
 import gleam/dict
 import gleam/http
 import gleam/int
-import gleam/json
+import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import gleeunit
@@ -9,17 +9,15 @@ import gleeunit/should
 import port_helpers
 import runner_fixtures
 import sad/bridge/client
+import sad/bridge/http_client
 import sad/bridge/runner
-import sad/decoders
 import sad/net/tcp_listener
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input
 import sad/types/output as types_output
-import sad/types/profile as types_profile
 import sad/types/runner as types_runner
-import simplifile
 import test_assertions
 
 const host = "127.0.0.1"
@@ -55,7 +53,7 @@ pub fn execute_sync_respects_max_body_test() {
   runner.stop_server(server)
 
   case result {
-    Error(client.BodyTooLarge(..)) -> Nil
+    Error(http_client.BodyTooLarge(..)) -> Nil
     other -> panic as { "Expected BodyTooLarge, got " <> string.inspect(other) }
   }
 }
@@ -112,7 +110,7 @@ pub fn continuous_timeout_does_not_kill_server_test() {
     client.request_sync(http.Get, slow, dict.new(), None, 50, 1024)
 
   case timed_out {
-    Error(client.Timeout) -> Nil
+    Error(http_client.Timeout) -> Nil
     other -> panic as { "Expected Timeout, got " <> string.inspect(other) }
   }
 
@@ -129,26 +127,28 @@ pub fn multipart_non_stream_ok_test() {
   let #(server, port, trace_id) = start_echo_server()
 
   let file_url =
-    "http://" <> host <> ":" <> int.to_string(port) <> "/file?size=4"
-  let echo_url = "http://" <> host <> ":" <> int.to_string(port) <> "/echo"
+    "http://" <> host <> ":" <> int.to_string(port) <> "/bin?size=16"
+
+  let check_url =
+    "http://" <> host <> ":" <> int.to_string(port) <> "/multipart_check"
 
   let file =
     types_input.FileRef(
       url: file_url,
-      mime: "text/plain",
-      name: "doc.txt",
+      mime: "application/pdf",
+      name: "doc.pdf",
       context: None,
     )
 
   let result =
-    client.request_multipart(
+    client.request_multipart_files(
       trace_id,
       http.Post,
-      echo_url,
+      check_url,
       dict.new(),
       dict.from_list([#("field", "value")]),
       "file",
-      file,
+      [file],
       False,
       types_config.default_sad_config(),
       1000,
@@ -156,10 +156,12 @@ pub fn multipart_non_stream_ok_test() {
 
   runner.stop_server(server)
 
-  let resp = test_assertions.assert_ok(result)
+  let responses = test_assertions.assert_ok(result)
+  list.length(responses) |> should.equal(1)
+
+  let assert [resp] = responses
   resp.status |> should.equal(200)
-  string.contains(resp.body, "doc.txt") |> should.equal(True)
-  string.contains(resp.body, "bbbb") |> should.equal(True)
+  string.contains(resp.body, "\"contains_marker\": true") |> should.equal(True)
 }
 
 pub fn multipart_streaming_rejected_test() {
@@ -168,7 +170,8 @@ pub fn multipart_streaming_rejected_test() {
 
   let file_url =
     "http://" <> host <> ":" <> int.to_string(port) <> "/file?size=1"
-  let echo_url = "http://" <> host <> ":" <> int.to_string(port) <> "/echo"
+  let echo_url =
+    "http://" <> host <> ":" <> int.to_string(port) <> "/multipart_check"
 
   let file =
     types_input.FileRef(
@@ -179,14 +182,14 @@ pub fn multipart_streaming_rejected_test() {
     )
 
   let result =
-    client.request_multipart(
+    client.request_multipart_files(
       trace_id,
       http.Post,
       echo_url,
       dict.new(),
       dict.new(),
       "file",
-      file,
+      [file],
       True,
       types_config.default_sad_config(),
       1000,
@@ -205,7 +208,8 @@ pub fn multipart_respects_max_file_fetch_bytes_test() {
 
   let file_url =
     "http://" <> host <> ":" <> int.to_string(port) <> "/file?size=20"
-  let echo_url = "http://" <> host <> ":" <> int.to_string(port) <> "/echo"
+  let echo_url =
+    "http://" <> host <> ":" <> int.to_string(port) <> "/multipart_check"
 
   let file =
     types_input.FileRef(
@@ -223,14 +227,14 @@ pub fn multipart_respects_max_file_fetch_bytes_test() {
     )
 
   let result =
-    client.request_multipart(
+    client.request_multipart_files(
       trace_id,
       http.Post,
       echo_url,
       dict.new(),
       dict.new(),
       "file",
-      file,
+      [file],
       False,
       config,
       1000,
@@ -247,7 +251,6 @@ fn start_echo_server() -> #(runner.ServerHandle, Int, types_core.TraceId) {
   let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
   tcp_listener.close(listener)
 
-  let interface = echo_server_interface()
   let config = types_config.default_sad_config()
 
   let runtime =
@@ -279,22 +282,15 @@ fn start_echo_server() -> #(runner.ServerHandle, Int, types_core.TraceId) {
       ".",
       input,
       config,
-      interface,
       Some(port),
     )
     |> test_assertions.assert_ok
 
+  port_helpers.wait_for_http_200(
+    "http://" <> host <> ":" <> int.to_string(port) <> "/health",
+    40,
+    25,
+  )
+
   #(server, port, input.context.trace_id)
-}
-
-fn echo_server_interface() -> types_profile.Interface {
-  let assert Ok(contents) =
-    simplifile.read(
-      from: "test/fixtures/source_local/profiles/echo_server.json",
-    )
-
-  let assert Ok(profile) = json.parse(contents, decoders.profile_decoder())
-
-  let types_profile.Profile(interface: interface, ..) = profile
-  interface
 }

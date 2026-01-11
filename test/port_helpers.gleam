@@ -1,7 +1,11 @@
 import envoy
+import gleam/dict
 import gleam/erlang/process
+import gleam/http
 import gleam/int
 import gleam/list
+import gleam/option
+import sad/bridge/client
 import sad/bridge/port_process
 import test_assertions
 
@@ -131,6 +135,23 @@ pub fn wait_for_exit_optional(
         Ok(port_process.PortExit(_)) -> Nil
         Ok(_) -> wait_for_exit_optional(process, timeout_ms, attempts - 1)
         Error(_) -> wait_for_exit_optional(process, timeout_ms, attempts - 1)
+      }
+  }
+}
+
+pub fn wait_for_http_200(url: String, attempts: Int, delay_ms: Int) {
+  case attempts {
+    0 -> panic as "Timed out waiting for HTTP 200"
+
+    _ ->
+      case
+        client.request_sync(http.Get, url, dict.new(), option.None, 200, 2048)
+      {
+        Ok(resp) if resp.status == 200 -> Nil
+        _ -> {
+          process.sleep(delay_ms)
+          wait_for_http_200(url, attempts - 1, delay_ms)
+        }
       }
   }
 }

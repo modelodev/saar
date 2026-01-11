@@ -15,7 +15,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except BrokenPipeError:
+            return
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -31,9 +34,17 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({k: os.environ.get(k) for k in keys})
             return
 
-        if path in ("/big", "/file"):
+        if path in ("/big", "/file", "/bin"):
             size = int(query.get("size", ["0"])[0])
-            content = (b"a" if path == "/big" else b"b") * max(size, 0)
+            if path == "/big":
+                content = b"a" * max(size, 0)
+            elif path == "/file":
+                content = b"b" * max(size, 0)
+            else:
+                # Return non-UTF8 bytes to validate binary proxying.
+                marker = b"\xff\x00\xfe\xff"
+                padding = b"x" * max(size - len(marker), 0)
+                content = marker + padding
             self.send_response(200)
             self.send_header("Content-Type", "application/octet-stream")
             self.send_header("Content-Length", str(len(content)))
@@ -56,8 +67,11 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
 
             def emit(data: str):
-                self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
-                self.wfile.flush()
+                try:
+                    self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+                except BrokenPipeError:
+                    return
 
             if mode == "invalid_json":
                 emit("{not json}")
@@ -83,12 +97,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path != "/echo":
+        if parsed.path not in ("/echo", "/multipart_check"):
             self.send_response(404)
             self.end_headers()
             return
+
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length)
+
+        if parsed.path == "/multipart_check":
+            marker = b"\xff\x00\xfe\xff"
+            self._send_json({
+                "content_length": len(body),
+                "contains_marker": marker in body,
+            })
+            return
+
         self.send_response(200)
         self.end_headers()
         self.wfile.write(body)

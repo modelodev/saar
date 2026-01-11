@@ -10,16 +10,13 @@ import port_helpers
 import runner_fixtures
 import sad/bridge/client
 import sad/bridge/runner
-import sad/decoders
 import sad/net/tcp_listener
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input
 import sad/types/output as types_output
-import sad/types/profile as types_profile
 import sad/types/runner as types_runner
-import simplifile
 import test_assertions
 
 const host = "127.0.0.1"
@@ -30,6 +27,7 @@ pub fn main() {
 
 pub fn port_injected_into_env_test() {
   port_helpers.ensure_wrapper_path()
+
   let #(server, port, _trace_id) =
     start_echo_server_with_runtime(types_runner.RuntimeConfig(
       mode: types_runner.ManagedPort,
@@ -73,7 +71,6 @@ pub fn managed_port_in_use_fails_fast_test() {
 
   let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
 
-  let interface = echo_server_interface()
   let config = types_config.default_sad_config()
 
   let runtime =
@@ -94,7 +91,6 @@ pub fn managed_port_in_use_fails_fast_test() {
       ".",
       input,
       config,
-      interface,
       Some(port),
     )
 
@@ -111,7 +107,6 @@ fn start_echo_server_with_runtime(
   let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
   tcp_listener.close(listener)
 
-  let interface = echo_server_interface()
   let config = types_config.default_sad_config()
   let input = base_input_with_runtime(runtime)
 
@@ -125,10 +120,15 @@ fn start_echo_server_with_runtime(
       ".",
       input,
       config,
-      interface,
       Some(port),
     )
     |> test_assertions.assert_ok
+
+  port_helpers.wait_for_http_200(
+    "http://" <> host <> ":" <> int.to_string(port) <> "/health",
+    40,
+    25,
+  )
 
   #(server, port, input.context.trace_id)
 }
@@ -146,16 +146,4 @@ fn base_input_with_runtime(
     ..base_input,
     runner_def: types_runner.Runner(..base_input.runner_def, runtime: runtime),
   )
-}
-
-fn echo_server_interface() -> types_profile.Interface {
-  let assert Ok(contents) =
-    simplifile.read(
-      from: "test/fixtures/source_local/profiles/echo_server.json",
-    )
-
-  let assert Ok(profile) = json.parse(contents, decoders.profile_decoder())
-
-  let types_profile.Profile(interface: interface, ..) = profile
-  interface
 }

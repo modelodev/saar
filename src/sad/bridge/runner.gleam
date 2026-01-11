@@ -1,5 +1,4 @@
 import gleam/dict
-import gleam/erlang/process as erlang_process
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
@@ -16,7 +15,6 @@ import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input
 import sad/types/output as types_output
-import sad/types/profile as types_profile
 import sad/types/runner as types_runner
 
 type Deadline {
@@ -145,10 +143,14 @@ pub type ServerHandle {
   ServerHandle(process: port_process.PortProcess, host: String, port: Int)
 }
 
-/// Starts a continuous runner server and optionally performs a health check.
+/// Starts a continuous runner server.
 ///
-/// This function performs a single health-check attempt. If the health check
-/// fails, it stops the server and returns an `InfraError`.
+/// This function is intentionally fail-fast:
+/// - It spawns the runner process and sends the initial input payload.
+/// - It does not sleep or retry to wait for HTTP readiness.
+///
+/// Readiness and health checks are expected to be handled by higher-level
+/// orchestration and/or tests.
 pub fn start_server(
   runner_path: String,
   runner_args: List(String),
@@ -156,7 +158,6 @@ pub fn start_server(
   cwd: String,
   input: types_input.SadInput,
   config: types_config.SadConfig,
-  interface: types_profile.Interface,
   assigned_port: option.Option(Int),
 ) -> Result(ServerHandle, types_output.InteractionError) {
   let types_config.RunnerExecSettings(
@@ -194,38 +195,17 @@ pub fn start_server(
 
   port_process.send(process, control_line <> "\n")
 
-  case interface {
-    types_profile.HttpInterface(health_check: option.Some(_), ..) ->
-      erlang_process.sleep(200)
-    _ -> Nil
+  let host = case assigned_port {
+    option.Some(_) -> client.managed_port_host(config)
+    option.None -> ""
   }
 
-  let #(runner_host, runner_port) = case assigned_port {
-    option.Some(port) -> #(
-      option.Some(client.managed_port_host(config)),
-      option.Some(port),
-    )
-    option.None -> #(option.None, option.None)
+  let port = case assigned_port {
+    option.Some(p) -> p
+    option.None -> 0
   }
 
-  case client.health_check(interface, input, runner_host, runner_port, config) {
-    Ok(_) -> {
-      let host = case runner_host {
-        option.Some(h) -> h
-        option.None -> ""
-      }
-      let port = case runner_port {
-        option.Some(p) -> p
-        option.None -> 0
-      }
-      Ok(ServerHandle(process: process, host: host, port: port))
-    }
-
-    Error(err) -> {
-      stop_server(ServerHandle(process: process, host: "", port: 0))
-      Error(err)
-    }
-  }
+  Ok(ServerHandle(process: process, host: host, port: port))
 }
 
 /// Sends a stop signal to a continuous server and closes its port.

@@ -1,24 +1,24 @@
 import gleam/dict
+import gleam/erlang/process
 import gleam/http
 import gleam/int
-import gleam/json
 import gleam/list
 import gleam/option
 import gleam/result
+import gleam/string
 import gleeunit
 import gleeunit/should
 import port_helpers
 import runner_fixtures
 import sad/bridge/client
+import sad/bridge/http_client
 import sad/bridge/runner
-import sad/decoders
 import sad/net/tcp_listener
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input
 import sad/types/output as types_output
-import sad/types/profile as types_profile
 import sad/types/runner as types_runner
 import simplifile
 import test_assertions
@@ -329,12 +329,18 @@ pub fn continuous_start_health_ok_test() {
   port_helpers.ensure_wrapper_path()
   let config = default_config()
 
-  let #(server, _port, _trace_id) =
+  let #(server, port, _trace_id) =
     start_continuous_server(
       "test/fixtures/source_local/profiles/echo_server.json",
       "./test/fixtures/source_local/runners/echo_server.py",
       config,
     )
+
+  port_helpers.wait_for_http_200(
+    "http://" <> host <> ":" <> int.to_string(port) <> "/health",
+    40,
+    25,
+  )
 
   runner.stop_server(server)
 }
@@ -352,16 +358,29 @@ pub fn continuous_health_check_timeout_test() {
       ),
     )
 
-  let result =
-    start_continuous_server_result(
+  let #(server, port, _trace_id) =
+    start_continuous_server(
       "test/fixtures/source_local/profiles/slow_poke.json",
       "./test/fixtures/source_local/runners/slow_poke.py",
       config,
     )
 
-  let err = test_assertions.assert_error(result)
-  let types_output.InteractionError(kind: kind, ..) = err
-  kind |> should.equal(types_enums.InfraError)
+  port_helpers.wait_for_http_200(
+    "http://" <> host <> ":" <> int.to_string(port) <> "/echo",
+    40,
+    25,
+  )
+
+  let health_url = "http://" <> host <> ":" <> int.to_string(port) <> "/health"
+
+  case
+    client.request_sync(http.Get, health_url, dict.new(), option.None, 50, 1024)
+  {
+    Error(http_client.Timeout) -> Nil
+    other -> panic as { "Expected Timeout, got " <> string.inspect(other) }
+  }
+
+  runner.stop_server(server)
 }
 
 pub fn continuous_server_died_test() {
@@ -375,6 +394,12 @@ pub fn continuous_server_died_test() {
       config,
     )
 
+  port_helpers.wait_for_http_200(
+    "http://" <> host <> ":" <> int.to_string(port) <> "/health",
+    40,
+    25,
+  )
+
   let url = "http://" <> host <> ":" <> int.to_string(port) <> "/echo"
 
   client.request_sync(
@@ -387,8 +412,27 @@ pub fn continuous_server_died_test() {
   )
   |> should.be_ok
 
-  runner.detect_server_exit(server, trace_id)
+  wait_for_server_exit(server, trace_id, 40)
   |> should.be_error
+}
+
+fn wait_for_server_exit(
+  server: runner.ServerHandle,
+  trace_id: types_core.TraceId,
+  attempts: Int,
+) -> Result(Nil, types_output.InteractionError) {
+  case runner.detect_server_exit(server, trace_id) {
+    Ok(_) ->
+      case attempts {
+        0 -> Ok(Nil)
+        _ -> {
+          process.sleep(25)
+          wait_for_server_exit(server, trace_id, attempts - 1)
+        }
+      }
+
+    Error(err) -> Error(err)
+  }
 }
 
 fn start_continuous_server(
@@ -401,7 +445,7 @@ fn start_continuous_server(
 }
 
 fn start_continuous_server_result(
-  profile_path: String,
+  _profile_path: String,
   runner_script: String,
   config: types_config.SadConfig,
 ) -> Result(
@@ -410,8 +454,6 @@ fn start_continuous_server_result(
 ) {
   let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
   tcp_listener.close(listener)
-
-  let interface = interface_from_profile(profile_path)
 
   let runtime =
     types_runner.RuntimeConfig(
@@ -441,17 +483,9 @@ fn start_continuous_server_result(
     ".",
     input,
     config,
-    interface,
     option.Some(port),
   )
   |> result.map(fn(server) { #(server, port, input.context.trace_id) })
-}
-
-fn interface_from_profile(path: String) -> types_profile.Interface {
-  let assert Ok(contents) = simplifile.read(from: path)
-  let assert Ok(profile) = json.parse(contents, decoders.profile_decoder())
-  let types_profile.Profile(interface: interface, ..) = profile
-  interface
 }
 
 fn ensure_workspace(path: String) {
