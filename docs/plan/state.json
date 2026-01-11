@@ -192,7 +192,11 @@
           "branch": "feat/s08-t02-http-client-sse-upstream",
           "commit": "681c923e9111822cb4416bbaee062e076b39bb8b"
         },
-        "S08-T03": {"status": "pending", "branch": null},
+        "S08-T03": {
+          "status": "completed",
+          "branch": "feat/s08-t03-managed-port-semantics",
+          "commit": "3d92afe56b47b956095745fee60a237a3884730b"
+        },
         "S08-T04": {"status": "pending", "branch": null},
         "S08-T05": {"status": "pending", "branch": null}
       }
