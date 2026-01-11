@@ -1,18 +1,30 @@
 import gleam/dict
+import gleam/http
+import gleam/int
+import gleam/json
 import gleam/list
 import gleam/option
+import gleam/result
 import gleeunit
 import gleeunit/should
 import port_helpers
 import runner_fixtures
+import sad/bridge/client
 import sad/bridge/runner
+import sad/decoders
+import sad/net/tcp_listener
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
+import sad/types/input as types_input
 import sad/types/output as types_output
+import sad/types/profile as types_profile
 import sad/types/runner as types_runner
 import simplifile
+import test_assertions
 import youid/uuid
+
+const host = "127.0.0.1"
 
 pub fn main() {
   gleeunit.main()
@@ -311,6 +323,135 @@ pub fn artifact_id_is_uuid_v7_test() {
     }
     _ -> panic as "Expected one artifact"
   }
+}
+
+pub fn continuous_start_health_ok_test() {
+  port_helpers.ensure_wrapper_path()
+  let config = default_config()
+
+  let #(server, _port, _trace_id) =
+    start_continuous_server(
+      "test/fixtures/source_local/profiles/echo_server.json",
+      "./test/fixtures/source_local/runners/echo_server.py",
+      config,
+    )
+
+  runner.stop_server(server)
+}
+
+pub fn continuous_health_check_timeout_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let base = default_config()
+  let config =
+    types_config.SadConfig(
+      ..base,
+      timeouts: types_config.SadTimeouts(
+        ..base.timeouts,
+        health_check_timeout_ms: 50,
+      ),
+    )
+
+  let result =
+    start_continuous_server_result(
+      "test/fixtures/source_local/profiles/slow_poke.json",
+      "./test/fixtures/source_local/runners/slow_poke.py",
+      config,
+    )
+
+  let err = test_assertions.assert_error(result)
+  let types_output.InteractionError(kind: kind, ..) = err
+  kind |> should.equal(types_enums.InfraError)
+}
+
+pub fn continuous_server_died_test() {
+  port_helpers.ensure_wrapper_path()
+  let config = default_config()
+
+  let #(server, port, trace_id) =
+    start_continuous_server(
+      "test/fixtures/source_local/profiles/crasher.json",
+      "./test/fixtures/source_local/runners/crasher.py",
+      config,
+    )
+
+  let url = "http://" <> host <> ":" <> int.to_string(port) <> "/echo"
+
+  client.request_sync(
+    http.Post,
+    url,
+    dict.new(),
+    option.Some("boom"),
+    1000,
+    1024,
+  )
+  |> should.be_ok
+
+  runner.detect_server_exit(server, trace_id)
+  |> should.be_error
+}
+
+fn start_continuous_server(
+  profile_path: String,
+  runner_script: String,
+  config: types_config.SadConfig,
+) -> #(runner.ServerHandle, Int, types_core.TraceId) {
+  start_continuous_server_result(profile_path, runner_script, config)
+  |> test_assertions.assert_ok
+}
+
+fn start_continuous_server_result(
+  profile_path: String,
+  runner_script: String,
+  config: types_config.SadConfig,
+) -> Result(
+  #(runner.ServerHandle, Int, types_core.TraceId),
+  types_output.InteractionError,
+) {
+  let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
+  tcp_listener.close(listener)
+
+  let interface = interface_from_profile(profile_path)
+
+  let runtime =
+    types_runner.RuntimeConfig(
+      mode: types_runner.ManagedPort,
+      port_env_var: option.None,
+      host_env_var: option.None,
+    )
+
+  let base_input =
+    runner_fixtures.base_input(
+      runner_fixtures.default_chat_payload(),
+      types_runner.ArtifactConfig(include: [], exclude: []),
+    )
+
+  let input =
+    types_input.SadInput(
+      ..base_input,
+      runner_def: types_runner.Runner(..base_input.runner_def, runtime: runtime),
+    )
+
+  let env = port_helpers.base_env(500, [])
+
+  runner.start_server(
+    "python3",
+    [runner_script],
+    env,
+    ".",
+    input,
+    config,
+    interface,
+    option.Some(port),
+  )
+  |> result.map(fn(server) { #(server, port, input.context.trace_id) })
+}
+
+fn interface_from_profile(path: String) -> types_profile.Interface {
+  let assert Ok(contents) = simplifile.read(from: path)
+  let assert Ok(profile) = json.parse(contents, decoders.profile_decoder())
+  let types_profile.Profile(interface: interface, ..) = profile
+  interface
 }
 
 fn ensure_workspace(path: String) {

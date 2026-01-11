@@ -1,10 +1,12 @@
 import gleam/dict
+import gleam/erlang/process as erlang_process
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option
 import gleam/result
 import sad/artifacts
+import sad/bridge/client
 import sad/bridge/port_process
 import sad/bridge/runner_contract
 import sad/bridge/serialization
@@ -14,6 +16,7 @@ import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input
 import sad/types/output as types_output
+import sad/types/profile as types_profile
 import sad/types/runner as types_runner
 
 type Deadline {
@@ -131,6 +134,133 @@ pub fn run_provision(
     types_runner.StatusSuccess -> Ok(provision)
     types_runner.StatusError ->
       Error(interaction_error(input.context.trace_id, "Provision failed"))
+  }
+}
+
+/// Handle for a started continuous server.
+///
+/// This is a thin wrapper around a port-backed process plus the assigned
+/// address used for health checks.
+pub type ServerHandle {
+  ServerHandle(process: port_process.PortProcess, host: String, port: Int)
+}
+
+/// Starts a continuous runner server and optionally performs a health check.
+///
+/// This function performs a single health-check attempt. If the health check
+/// fails, it stops the server and returns an `InfraError`.
+pub fn start_server(
+  runner_path: String,
+  runner_args: List(String),
+  env: List(#(String, String)),
+  cwd: String,
+  input: types_input.SadInput,
+  config: types_config.SadConfig,
+  interface: types_profile.Interface,
+  assigned_port: option.Option(Int),
+) -> Result(ServerHandle, types_output.InteractionError) {
+  let types_config.RunnerExecSettings(
+    max_runner_event_bytes: max_runner_event_bytes,
+    shutdown_timeout_ms: shutdown_timeout_ms,
+    wrapper: wrapper,
+    ..,
+  ) = types_config.runner_exec_settings(config)
+
+  let env = append_wrapper_env(env, wrapper, shutdown_timeout_ms)
+
+  use env <- result.try(client.inject_managed_port_env(
+    env,
+    input.context.trace_id,
+    config,
+    input.runner_def.runtime,
+    assigned_port,
+  ))
+
+  use process <- result.try(start_process(
+    runner_path,
+    runner_args,
+    env,
+    cwd,
+    max_runner_event_bytes,
+    input.context.trace_id,
+  ))
+
+  let control_line =
+    json.object([
+      #("t", json.string("input")),
+      #("payload", serialization.sad_input_to_json(input)),
+    ])
+    |> json.to_string
+
+  port_process.send(process, control_line <> "\n")
+
+  case interface {
+    types_profile.HttpInterface(health_check: option.Some(_), ..) ->
+      erlang_process.sleep(200)
+    _ -> Nil
+  }
+
+  let #(runner_host, runner_port) = case assigned_port {
+    option.Some(port) -> #(
+      option.Some(client.managed_port_host(config)),
+      option.Some(port),
+    )
+    option.None -> #(option.None, option.None)
+  }
+
+  case client.health_check(interface, input, runner_host, runner_port, config) {
+    Ok(_) -> {
+      let host = case runner_host {
+        option.Some(h) -> h
+        option.None -> ""
+      }
+      let port = case runner_port {
+        option.Some(p) -> p
+        option.None -> 0
+      }
+      Ok(ServerHandle(process: process, host: host, port: port))
+    }
+
+    Error(err) -> {
+      stop_server(ServerHandle(process: process, host: "", port: 0))
+      Error(err)
+    }
+  }
+}
+
+/// Sends a stop signal to a continuous server and closes its port.
+pub fn stop_server(server: ServerHandle) -> Nil {
+  let ServerHandle(process: process, ..) = server
+  port_process.send(process, "{\"t\":\"stop\"}\n")
+  port_process.close(process)
+}
+
+/// Detects whether a continuous server has exited.
+///
+/// Returns `Ok(Nil)` when no exit is observed.
+/// Returns `Error(InfraError)` when the port exited.
+pub fn detect_server_exit(
+  server: ServerHandle,
+  trace_id: types_core.TraceId,
+) -> Result(Nil, types_output.InteractionError) {
+  let ServerHandle(process: process, ..) = server
+  detect_exit_loop(process, trace_id)
+}
+
+fn detect_exit_loop(
+  process: port_process.PortProcess,
+  trace_id: types_core.TraceId,
+) -> Result(Nil, types_output.InteractionError) {
+  case port_process.receive(process, 0) {
+    Error(_) -> Ok(Nil)
+
+    Ok(port_process.PortChunk(_)) -> detect_exit_loop(process, trace_id)
+
+    Ok(port_process.PortExit(code)) ->
+      Error(interaction_error(
+        trace_id,
+        "Server exited with code " <> int.to_string(code),
+      ))
   }
 }
 
