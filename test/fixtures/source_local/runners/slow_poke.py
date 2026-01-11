@@ -13,12 +13,18 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(10)
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(b"{\"status\":\"healthy\"}")
+            try:
+                self.wfile.write(b"{\"status\":\"healthy\"}")
+            except BrokenPipeError:
+                return
             return
         if self.path == "/echo":
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(b"ok")
+            try:
+                self.wfile.write(b"ok")
+            except BrokenPipeError:
+                return
             return
         self.send_response(404)
         self.end_headers()
@@ -32,7 +38,10 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(length)
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except BrokenPipeError:
+            return
 
 
 def main():
