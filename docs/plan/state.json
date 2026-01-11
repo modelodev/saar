@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": null,
+  "current_sprint": "S08",
   "sprints": {
     "S07": {
       "status": "completed",
@@ -165,6 +165,32 @@
           "branch": "sprint/s05-decoders-params-puro",
           "commit": "62c027f3a4fcddd7d2aad34a1b3c47719d2e8894"
         }
+      }
+    },
+    "S04": {
+      "status": "completed",
+      "branch": null,
+      "started_at": null,
+      "completed_at": null,
+      "current_story": null,
+      "stories": {}
+    },
+    "S08": {
+      "status": "in_progress",
+      "branch": "sprint/s08-bridge-continuous-sse-managed-port",
+      "started_at": "2026-01-11T12:11:30Z",
+      "completed_at": null,
+      "current_story": null,
+      "stories": {
+        "S08-T01": {
+          "status": "completed",
+          "branch": "feat/s08-t01-start-server-health-check",
+          "commit": "08f5de48c19e0def5e4cecae88174744a2d50269"
+        },
+        "S08-T02": {"status": "pending", "branch": null},
+        "S08-T03": {"status": "pending", "branch": null},
+        "S08-T04": {"status": "pending", "branch": null},
+        "S08-T05": {"status": "pending", "branch": null}
       }
     }
   }
