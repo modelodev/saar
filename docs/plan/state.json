@@ -187,7 +187,11 @@
           "branch": "feat/s08-t01-start-server-health-check",
           "commit": "08f5de48c19e0def5e4cecae88174744a2d50269"
         },
-        "S08-T02": {"status": "pending", "branch": null},
+        "S08-T02": {
+          "status": "completed",
+          "branch": "feat/s08-t02-http-client-sse-upstream",
+          "commit": "681c923e9111822cb4416bbaee062e076b39bb8b"
+        },
         "S08-T03": {"status": "pending", "branch": null},
         "S08-T04": {"status": "pending", "branch": null},
         "S08-T05": {"status": "pending", "branch": null}
