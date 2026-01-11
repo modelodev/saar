@@ -13,7 +13,7 @@ pub fn main() {
 
 pub fn rejects_noeol_fragment_test() {
   let script =
-    "import sys, time; sys.stdout.write('{\"t\":\"result\",\"status\":\"success\"}'); sys.stdout.flush(); time.sleep(0.2)"
+    "import sys, time; sys.stdout.write('{\"t\":\"result\",\"status\":\"success\"}'); sys.stdout.flush(); time.sleep(1.0)"
   let process = start_process("python3", ["-c", script], 500, 200)
 
   let #(process, fragment_result) =
