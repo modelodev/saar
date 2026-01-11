@@ -1,6 +1,6 @@
 import gleeunit
 import gleeunit/should
-import sad/bridge/runner_contract_min
+import sad/bridge/runner_contract
 import sad/types/runner as types_runner
 
 pub fn main() {
@@ -11,7 +11,7 @@ pub fn jsonl_result_ok_test() {
   let line =
     "{\"t\":\"result\",\"status\":\"success\",\"data\":{},\"artifacts\":[],\"error\":null}"
 
-  case runner_contract_min.decode_runner_event(line) {
+  case runner_contract.decode_event(line) {
     Ok(types_runner.RunnerEventResult(response: response)) -> {
       case response {
         types_runner.RunnerSuccess(..) -> Nil
@@ -26,7 +26,7 @@ pub fn jsonl_result_ok_test() {
 pub fn jsonl_log_allowed_test() {
   let line = "{\"t\":\"log\",\"message\":\"hello\",\"level\":\"info\"}"
 
-  case runner_contract_min.decode_runner_event(line) {
+  case runner_contract.decode_event(line) {
     Ok(types_runner.RunnerEventLog(message: message, level: level)) -> {
       message |> should.equal("hello")
       level |> should.equal("info")
@@ -37,10 +37,10 @@ pub fn jsonl_log_allowed_test() {
 }
 
 pub fn jsonl_unknown_t_rejected_test() {
-  let line = "{\"t\":\"chunk\",\"delta\":\"x\"}"
+  let line = "{\"t\":\"nope\"}"
 
-  case runner_contract_min.decode_runner_event(line) {
-    Ok(_) -> panic as "Expected error for chunk"
+  case runner_contract.decode_event(line) {
+    Ok(_) -> panic as "Expected error for unknown event"
     Error(_) -> Nil
   }
 }
@@ -48,7 +48,7 @@ pub fn jsonl_unknown_t_rejected_test() {
 pub fn jsonl_invalid_json_rejected_test() {
   let line = "{\"t\":\"result\","
 
-  case runner_contract_min.decode_runner_event(line) {
+  case runner_contract.decode_event(line) {
     Ok(_) -> panic as "Expected error for invalid json"
     Error(_) -> Nil
   }

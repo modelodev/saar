@@ -5,6 +5,7 @@
 //// Responsibilities:
 //// - Start the wrapper process via `sad/ffi` with the configured limits.
 //// - Send control lines and read JSONL output with size checks.
+//// - Delegate JSONL framing to `sad/bridge/jsonl_framer`.
 ////
 //// Non-responsibilities:
 //// - Parsing runner events into domain types.
@@ -12,6 +13,7 @@
 ////
 //// Relationships:
 //// - Uses `sad/ffi` for port IO and `gleam/erlang/application` for priv lookup.
+//// - Uses `sad/bridge/jsonl_framer` for newline framing.
 //// - Consumed by `sad/bridge/runner` as the port boundary.
 
 import envoy
@@ -21,7 +23,7 @@ import gleam/erlang/port.{type Port}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
-import gleam/string
+import sad/bridge/jsonl_framer
 import sad/ffi
 import simplifile
 
@@ -142,38 +144,64 @@ pub fn read_line(
   process: PortProcess,
   timeout_ms: Int,
 ) -> #(PortProcess, Result(String, PortReadError)) {
-  case take_line(process.buffer) {
-    Some(#(line, rest)) -> handle_line(process, line, rest)
-    None ->
-      case receive(process, timeout_ms) {
+  let framer = jsonl_framer.from_buffer(process.max_event_bytes, process.buffer)
+  let #(next_framer, popped) = jsonl_framer.pop_line(framer)
+  let next_process =
+    PortProcess(..process, buffer: jsonl_framer.buffer(next_framer))
+
+  case popped {
+    Ok(Some(line)) -> #(next_process, Ok(line))
+
+    Ok(None) ->
+      case receive(next_process, timeout_ms) {
         Ok(PortChunk(chunk)) -> {
-          let next_buffer = process.buffer <> chunk
-          let next_process = PortProcess(..process, buffer: next_buffer)
-          case take_line(next_buffer) {
-            Some(#(line, rest)) -> handle_line(next_process, line, rest)
-            None ->
-              case string.byte_size(next_buffer) > process.max_event_bytes {
-                True -> #(
-                  PortProcess(..process, buffer: ""),
-                  Error(OversizedEvent(
-                    size: string.byte_size(next_buffer),
-                    max: process.max_event_bytes,
-                  )),
-                )
-                False -> read_line(next_process, timeout_ms)
-              }
-          }
-        }
-        Ok(PortExit(status)) ->
-          case string.is_empty(process.buffer) {
-            True -> #(process, Error(PortExited(status)))
-            False -> #(
-              PortProcess(..process, buffer: ""),
-              Error(NoeolFragment(process.buffer)),
+          let framer =
+            jsonl_framer.from_buffer(
+              next_process.max_event_bytes,
+              next_process.buffer,
+            )
+          let #(next_framer, pushed) = jsonl_framer.push_chunk(framer, chunk)
+          let next_process =
+            PortProcess(
+              ..next_process,
+              buffer: jsonl_framer.buffer(next_framer),
+            )
+
+          case pushed {
+            Ok(_) -> read_line(next_process, timeout_ms)
+            Error(err) -> #(
+              next_process,
+              Error(framer_error_to_read_error(err)),
             )
           }
-        Error(_) -> #(process, Error(Timeout))
+        }
+
+        Ok(PortExit(status)) -> {
+          let framer =
+            jsonl_framer.from_buffer(
+              next_process.max_event_bytes,
+              next_process.buffer,
+            )
+          let #(next_framer, finalized) = jsonl_framer.finalize(framer)
+          let next_process =
+            PortProcess(
+              ..next_process,
+              buffer: jsonl_framer.buffer(next_framer),
+            )
+
+          case finalized {
+            Ok(_) -> #(next_process, Error(PortExited(status)))
+            Error(err) -> #(
+              next_process,
+              Error(framer_error_to_read_error(err)),
+            )
+          }
+        }
+
+        Error(_) -> #(next_process, Error(Timeout))
       }
+
+    Error(err) -> #(next_process, Error(framer_error_to_read_error(err)))
   }
 }
 
@@ -190,28 +218,12 @@ pub fn wrapper_path(process: PortProcess) -> String {
   wrapper_path
 }
 
-fn take_line(buffer: String) -> Option(#(String, String)) {
-  case string.split(buffer, "\n") {
-    [] -> None
-    [_single] -> None
-    [line, ..rest] -> Some(#(line, string.join(rest, "\n")))
-  }
-}
+fn framer_error_to_read_error(err: jsonl_framer.FramerError) -> PortReadError {
+  case err {
+    jsonl_framer.OversizedEvent(size: size, max: max) ->
+      OversizedEvent(size: size, max: max)
 
-fn handle_line(
-  process: PortProcess,
-  line: String,
-  rest: String,
-) -> #(PortProcess, Result(String, PortReadError)) {
-  case string.byte_size(line) > process.max_event_bytes {
-    True -> #(
-      PortProcess(..process, buffer: ""),
-      Error(OversizedEvent(
-        size: string.byte_size(line),
-        max: process.max_event_bytes,
-      )),
-    )
-    False -> #(PortProcess(..process, buffer: rest), Ok(line))
+    jsonl_framer.NoeolFragment(fragment) -> NoeolFragment(fragment)
   }
 }
 

@@ -49,6 +49,7 @@ type InterpolationError {
   ValueNotScalar(key: String)
   InvalidPointer(pointer: String)
   InvalidPlaceholder(placeholder: String)
+  Internal(message: String)
 }
 
 fn interpolation_error_to_string(err: InterpolationError) -> String {
@@ -63,6 +64,7 @@ fn interpolation_error_to_string(err: InterpolationError) -> String {
       "Interpolation failed: Invalid JSON pointer '" <> pointer <> "'"
     InvalidPlaceholder(placeholder) ->
       "Interpolation failed: Invalid placeholder '{{" <> placeholder <> "}}'"
+    Internal(message) -> "Interpolation failed: " <> message
   }
 }
 
@@ -70,11 +72,12 @@ fn to_sad_error(
   trace_id: types_core.TraceId,
   err: InterpolationError,
 ) -> types_output.SadError {
-  types_output.sad_error(
-    trace_id,
-    types_enums.BadRequest,
-    interpolation_error_to_string(err),
-  )
+  let kind = case err {
+    Internal(_) -> types_enums.InfraError
+    _ -> types_enums.BadRequest
+  }
+
+  types_output.sad_error(trace_id, kind, interpolation_error_to_string(err))
 }
 
 pub fn interpolate_string(
@@ -167,7 +170,7 @@ fn interpolate_json_pure(
   template: json.Json,
   ctx: InterpContext,
 ) -> Result(json.Json, InterpolationError) {
-  let value = json_to_value(template)
+  use value <- result.try(json_to_value(template))
   let string_context = string_context_value(ctx)
   let pointer_context = pointer_context_value(ctx)
 
@@ -192,7 +195,7 @@ fn resolve_json_pointer_pure(
   pointer: String,
   value: json.Json,
 ) -> Result(json.Json, InterpolationError) {
-  let root = json_to_value(value)
+  use root <- result.try(json_to_value(value))
   use resolved <- result.try(resolve_pointer(pointer, root))
   Ok(value_to_json(resolved))
 }
@@ -513,55 +516,19 @@ fn resolve_pointer(
     |> result.map_error(fn(_) { InvalidPointer(pointer) }),
   )
 
-  case resolve_segments(json_pointer.segments(parsed_pointer), root) {
-    Some(resolved) -> Ok(resolved)
+  let dynamic_root = root |> value_to_json |> json_pointer.json_to_dynamic
+
+  case json_pointer.resolve(parsed_pointer, dynamic_root) {
+    Some(resolved) -> Ok(dynamic_to_value(resolved))
     None -> Error(InvalidPointer(pointer))
   }
 }
 
-fn resolve_segments(
-  segments: List(String),
-  current: InterpValue,
-) -> Option(InterpValue) {
-  case segments {
-    [] -> Some(current)
-    [segment, ..rest] ->
-      case current {
-        Object(fields) ->
-          case dict.get(fields, segment) {
-            Ok(next) -> resolve_segments(rest, next)
-            Error(_) -> None
-          }
-        Array(items) -> resolve_list_segment(segment, rest, items)
-        _ -> None
-      }
-  }
-}
-
-fn resolve_list_segment(
-  segment: String,
-  rest: List(String),
-  items: List(InterpValue),
-) -> Option(InterpValue) {
-  case int.parse(segment) {
-    Ok(index) ->
-      case index < 0 {
-        True -> None
-        False ->
-          case list.drop(items, index) |> list.first {
-            Ok(value) -> resolve_segments(rest, value)
-            Error(_) -> None
-          }
-      }
-    Error(_) -> None
-  }
-}
-
-fn json_to_value(value: json.Json) -> InterpValue {
-  let assert Ok(dynamic_value) =
-    json.to_string(value)
-    |> json.parse(using: decode.dynamic)
-  dynamic_to_value(dynamic_value)
+fn json_to_value(value: json.Json) -> Result(InterpValue, InterpolationError) {
+  value
+  |> json_pointer.json_to_dynamic
+  |> dynamic_to_value
+  |> Ok
 }
 
 fn dynamic_to_value(value: dynamic.Dynamic) -> InterpValue {

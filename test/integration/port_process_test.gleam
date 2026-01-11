@@ -1,7 +1,7 @@
 import gleeunit
 import port_helpers
 import sad/bridge/port_process
-import sad/bridge/runner_contract_min
+import sad/bridge/runner_contract
 import sad/types/runner as types_runner
 import test_assertions
 
@@ -70,7 +70,7 @@ pub fn echo_cli_result_is_received_test() {
     port_helpers.read_line_with_retries(process, read_timeout_ms, 10)
   let line = test_assertions.assert_ok(line_result)
 
-  let event = runner_contract_min.decode_runner_event(line)
+  let event = runner_contract.decode_event(line)
   let event = test_assertions.assert_ok(event)
 
   case event {
