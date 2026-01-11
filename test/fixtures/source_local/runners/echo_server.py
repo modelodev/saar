@@ -3,26 +3,87 @@
 import json
 import os
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+import time
 
 
 class Handler(BaseHTTPRequestHandler):
+    def _send_json(self, payload: dict, status: int = 200):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
-        if self.path == "/health":
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"{\"status\":\"healthy\"}")
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+
+        if path == "/health":
+            self._send_json({"status": "healthy"})
             return
-        if self.path == "/echo":
+
+        if path == "/env":
+            keys = ["SAD_HOST", "SAD_PORT", "TEST_HOST", "TEST_PORT"]
+            self._send_json({k: os.environ.get(k) for k in keys})
+            return
+
+        if path in ("/big", "/file"):
+            size = int(query.get("size", ["0"])[0])
+            content = (b"a" if path == "/big" else b"b") * max(size, 0)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+            return
+
+        if path == "/sleep":
+            ms = int(query.get("ms", ["0"])[0])
+            time.sleep(max(ms, 0) / 1000.0)
+            self._send_json({"slept_ms": ms})
+            return
+
+        if path == "/sse":
+            mode = query.get("mode", ["ok"])[0]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+
+            def emit(data: str):
+                self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                self.wfile.flush()
+
+            if mode == "invalid_json":
+                emit("{not json}")
+                return
+
+            emit(json.dumps({"t": "log", "message": "hello", "level": "info"}))
+            emit(json.dumps({"t": "chunk", "delta": "hi"}))
+
+            if mode == "no_result":
+                return
+
+            emit(json.dumps({"t": "result", "status": "success", "data": {"answer": "ok"}, "artifacts": [], "error": None}))
+            return
+
+        if path == "/echo":
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b"ok")
             return
+
         self.send_response(404)
         self.end_headers()
 
     def do_POST(self):
-        if self.path != "/echo":
+        parsed = urlparse(self.path)
+        if parsed.path != "/echo":
             self.send_response(404)
             self.end_headers()
             return
@@ -40,7 +101,7 @@ def main():
 
     host = os.environ.get("SAD_HOST", "127.0.0.1")
     port = int(os.environ.get("SAD_PORT", os.environ.get("PORT", "8080")))
-    HTTPServer((host, port), Handler).serve_forever()
+    ThreadingHTTPServer((host, port), Handler).serve_forever()
 
 
 if __name__ == "__main__":
