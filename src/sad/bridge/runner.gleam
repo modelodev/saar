@@ -5,6 +5,7 @@ import gleam/list
 import gleam/option
 import gleam/result
 import sad/artifacts
+import sad/bridge/client
 import sad/bridge/port_process
 import sad/bridge/runner_contract
 import sad/bridge/serialization
@@ -131,6 +132,115 @@ pub fn run_provision(
     types_runner.StatusSuccess -> Ok(provision)
     types_runner.StatusError ->
       Error(interaction_error(input.context.trace_id, "Provision failed"))
+  }
+}
+
+/// Handle for a started continuous server.
+///
+/// This is a thin wrapper around a port-backed process plus the assigned
+/// address used for health checks.
+pub type ServerHandle {
+  ServerHandle(process: port_process.PortProcess, host: String, port: Int)
+}
+
+/// Starts a continuous runner server.
+///
+/// This function is intentionally fail-fast:
+/// - It spawns the runner process and sends the initial input payload.
+/// - It does not sleep or retry to wait for HTTP readiness.
+///
+/// Readiness and health checks are expected to be handled by higher-level
+/// orchestration and/or tests.
+pub fn start_server(
+  runner_path: String,
+  runner_args: List(String),
+  env: List(#(String, String)),
+  cwd: String,
+  input: types_input.SadInput,
+  config: types_config.SadConfig,
+  assigned_port: option.Option(Int),
+) -> Result(ServerHandle, types_output.InteractionError) {
+  let types_config.RunnerExecSettings(
+    max_runner_event_bytes: max_runner_event_bytes,
+    shutdown_timeout_ms: shutdown_timeout_ms,
+    wrapper: wrapper,
+    ..,
+  ) = types_config.runner_exec_settings(config)
+
+  let env = append_wrapper_env(env, wrapper, shutdown_timeout_ms)
+
+  use env <- result.try(client.inject_managed_port_env(
+    env,
+    input.context.trace_id,
+    config,
+    input.runner_def.runtime,
+    assigned_port,
+  ))
+
+  use process <- result.try(start_process(
+    runner_path,
+    runner_args,
+    env,
+    cwd,
+    max_runner_event_bytes,
+    input.context.trace_id,
+  ))
+
+  let control_line =
+    json.object([
+      #("t", json.string("input")),
+      #("payload", serialization.sad_input_to_json(input)),
+    ])
+    |> json.to_string
+
+  port_process.send(process, control_line <> "\n")
+
+  let host = case assigned_port {
+    option.Some(_) -> client.managed_port_host(config)
+    option.None -> ""
+  }
+
+  let port = case assigned_port {
+    option.Some(p) -> p
+    option.None -> 0
+  }
+
+  Ok(ServerHandle(process: process, host: host, port: port))
+}
+
+/// Sends a stop signal to a continuous server and closes its port.
+pub fn stop_server(server: ServerHandle) -> Nil {
+  let ServerHandle(process: process, ..) = server
+  port_process.send(process, "{\"t\":\"stop\"}\n")
+  port_process.close(process)
+}
+
+/// Detects whether a continuous server has exited.
+///
+/// Returns `Ok(Nil)` when no exit is observed.
+/// Returns `Error(InfraError)` when the port exited.
+pub fn detect_server_exit(
+  server: ServerHandle,
+  trace_id: types_core.TraceId,
+) -> Result(Nil, types_output.InteractionError) {
+  let ServerHandle(process: process, ..) = server
+  detect_exit_loop(process, trace_id)
+}
+
+fn detect_exit_loop(
+  process: port_process.PortProcess,
+  trace_id: types_core.TraceId,
+) -> Result(Nil, types_output.InteractionError) {
+  case port_process.receive(process, 0) {
+    Error(_) -> Ok(Nil)
+
+    Ok(port_process.PortChunk(_)) -> detect_exit_loop(process, trace_id)
+
+    Ok(port_process.PortExit(code)) ->
+      Error(interaction_error(
+        trace_id,
+        "Server exited with code " <> int.to_string(code),
+      ))
   }
 }
 
