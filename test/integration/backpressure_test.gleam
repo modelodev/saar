@@ -1,3 +1,4 @@
+import ffi_inspect
 import gleam/dict
 import gleam/dynamic/decode
 import gleam/erlang/process
@@ -6,7 +7,6 @@ import gleam/option.{None, Some}
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/ffi
 import sad/gateway/sse_loop
 import sad/otp/safe_call
 import sad/streams/sink
@@ -25,7 +25,7 @@ pub fn interaction_backpressure_or_discard_under_pressure() {
   let done = process.new_subject()
 
   // Sink ACK is slower than push_timeout_ms, forcing TimedOut and discard.
-  let stream_sink = start_sink_ack_delay(200)
+  let stream_sink = start_sink(writer_slow_ack(200))
 
   let cfg =
     types_config.InteractionStreamConfig(
@@ -36,9 +36,9 @@ pub fn interaction_backpressure_or_discard_under_pressure() {
 
   let pump = stream_pump.start(done, Some(stream_sink), cfg)
 
-  let pump_pid = case process.subject_owner(pump) {
+  let pump_pid = case stream_pump.pid(pump) {
     Ok(pid) -> pid
-    Error(_) -> panic as "pump has no owner"
+    Error(_) -> panic as "pump has no pid"
   }
 
   let trace_id = core.trace_id("trace-pressure")
@@ -46,23 +46,23 @@ pub fn interaction_backpressure_or_discard_under_pressure() {
 
   let _sender =
     process.spawn(fn() {
-      // Burst a lot of messages into the pump.
       send_chunks(pump, trace_id, 750)
-      process.send(pump, stream_pump.Finish(Ok(min_ok_result(trace_id))))
+      stream_pump.finish(pump, Ok(min_ok_result(trace_id)))
       process.send(sender_done, Nil)
     })
 
-  // Sample mailbox length while the burst is in flight.
   let max_len = sample_max_queue_len(pump_pid, 8, 10)
   should.equal(max_len < 5000, True)
 
-  // Must still emit InteractionDone.
   let msg = case process.receive(done, 3000) {
     Ok(msg) -> msg
-    Error(_) -> panic as "Did not receive InteractionDone"
+    Error(_) -> panic as "Did not receive done"
   }
 
-  msg |> should.equal(stream_pump.InteractionDone(Ok(min_ok_result(trace_id))))
+  msg |> should.equal(Ok(min_ok_result(trace_id)))
+
+  // Ensure the sink process is closed (the pump may have switched to Discard).
+  sink.finish(stream_sink, Ok(min_ok_result(trace_id)), 2000) |> should.be_ok
 
   let _ = process.receive(sender_done, 1000)
   Nil
@@ -71,8 +71,8 @@ pub fn interaction_backpressure_or_discard_under_pressure() {
 pub fn disconnect_does_not_cancel() {
   let done = process.new_subject()
 
-  // The sink exits on the first batch, simulating an early client disconnect.
-  let stream_sink = start_sink_disconnect_after_batches(1)
+  // A write failure simulates early client disconnect.
+  let stream_sink = start_sink(writer_always_error(safe_call.Disconnected))
 
   let cfg =
     types_config.InteractionStreamConfig(
@@ -85,19 +85,20 @@ pub fn disconnect_does_not_cancel() {
   let trace_id = core.trace_id("trace-disconnect")
 
   send_chunks(pump, trace_id, 10)
-  process.send(pump, stream_pump.Finish(Ok(min_ok_result(trace_id))))
+  stream_pump.finish(pump, Ok(min_ok_result(trace_id)))
 
   case process.receive(done, 2000) {
-    Ok(stream_pump.InteractionDone(_)) -> Nil
-    Error(_) -> panic as "InteractionDone missing after disconnect"
+    Ok(Ok(_)) -> Nil
+    Ok(Error(_)) -> panic as "Unexpected error"
+    Error(_) -> panic as "done missing after disconnect"
   }
 }
 
 pub fn sink_disconnect_switches_to_discard() {
   let done = process.new_subject()
 
-  // Sink replies `Error(Disconnected)` immediately. The pump must switch to discard.
-  let stream_sink = start_sink_error_always(safe_call.Disconnected)
+  // Sink errors immediately. The pump must switch to discard and still finish.
+  let stream_sink = start_sink(writer_always_error(safe_call.Disconnected))
 
   let cfg =
     types_config.InteractionStreamConfig(
@@ -109,13 +110,13 @@ pub fn sink_disconnect_switches_to_discard() {
   let pump = stream_pump.start(done, Some(stream_sink), cfg)
   let trace_id = core.trace_id("trace-switch")
 
-  // If discard works, this burst should finish quickly.
   send_chunks(pump, trace_id, 250)
-  process.send(pump, stream_pump.Finish(Ok(min_ok_result(trace_id))))
+  stream_pump.finish(pump, Ok(min_ok_result(trace_id)))
 
   case process.receive(done, 2000) {
-    Ok(stream_pump.InteractionDone(_)) -> Nil
-    Error(_) -> panic as "InteractionDone missing"
+    Ok(Ok(_)) -> Nil
+    Ok(Error(_)) -> panic as "Unexpected error"
+    Error(_) -> panic as "done missing"
   }
 }
 
@@ -123,7 +124,7 @@ pub fn mailbox_does_not_grow_unbounded() {
   let done = process.new_subject()
 
   // Slow sink triggers TimedOut, then discard should keep the mailbox bounded.
-  let stream_sink = start_sink_ack_delay(200)
+  let stream_sink = start_sink(writer_slow_ack(200))
 
   let cfg =
     types_config.InteractionStreamConfig(
@@ -134,9 +135,9 @@ pub fn mailbox_does_not_grow_unbounded() {
 
   let pump = stream_pump.start(done, Some(stream_sink), cfg)
 
-  let pump_pid = case process.subject_owner(pump) {
+  let pump_pid = case stream_pump.pid(pump) {
     Ok(pid) -> pid
-    Error(_) -> panic as "pump has no owner"
+    Error(_) -> panic as "pump has no pid"
   }
 
   let trace_id = core.trace_id("trace-mailbox")
@@ -144,23 +145,27 @@ pub fn mailbox_does_not_grow_unbounded() {
   let _sender =
     process.spawn(fn() {
       send_chunks(pump, trace_id, 1200)
-      process.send(pump, stream_pump.Finish(Ok(min_ok_result(trace_id))))
+      stream_pump.finish(pump, Ok(min_ok_result(trace_id)))
     })
 
   let max_len = sample_max_queue_len(pump_pid, 12, 10)
   should.equal(max_len < 8000, True)
 
   case process.receive(done, 3000) {
-    Ok(stream_pump.InteractionDone(_)) -> Nil
-    Error(_) -> panic as "InteractionDone missing"
+    Ok(Ok(_)) -> Nil
+    Ok(Error(_)) -> panic as "Unexpected error"
+    Error(_) -> panic as "done missing"
   }
+
+  // Ensure the sink process is closed.
+  sink.finish(stream_sink, Ok(min_ok_result(trace_id)), 2000) |> should.be_ok
 }
 
 pub fn finish_payload_is_valid_json() {
   let writes = process.new_subject()
 
   let writer =
-    sse_loop.SseWriter(
+    sink.SseWriter(
       write: fn(data) {
         process.send(writes, data)
         Ok(Nil)
@@ -200,36 +205,31 @@ pub fn finish_payload_is_valid_json() {
 
 pub fn keep_alive_format_is_correct() {
   let writes = process.new_subject()
-  let closed = process.new_subject()
 
   let writer =
-    sse_loop.SseWriter(
+    sink.SseWriter(
       write: fn(data) {
         process.send(writes, data)
         Ok(Nil)
       },
-      close: fn() { process.send(closed, Nil) },
+      close: fn() { Nil },
     )
 
   let _sink = sse_loop.start(writer, fn(_event) { "{}" }, 10)
 
-  // Wait a bit and expect at least one keep-alive comment.
   process.sleep(40)
 
   case process.receive(writes, 0) {
     Ok(data) -> data |> should.equal(": keep-alive\n\n")
     Error(_) -> panic as "Expected keep-alive write"
   }
-
-  let _ = process.receive(closed, 0)
-  Nil
 }
 
 pub fn keep_alive_can_be_disabled_with_zero() {
   let writes = process.new_subject()
 
   let writer =
-    sse_loop.SseWriter(
+    sink.SseWriter(
       write: fn(data) {
         process.send(writes, data)
         Ok(Nil)
@@ -248,8 +248,42 @@ pub fn keep_alive_can_be_disabled_with_zero() {
 
 // --- Helpers ---
 
+type WriterBehavior {
+  WriterSlowAck(delay_ms: Int)
+  WriterAlwaysError(err: safe_call.CallError)
+}
+
+fn writer_slow_ack(delay_ms: Int) -> WriterBehavior {
+  WriterSlowAck(delay_ms)
+}
+
+fn writer_always_error(err: safe_call.CallError) -> WriterBehavior {
+  WriterAlwaysError(err)
+}
+
+fn start_sink(behavior: WriterBehavior) -> sink.StreamSink {
+  let writes = process.new_subject()
+
+  let writer =
+    sink.SseWriter(
+      write: fn(data) {
+        process.send(writes, data)
+        case behavior {
+          WriterSlowAck(delay_ms) -> {
+            process.sleep(delay_ms)
+            Ok(Nil)
+          }
+          WriterAlwaysError(err) -> Error(err)
+        }
+      },
+      close: fn() { Nil },
+    )
+
+  sink.start_sse_sink(writer, fn(_event) { "{}" }, 0)
+}
+
 fn send_chunks(
-  pump: process.Subject(stream_pump.StreamPumpMsg),
+  pump: stream_pump.StreamPump,
   trace_id: core.TraceId,
   count: Int,
 ) -> Nil {
@@ -257,7 +291,7 @@ fn send_chunks(
     0 -> Nil
     _ -> {
       let event = stream.content_chunk(trace_id, "x")
-      process.send(pump, stream_pump.Push(event))
+      stream_pump.push(pump, event)
       send_chunks(pump, trace_id, count - 1)
     }
   }
@@ -275,7 +309,7 @@ fn sample_max_queue_len(pid: process.Pid, samples: Int, sleep_ms: Int) -> Int {
   case samples {
     0 -> 0
     _ -> {
-      let current = ffi.message_queue_len(pid)
+      let current = ffi_inspect.message_queue_len(pid)
       process.sleep(sleep_ms)
       let rest = sample_max_queue_len(pid, samples - 1, sleep_ms)
       case current > rest {
@@ -283,101 +317,5 @@ fn sample_max_queue_len(pid: process.Pid, samples: Int, sleep_ms: Int) -> Int {
         False -> rest
       }
     }
-  }
-}
-
-fn start_sink_ack_delay(ack_delay_ms: Int) -> sink.StreamSink {
-  let ready = process.new_subject()
-
-  let _pid =
-    process.spawn(fn() {
-      let subject: sink.StreamSink = process.new_subject()
-      process.send(ready, subject)
-      sink_loop_ack_delay(subject, ack_delay_ms)
-    })
-
-  case process.receive(ready, 1000) {
-    Ok(subject) -> subject
-    Error(_) -> panic as "sink did not start"
-  }
-}
-
-fn sink_loop_ack_delay(subject: sink.StreamSink, ack_delay_ms: Int) -> Nil {
-  case process.receive(subject, 5000) {
-    Ok(sink.PushBatch(_events, reply_to)) -> {
-      process.sleep(ack_delay_ms)
-      process.send(reply_to, Ok(Nil))
-      sink_loop_ack_delay(subject, ack_delay_ms)
-    }
-
-    Ok(sink.Finish(_result, reply_to)) -> {
-      process.send(reply_to, Ok(Nil))
-      Nil
-    }
-
-    Error(_) -> Nil
-  }
-}
-
-fn start_sink_disconnect_after_batches(batches: Int) -> sink.StreamSink {
-  let ready = process.new_subject()
-
-  let _pid =
-    process.spawn(fn() {
-      let subject: sink.StreamSink = process.new_subject()
-      process.send(ready, subject)
-      sink_loop_disconnect(subject, batches)
-    })
-
-  case process.receive(ready, 1000) {
-    Ok(subject) -> subject
-    Error(_) -> panic as "sink did not start"
-  }
-}
-
-fn sink_loop_disconnect(subject: sink.StreamSink, remaining_batches: Int) -> Nil {
-  case remaining_batches <= 0 {
-    True -> Nil
-    False ->
-      case process.receive(subject, 5000) {
-        Ok(sink.PushBatch(_events, _reply_to)) -> Nil
-        Ok(sink.Finish(_result, _reply_to)) -> Nil
-        Error(_) -> sink_loop_disconnect(subject, remaining_batches)
-      }
-  }
-}
-
-fn start_sink_error_always(err: safe_call.CallError) -> sink.StreamSink {
-  let ready = process.new_subject()
-
-  let _pid =
-    process.spawn(fn() {
-      let subject: sink.StreamSink = process.new_subject()
-      process.send(ready, subject)
-      sink_loop_error_always(subject, err)
-    })
-
-  case process.receive(ready, 1000) {
-    Ok(subject) -> subject
-    Error(_) -> panic as "sink did not start"
-  }
-}
-
-fn sink_loop_error_always(
-  subject: sink.StreamSink,
-  err: safe_call.CallError,
-) -> Nil {
-  case process.receive(subject, 5000) {
-    Ok(sink.PushBatch(_events, reply_to)) -> {
-      process.send(reply_to, Error(err))
-      sink_loop_error_always(subject, err)
-    }
-
-    Ok(sink.Finish(_result, reply_to)) -> {
-      process.send(reply_to, Ok(Nil))
-      Nil
-    }
-
-    Error(_) -> Nil
   }
 }

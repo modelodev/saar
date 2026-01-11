@@ -15,19 +15,19 @@ pub fn main() {
 }
 
 pub fn stream_sink_push_batch_is_ack_backpressure() {
-  let ready = process.new_subject()
+  let writes = process.new_subject()
 
-  let _pid =
-    process.spawn(fn() {
-      let subject: sink.StreamSink = process.new_subject()
-      process.send(ready, subject)
-      loop(subject, 50)
-    })
+  let writer =
+    sink.SseWriter(
+      write: fn(data) {
+        process.send(writes, data)
+        process.sleep(50)
+        Ok(Nil)
+      },
+      close: fn() { Nil },
+    )
 
-  let stream_sink = case process.receive(ready, 1000) {
-    Ok(subject) -> subject
-    Error(_) -> panic as "Did not receive sink subject"
-  }
+  let stream_sink = sink.start_sse_sink(writer, fn(_event) { "{}" }, 0)
 
   let trace_id = core.trace_id("trace-1")
   let events = [stream.content_chunk(trace_id, "hello")]
@@ -36,25 +36,37 @@ pub fn stream_sink_push_batch_is_ack_backpressure() {
   let result = sink.push_batch(stream_sink, events, 1000)
   let t1 = ffi.now_ms()
 
-  result
-  |> should.equal(Ok(Nil))
+  result |> should.equal(Ok(Nil))
   should.equal(t1 - t0 >= 40, True)
+
+  // Ensure an SSE data frame was written.
+  let _ = process.receive(writes, 1000)
+
+  // Close the sink loop.
+  let ok_result =
+    output.InteractionResult(
+      data: output.ResponseData(content: None, metadata: dict.new()),
+      artifacts: [],
+      trace_id: trace_id,
+    )
+
+  sink.finish(stream_sink, Ok(ok_result), 1000) |> should.equal(Ok(Nil))
+  Nil
 }
 
 pub fn stream_sink_finish_closes_stream() {
-  let ready = process.new_subject()
+  let writes = process.new_subject()
 
-  let _pid =
-    process.spawn(fn() {
-      let subject: sink.StreamSink = process.new_subject()
-      process.send(ready, subject)
-      loop(subject, 0)
-    })
+  let writer =
+    sink.SseWriter(
+      write: fn(data) {
+        process.send(writes, data)
+        Ok(Nil)
+      },
+      close: fn() { Nil },
+    )
 
-  let stream_sink = case process.receive(ready, 1000) {
-    Ok(subject) -> subject
-    Error(_) -> panic as "Did not receive sink subject"
-  }
+  let stream_sink = sink.start_sse_sink(writer, fn(_event) { "{}" }, 0)
 
   let trace_id = core.trace_id("trace-2")
 
@@ -70,21 +82,4 @@ pub fn stream_sink_finish_closes_stream() {
   let events = [stream.content_chunk(trace_id, "late")]
   sink.push_batch(stream_sink, events, 1000)
   |> should.equal(Error(safe_call.Disconnected))
-}
-
-fn loop(subject: sink.StreamSink, ack_delay_ms: Int) -> Nil {
-  case process.receive(subject, 5000) {
-    Ok(sink.PushBatch(_events, reply_to)) -> {
-      process.sleep(ack_delay_ms)
-      process.send(reply_to, Ok(Nil))
-      loop(subject, ack_delay_ms)
-    }
-
-    Ok(sink.Finish(_result, reply_to)) -> {
-      process.send(reply_to, Ok(Nil))
-      Nil
-    }
-
-    Error(_) -> loop(subject, ack_delay_ms)
-  }
 }

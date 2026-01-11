@@ -5,7 +5,7 @@
 //// - Batch events by size/interval before calling `StreamSink.push_batch`.
 //// - Apply real backpressure via sink ACKs.
 //// - Degrade to discard mode on `TimedOut`/`Disconnected` without cancelling.
-//// - Always notify the actor with `InteractionDone`.
+//// - Always emit the final result on `done`.
 ////
 //// Non-responsibilities:
 //// - Reading runner output or mapping external protocols.
@@ -20,22 +20,20 @@ import gleam/int
 import gleam/option.{type Option, None, Some}
 import gleam/string
 import sad/ffi
-import sad/otp/safe_call.{type CallError}
 import sad/streams/batcher
 import sad/streams/sink
 import sad/types/config as types_config
 import sad/types/output
 import sad/types/stream.{type StreamEvent, ContentChunk}
 
-pub type StreamPumpMsg {
+type StreamPumpMsg {
   Push(event: StreamEvent)
   Finish(result: Result(output.InteractionResult, output.InteractionError))
 }
 
-pub type StreamPumpDone {
-  InteractionDone(
-    result: Result(output.InteractionResult, output.InteractionError),
-  )
+/// Handle for pushing and finishing a stream.
+pub opaque type StreamPump {
+  StreamPump(process.Subject(StreamPumpMsg))
 }
 
 type Mode {
@@ -45,18 +43,20 @@ type Mode {
 
 /// Starts a stream pump.
 ///
-/// The returned subject is owned by the pump process.
+/// When finished, the pump sends the final `Result` to `done`.
 pub fn start(
-  actor: process.Subject(StreamPumpDone),
+  done: process.Subject(
+    Result(output.InteractionResult, output.InteractionError),
+  ),
   maybe_sink: Option(sink.StreamSink),
   cfg: types_config.InteractionStreamConfig,
-) -> process.Subject(StreamPumpMsg) {
+) -> StreamPump {
   let ready = process.new_subject()
 
   let _pid =
     process.spawn(fn() {
       let inbox: process.Subject(StreamPumpMsg) = process.new_subject()
-      process.send(ready, inbox)
+      process.send(ready, StreamPump(inbox))
 
       let mode = case maybe_sink {
         Some(s) -> Active(s)
@@ -78,18 +78,48 @@ pub fn start(
 
       let batch_state = batcher.new(now_ms)
 
-      loop(inbox, actor, mode, batcher_cfg, batch_state, push_timeout_ms)
+      loop(inbox, done, mode, batcher_cfg, batch_state, push_timeout_ms)
     })
 
   case process.receive(ready, 1000) {
-    Ok(subject) -> subject
+    Ok(pump) -> pump
     Error(_) -> panic as "Stream pump did not start"
   }
 }
 
+/// Sends an event to the pump.
+pub fn push(pump: StreamPump, event: StreamEvent) -> Nil {
+  process.send(subject(pump), Push(event))
+}
+
+/// Signals that the interaction has finished.
+pub fn finish(
+  pump: StreamPump,
+  result: Result(output.InteractionResult, output.InteractionError),
+) -> Nil {
+  process.send(subject(pump), Finish(result))
+}
+
+/// Returns the pump process pid.
+///
+/// This is intended for tests and diagnostics.
+pub fn pid(pump: StreamPump) -> Result(process.Pid, Nil) {
+  case process.subject_owner(subject(pump)) {
+    Ok(pid) -> Ok(pid)
+    Error(_) -> Error(Nil)
+  }
+}
+
+fn subject(pump: StreamPump) -> process.Subject(StreamPumpMsg) {
+  let StreamPump(subject) = pump
+  subject
+}
+
 fn loop(
   inbox: process.Subject(StreamPumpMsg),
-  actor: process.Subject(StreamPumpDone),
+  done: process.Subject(
+    Result(output.InteractionResult, output.InteractionError),
+  ),
   mode: Mode,
   cfg: batcher.BatcherConfig,
   state: batcher.Batcher(StreamEvent),
@@ -112,7 +142,7 @@ fn loop(
         }
       }
 
-      loop(inbox, actor, mode, cfg, state, push_timeout_ms)
+      loop(inbox, done, mode, cfg, state, push_timeout_ms)
     }
 
     Ok(Finish(result)) -> {
@@ -124,7 +154,7 @@ fn loop(
       }
 
       let _ = finish_sink(mode, result, push_timeout_ms)
-      process.send(actor, InteractionDone(result))
+      process.send(done, result)
       Nil
     }
 
@@ -140,7 +170,7 @@ fn loop(
         }
       }
 
-      loop(inbox, actor, mode, cfg, state, push_timeout_ms)
+      loop(inbox, done, mode, cfg, state, push_timeout_ms)
     }
   }
 }
@@ -165,10 +195,13 @@ fn finish_sink(
   mode: Mode,
   result: Result(output.InteractionResult, output.InteractionError),
   push_timeout_ms: Int,
-) -> Result(Nil, CallError) {
+) -> Nil {
   case mode {
-    Discard -> Ok(Nil)
-    Active(s) -> sink.finish(s, result, push_timeout_ms)
+    Discard -> Nil
+    Active(s) -> {
+      let _ = sink.finish(s, result, push_timeout_ms)
+      Nil
+    }
   }
 }
 
