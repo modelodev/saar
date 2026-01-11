@@ -798,7 +798,8 @@ fn build_multipart(
   file: types_input.FileRef,
   file_bits: BitArray,
 ) -> Result(#(String, String), String) {
-  let boundary = "sad_boundary_" <> int.to_string(ffi.now_ms())
+  let boundary =
+    "sad_boundary_" <> int.to_string(int.absolute_value(ffi.now_ms()))
 
   use file_content <- result.try(
     bit_array.to_string(file_bits)
