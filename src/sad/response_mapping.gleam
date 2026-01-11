@@ -22,7 +22,9 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import sad/json_pointer
+import sad/types/core as types_core
 import sad/types/enums as types_enums
+import sad/types/output as types_output
 import sad/types/profile as types_profile
 
 type MappingFailure {
@@ -33,11 +35,6 @@ type MappingFailure {
 /// Output from applying a response mapping.
 pub type MappingResult {
   MappingResult(text: Option(String), artifacts: Option(List(json.Json)))
-}
-
-/// Errors produced while applying a response mapping.
-pub type MappingError {
-  MappingError(kind: types_enums.ErrorKind, message: String)
 }
 
 /// Applies response mapping pointers to a dynamic payload.
@@ -65,11 +62,14 @@ pub type MappingError {
 /// response_mapping.apply_response_mapping(Some(mapping), payload)
 /// ```
 pub fn apply_response_mapping(
+  trace_id: types_core.TraceId,
   mapping: Option(types_profile.ResponseMapping),
   body: dynamic.Dynamic,
-) -> Result(MappingResult, MappingError) {
+) -> Result(MappingResult, types_output.SadError) {
   apply_response_mapping_pure(mapping, body)
-  |> result.map_error(mapping_failure_to_error)
+  |> result.map_error(fn(failure) {
+    mapping_failure_to_error(trace_id, failure)
+  })
 }
 
 fn apply_response_mapping_pure(
@@ -203,32 +203,42 @@ fn describe_dynamic(value: dynamic.Dynamic) -> String {
   }
 }
 
-fn mapping_failure_to_error(failure: MappingFailure) -> MappingError {
+fn mapping_failure_to_error(
+  trace_id: types_core.TraceId,
+  failure: MappingFailure,
+) -> types_output.SadError {
   case failure {
-    InvalidPointer(pointer) -> invalid_pointer(pointer)
-    WrongType(expected, pointer, got) -> wrong_type(expected, pointer, got)
+    InvalidPointer(pointer) -> invalid_pointer(trace_id, pointer)
+    WrongType(expected, pointer, got) ->
+      wrong_type(trace_id, expected, pointer, got)
   }
 }
 
-fn invalid_pointer(pointer: String) -> MappingError {
-  MappingError(
-    kind: types_enums.BadRequest,
-    message: "Invalid JSON pointer '" <> pointer <> "'",
+fn invalid_pointer(
+  trace_id: types_core.TraceId,
+  pointer: String,
+) -> types_output.SadError {
+  types_output.sad_error(
+    trace_id,
+    types_enums.BadRequest,
+    "Invalid JSON pointer '" <> pointer <> "'",
   )
 }
 
 fn wrong_type(
+  trace_id: types_core.TraceId,
   expected: String,
   pointer: Option(String),
   got: String,
-) -> MappingError {
+) -> types_output.SadError {
   let suffix = case pointer {
     Some(value) -> " at '" <> value <> "'"
     None -> ""
   }
 
-  MappingError(
-    kind: types_enums.AgentError,
-    message: "Expected " <> expected <> suffix <> ", got " <> got,
+  types_output.sad_error(
+    trace_id,
+    types_enums.AgentError,
+    "Expected " <> expected <> suffix <> ", got " <> got,
   )
 }

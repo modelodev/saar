@@ -28,4 +28,4 @@ e2e-transient: wrapper
 e2e-echo: e2e-transient
 
 docs-limits:
-	gleam run -m sad/tools/limits_md
+	gleam run -m sad/docs/limits_md

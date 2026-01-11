@@ -41,14 +41,14 @@ pub fn execute_transient(
   streaming: Bool,
   timeout_ms: Int,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
-  let #(
-    max_runner_event_bytes,
-    max_stdout_bytes,
-    read_timeout_ms,
-    max_read_attempts,
-    shutdown_timeout_ms,
-    wrapper,
-  ) = runner_settings(config)
+  let types_config.RunnerExecSettings(
+    max_runner_event_bytes: max_runner_event_bytes,
+    max_stdout_bytes: max_stdout_bytes,
+    read_timeout_ms: read_timeout_ms,
+    max_read_attempts: max_read_attempts,
+    shutdown_timeout_ms: shutdown_timeout_ms,
+    wrapper: wrapper,
+  ) = types_config.runner_exec_settings(config)
 
   use events <- result.try(run_and_collect_events(
     runner_path,
@@ -96,14 +96,14 @@ pub fn run_provision(
   config: types_config.SadConfig,
   timeout_ms: Int,
 ) -> Result(types_runner.RunnerProvisionResult, types_output.InteractionError) {
-  let #(
-    max_runner_event_bytes,
-    max_stdout_bytes,
-    read_timeout_ms,
-    max_read_attempts,
-    shutdown_timeout_ms,
-    wrapper,
-  ) = runner_settings(config)
+  let types_config.RunnerExecSettings(
+    max_runner_event_bytes: max_runner_event_bytes,
+    max_stdout_bytes: max_stdout_bytes,
+    read_timeout_ms: read_timeout_ms,
+    max_read_attempts: max_read_attempts,
+    shutdown_timeout_ms: shutdown_timeout_ms,
+    wrapper: wrapper,
+  ) = types_config.runner_exec_settings(config)
   let args = list.append(runner_args, ["--provision"])
 
   use events <- result.try(run_and_collect_events(
@@ -514,26 +514,14 @@ fn runner_response_to_interaction_result(
   artifact_config: types_runner.ArtifactConfig,
   trace_id: types_core.TraceId,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
-  case response.status {
-    types_runner.StatusError -> {
-      let message = case response.error {
-        option.Some(err) -> err.message
-        option.None -> "Runner returned error"
-      }
-      let kind = case response.error {
-        option.Some(err) -> err.kind
-        option.None -> types_enums.InfraError
-      }
-      Error(types_output.InteractionError(
-        kind: kind,
-        message: message,
-        trace_id: trace_id,
-      ))
-    }
-    types_runner.StatusSuccess -> {
-      let data = response_data_from_runner(response.data)
+  case response {
+    types_runner.RunnerFailure(error: err, ..) ->
+      Error(types_output.sad_error(trace_id, err.kind, err.message))
+
+    types_runner.RunnerSuccess(data: data, artifacts: runner_artifacts) -> {
+      let data = response_data_from_runner(data)
       let artifacts =
-        artifacts.collect(response.artifacts, artifact_config)
+        artifacts.collect(runner_artifacts, artifact_config)
         |> result.map_error(fn(err) {
           interaction_error(
             trace_id,
@@ -570,38 +558,7 @@ fn interaction_error(
   trace_id: types_core.TraceId,
   message: String,
 ) -> types_output.InteractionError {
-  types_output.InteractionError(
-    kind: types_enums.InfraError,
-    message: message,
-    trace_id: trace_id,
-  )
-}
-
-fn runner_settings(
-  config: types_config.SadConfig,
-) -> #(Int, Int, Int, Int, Int, types_config.WrapperConfig) {
-  let types_config.SadConfig(
-    max_runner_event_bytes: max_runner_event_bytes,
-    max_stdout_bytes: max_stdout_bytes,
-    runner_io: runner_io,
-    shutdown_timeout_ms: shutdown_timeout_ms,
-    wrapper: wrapper,
-    ..,
-  ) = config
-
-  let types_config.RunnerIoConfig(
-    read_timeout_ms: read_timeout_ms,
-    max_read_attempts: max_read_attempts,
-  ) = runner_io
-
-  #(
-    max_runner_event_bytes,
-    max_stdout_bytes,
-    read_timeout_ms,
-    max_read_attempts,
-    shutdown_timeout_ms,
-    wrapper,
-  )
+  types_output.sad_error(trace_id, types_enums.InfraError, message)
 }
 
 fn append_wrapper_env(

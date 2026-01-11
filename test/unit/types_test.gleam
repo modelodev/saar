@@ -90,32 +90,56 @@ pub fn default_config_invariants_test() {
     server_host: server_host,
     server_port: server_port,
     api_key: api_key,
+    timeouts: timeouts,
+    profiles: profiles,
+    runner: runner_cfg,
+    storage: storage,
+    limits: limits,
+    stream: stream,
+    landlock_mode: landlock_mode,
+  ) = types_config.default_sad_config()
+
+  let types_config.SadTimeouts(
     call_timeout_ms: call_timeout_ms,
     status_timeout_ms: status_timeout_ms,
     registry_timeout_ms: registry_timeout_ms,
     health_check_timeout_ms: health_check_timeout_ms,
     shutdown_timeout_ms: shutdown_timeout_ms,
-    profiles_sources: profiles_sources,
-    profiles_git_cache_dir: profiles_git_cache_dir,
-    runners_python_bin: runners_python_bin,
+  ) = timeouts
+
+  let types_config.ProfilesConfig(
+    sources: profiles_sources,
+    git_cache_dir: profiles_git_cache_dir,
+  ) = profiles
+
+  let types_config.RunnerSystemConfig(
+    python_bin: runners_python_bin,
+    io: runner_io,
+    wrapper: wrapper,
+    port_range_min: port_range_min,
+    port_range_max: port_range_max,
+    managed_port_host: managed_port_host,
+  ) = runner_cfg
+
+  let types_config.StorageConfig(
     workspaces_directory: workspaces_directory,
+    artifacts: artifacts,
+  ) = storage
+
+  let types_config.SadLimits(
     log_buffer_bytes: log_buffer_bytes,
     max_stdout_bytes: max_stdout_bytes,
     max_runner_event_bytes: max_runner_event_bytes,
     max_request_body_bytes: max_request_body_bytes,
     max_http_response_bytes: max_http_response_bytes,
     max_file_fetch_bytes: max_file_fetch_bytes,
-    port_range_min: port_range_min,
-    port_range_max: port_range_max,
+  ) = limits
+
+  let types_config.StreamConfig(
     sse_keep_alive_interval_ms: sse_keep_alive_interval_ms,
     log_stream: log_stream,
     interaction_stream: interaction_stream,
-    runner_io: runner_io,
-    wrapper: wrapper,
-    artifacts: artifacts,
-    managed_port_host: managed_port_host,
-    landlock_mode: landlock_mode,
-  ) = types_config.default_sad_config()
+  ) = stream
 
   server_host |> should.equal("0.0.0.0")
   server_port |> should.equal(8080)
@@ -186,13 +210,7 @@ pub fn default_config_invariants_test() {
 }
 
 pub fn runner_event_variants_test() {
-  let response =
-    types_runner.RunnerResponse(
-      status: types_runner.StatusSuccess,
-      data: None,
-      artifacts: [],
-      error: None,
-    )
+  let response = types_runner.RunnerSuccess(data: None, artifacts: [])
 
   let events = [
     types_runner.RunnerEventLog(message: "ok", level: "info"),

@@ -36,7 +36,7 @@ pub fn transient_echo_happy_test() {
       input,
       config,
       False,
-      config.call_timeout_ms,
+      config.timeouts.call_timeout_ms,
     )
 
   let assert Ok(output) = result
@@ -73,7 +73,7 @@ pub fn transient_invalid_json_fails_test() {
       input,
       config,
       False,
-      config.call_timeout_ms,
+      config.timeouts.call_timeout_ms,
     )
 
   let assert Error(err) = result
@@ -100,7 +100,7 @@ pub fn provision_requires_single_result_test() {
       ".",
       input,
       config,
-      config.call_timeout_ms,
+      config.timeouts.call_timeout_ms,
     )
 
   let assert Error(err) = result
@@ -126,7 +126,7 @@ pub fn streaming_chunks_ok_test() {
       input,
       config,
       True,
-      config.call_timeout_ms,
+      config.timeouts.call_timeout_ms,
     )
 
   let assert Ok(_) = result
@@ -140,7 +140,7 @@ pub fn streaming_chunks_ok_test() {
       input,
       config,
       False,
-      config.call_timeout_ms,
+      config.timeouts.call_timeout_ms,
     )
 
   let assert Error(err) = result
@@ -166,7 +166,7 @@ pub fn runner_crash_returns_infra_error_test() {
       input,
       config,
       False,
-      config.call_timeout_ms,
+      config.timeouts.call_timeout_ms,
     )
 
   let assert Error(err) = result
@@ -179,8 +179,15 @@ pub fn transient_timeout_stops_runner_test() {
   let workspace = "./build/test-workspaces/timeout"
   let _ = ensure_workspace(workspace)
   let marker = workspace <> "/stopped.txt"
+  let base = default_config()
   let config =
-    types_config.SadConfig(..default_config(), shutdown_timeout_ms: 100)
+    types_config.SadConfig(
+      ..base,
+      timeouts: types_config.SadTimeouts(
+        ..base.timeouts,
+        shutdown_timeout_ms: 100,
+      ),
+    )
   let input =
     runner_fixtures.base_input(
       runner_fixtures.default_chat_payload(),
@@ -231,7 +238,7 @@ pub fn artifact_collection_respects_globs_test() {
       input,
       config,
       False,
-      config.call_timeout_ms,
+      config.timeouts.call_timeout_ms,
     )
 
   let assert Ok(types_output.InteractionResult(artifacts: artifacts, ..)) =
@@ -255,7 +262,7 @@ pub fn artifact_collection_respects_globs_test() {
       input,
       config,
       False,
-      config.call_timeout_ms,
+      config.timeouts.call_timeout_ms,
     )
 
   let assert Ok(types_output.InteractionResult(artifacts: artifacts, ..)) =
@@ -288,7 +295,7 @@ pub fn artifact_id_is_uuid_v7_test() {
       input,
       sad_config,
       False,
-      sad_config.call_timeout_ms,
+      sad_config.timeouts.call_timeout_ms,
     )
 
   let assert Ok(types_output.InteractionResult(artifacts: artifacts, ..)) =

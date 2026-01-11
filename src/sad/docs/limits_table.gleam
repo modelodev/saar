@@ -1,8 +1,27 @@
+//// Parse and render the canonical limits table used in `docs/plan/limits.*`.
+////
+//// Responsibilities:
+//// - Parse a small TOML-like format (see `docs/plan/limits.toml`) into typed entries.
+//// - Render entries as a Markdown table used in documentation.
+//// - Provide small helpers for consuming defaults.
+////
+//// Non-responsibilities:
+//// - File IO (reading/writing docs).
+//// - CLI argument parsing or process/env configuration.
+////
+//// Relationships:
+//// - Used by `sad/docs/limits_md` to generate `docs/plan/limits.md`.
+//// - Used by tests to validate documentation consistency.
+
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 
+/// A single limits table entry.
+///
+/// Each entry describes a config/CLI key, its type, the canonical default,
+/// the sprint that introduced it, and a short usage note.
 pub type LimitEntry {
   LimitEntry(
     key: String,
@@ -23,11 +42,49 @@ type PartialEntry {
   )
 }
 
+/// Parse `docs/plan/limits.toml` content into a list of entries.
+///
+/// Returns `Error(String)` with a short reason code when the content is invalid.
+///
+/// Example:
+/// ```
+/// let entries = limits_table.parse_toml(toml_text)
+/// ```
 pub fn parse_toml(content: String) -> Result(List(LimitEntry), String) {
   let lines = string.split(content, "\n")
   parse_lines(lines, None, [])
 }
 
+/// Render entries as a Markdown document.
+///
+/// The output matches the canonical `docs/plan/limits.md` format.
+///
+/// Example:
+/// ```
+/// let md = limits_table.render_markdown(entries)
+/// ```
+/// Parse TOML content and render it as the canonical Markdown document.
+///
+/// This is a convenience helper equivalent to `parse_toml` followed by
+/// `render_markdown`.
+///
+/// Example:
+/// ```
+/// let md = limits_table.render_markdown_from_toml(toml_text)
+/// ```
+pub fn render_markdown_from_toml(content: String) -> Result(String, String) {
+  use entries <- result.try(parse_toml(content))
+  Ok(render_markdown(entries))
+}
+
+/// Render entries as a Markdown document.
+///
+/// The output matches the canonical `docs/plan/limits.md` format.
+///
+/// Example:
+/// ```
+/// let md = limits_table.render_markdown(entries)
+/// ```
 pub fn render_markdown(entries: List(LimitEntry)) -> String {
   let header = [
     "# Limits y defaults canonicos",
@@ -57,6 +114,14 @@ pub fn render_markdown(entries: List(LimitEntry)) -> String {
   <> "\n"
 }
 
+/// Extract a list of `#(key, default)` pairs.
+///
+/// Useful for generating config defaults or validating consistency.
+///
+/// Example:
+/// ```
+/// let defaults = limits_table.defaults_by_key(entries)
+/// ```
 pub fn defaults_by_key(entries: List(LimitEntry)) -> List(#(String, String)) {
   entries
   |> list.map(fn(entry) {

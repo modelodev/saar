@@ -7,6 +7,7 @@ import gleeunit
 import gleeunit/should
 import sad/decoders
 import sad/response_mapping
+import sad/types/core as types_core
 import sad/types/profile as types_profile
 import simplifile
 
@@ -41,7 +42,11 @@ pub fn response_mapping_profile_fixture_test() {
     ])
 
   let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =
-    response_mapping.apply_response_mapping(Some(mapping), body)
+    response_mapping.apply_response_mapping(
+      types_core.trace_id("trace-1"),
+      Some(mapping),
+      body,
+    )
 
   text |> should.equal(Some("ok"))
   let assert Some(items) = artifacts

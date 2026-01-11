@@ -7,6 +7,7 @@
 //// - Maintain port reservations per instance.
 //// - Allocate the next available port in a range.
 //// - Optionally check host bind availability via a callback.
+//// - Provide allocation metadata for safe release+retry orchestration.
 ////
 //// Non-responsibilities:
 //// - Performing OS-level checks directly (callers supply `check`).
@@ -21,6 +22,7 @@
 //// - The pool may keep an internal cursor to reduce repeated scans under contention.
 
 import gleam/dict
+import gleam/result
 import sad/types/core as types_core
 
 /// Errors that can occur when allocating from a port pool.
@@ -34,6 +36,10 @@ pub type PortPoolError {
   /// This can happen when all candidates are occupied, or due to a race between a
   /// successful availability check and a later bind/use step (see `sad/port_pool/checked`).
   PortInUse
+  /// The host format is unsupported by the bind checker.
+  BindCheckInvalidHost(host: String)
+  /// Binding was not permitted by the runtime.
+  BindCheckPermissionDenied
   /// The bind check failed with a runtime reason.
   BindCheckFailed(reason: String)
   /// No checked port became available after retries.
@@ -46,8 +52,40 @@ pub type PortPoolError {
 pub type PortCheckError {
   /// The port is in use.
   CheckPortInUse
+  /// The host format is unsupported.
+  CheckInvalidHost(host: String)
+  /// Binding was not permitted by the runtime.
+  CheckPermissionDenied
   /// Binding failed for an OS/runtime reason.
   CheckBindFailed(reason: String)
+}
+
+/// Indicates whether an allocation reused an existing reservation.
+///
+/// This is useful for higher-level orchestration that wants to safely release and
+/// retry only when a reservation was created as part of the current operation.
+pub type AllocationSource {
+  /// The instance already had a reservation.
+  ExistingReservation
+  /// A new reservation was created.
+  NewReservation
+}
+
+/// Maps a bind-check error into a pool-level error.
+///
+/// Example:
+/// ```gleam
+/// import sad/port_pool
+///
+/// port_pool.port_check_error_to_pool_error(port_pool.CheckPermissionDenied)
+/// ```
+pub fn port_check_error_to_pool_error(err: PortCheckError) -> PortPoolError {
+  case err {
+    CheckPortInUse -> PortInUse
+    CheckInvalidHost(host: host) -> BindCheckInvalidHost(host: host)
+    CheckPermissionDenied -> BindCheckPermissionDenied
+    CheckBindFailed(reason) -> BindCheckFailed(reason)
+  }
 }
 
 /// Pool state and reservations.
@@ -130,6 +168,26 @@ pub fn allocate_checked(
   instance_id: types_core.InstanceId,
   check: fn(Int) -> Result(Nil, PortCheckError),
 ) -> Result(#(PortPool, Int), PortPoolError) {
+  use #(next_pool, port, _) <- result.try(allocate_checked_with_source(
+    pool,
+    instance_id,
+    check,
+  ))
+  Ok(#(next_pool, port))
+}
+
+/// Allocates a port like `allocate_checked`, also returning how it was obtained.
+///
+/// This is useful for higher-level orchestration that needs to know whether it
+/// may safely release and retry after a later "use" step fails.
+///
+/// If the instance already has a reservation, this returns `ExistingReservation`
+/// and does not re-run `check`.
+pub fn allocate_checked_with_source(
+  pool: PortPool,
+  instance_id: types_core.InstanceId,
+  check: fn(Int) -> Result(Nil, PortCheckError),
+) -> Result(#(PortPool, Int, AllocationSource), PortPoolError) {
   let PortPool(
     min_port,
     max_port,
@@ -139,24 +197,21 @@ pub fn allocate_checked(
   ) = pool
 
   case dict.get(reserved_by_instance, instance_id) {
-    Ok(port) -> Ok(#(pool, port))
+    Ok(port) -> Ok(#(pool, port, ExistingReservation))
     Error(_) -> {
       let range_size = max_port - min_port + 1
 
-      case
-        find_checked_port(
-          next_port,
-          min_port,
-          max_port,
-          reserved_ports,
-          check,
-          range_size,
-          0,
-        )
-      {
-        Ok(port) -> Ok(#(reserve(pool, instance_id, port), port))
-        Error(err) -> Error(err)
-      }
+      use port <- result.try(find_checked_port(
+        next_port,
+        min_port,
+        max_port,
+        reserved_ports,
+        check,
+        range_size,
+        0,
+      ))
+
+      Ok(#(reserve(pool, instance_id, port), port, NewReservation))
     }
   }
 }
@@ -220,34 +275,76 @@ fn find_checked_port(
   case remaining <= 0 {
     True -> Error(exhausted_checked_error(attempts))
     False ->
-      case dict.has_key(reserved_ports, current) {
-        True ->
-          find_checked_port(
-            wrap_port(current + 1, min_port, max_port),
-            min_port,
-            max_port,
-            reserved_ports,
-            check,
-            remaining - 1,
-            attempts,
-          )
+      find_checked_port_unreserved(
+        current,
+        min_port,
+        max_port,
+        reserved_ports,
+        check,
+        remaining,
+        attempts,
+      )
+  }
+}
 
-        False ->
-          case check(current) {
-            Ok(_) -> Ok(current)
-            Error(CheckPortInUse) ->
-              find_checked_port(
-                wrap_port(current + 1, min_port, max_port),
-                min_port,
-                max_port,
-                reserved_ports,
-                check,
-                remaining - 1,
-                attempts + 1,
-              )
-            Error(CheckBindFailed(reason)) -> Error(BindCheckFailed(reason))
-          }
-      }
+fn find_checked_port_unreserved(
+  current: Int,
+  min_port: Int,
+  max_port: Int,
+  reserved_ports: dict.Dict(Int, types_core.InstanceId),
+  check: fn(Int) -> Result(Nil, PortCheckError),
+  remaining: Int,
+  attempts: Int,
+) -> Result(Int, PortPoolError) {
+  case dict.has_key(reserved_ports, current) {
+    True ->
+      find_checked_port(
+        wrap_port(current + 1, min_port, max_port),
+        min_port,
+        max_port,
+        reserved_ports,
+        check,
+        remaining - 1,
+        attempts,
+      )
+
+    False ->
+      find_checked_port_checked(
+        current,
+        min_port,
+        max_port,
+        reserved_ports,
+        check,
+        remaining,
+        attempts,
+      )
+  }
+}
+
+fn find_checked_port_checked(
+  current: Int,
+  min_port: Int,
+  max_port: Int,
+  reserved_ports: dict.Dict(Int, types_core.InstanceId),
+  check: fn(Int) -> Result(Nil, PortCheckError),
+  remaining: Int,
+  attempts: Int,
+) -> Result(Int, PortPoolError) {
+  case check(current) {
+    Ok(_) -> Ok(current)
+
+    Error(CheckPortInUse) ->
+      find_checked_port(
+        wrap_port(current + 1, min_port, max_port),
+        min_port,
+        max_port,
+        reserved_ports,
+        check,
+        remaining - 1,
+        attempts + 1,
+      )
+
+    Error(err) -> Error(port_check_error_to_pool_error(err))
   }
 }
 

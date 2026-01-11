@@ -10,7 +10,9 @@ import gleam/result
 import gleam/string
 import sad/json_pointer
 import sad/types/core as types_core
+import sad/types/enums as types_enums
 import sad/types/input as types_input
+import sad/types/output as types_output
 import sad/types/resolved_params
 
 pub type RunnerAddress {
@@ -41,7 +43,7 @@ type Token {
   Placeholder(namespace: String, key: String)
 }
 
-pub type InterpolationError {
+type InterpolationError {
   UnknownNamespace(namespace: String, key: String)
   UnknownKey(namespace: String, key: String)
   ValueNotScalar(key: String)
@@ -49,7 +51,7 @@ pub type InterpolationError {
   InvalidPlaceholder(placeholder: String)
 }
 
-pub fn interpolation_error_to_string(err: InterpolationError) -> String {
+fn interpolation_error_to_string(err: InterpolationError) -> String {
   case err {
     UnknownNamespace(ns, key) ->
       "Interpolation failed: Unknown namespace '{{" <> ns <> "." <> key <> "}}'"
@@ -64,7 +66,26 @@ pub fn interpolation_error_to_string(err: InterpolationError) -> String {
   }
 }
 
+fn to_sad_error(
+  trace_id: types_core.TraceId,
+  err: InterpolationError,
+) -> types_output.SadError {
+  types_output.sad_error(
+    trace_id,
+    types_enums.BadRequest,
+    interpolation_error_to_string(err),
+  )
+}
+
 pub fn interpolate_string(
+  template: String,
+  ctx: InterpContext,
+) -> Result(String, types_output.SadError) {
+  interpolate_string_pure(template, ctx)
+  |> result.map_error(fn(err) { to_sad_error(ctx.context.trace_id, err) })
+}
+
+fn interpolate_string_pure(
   template: String,
   ctx: InterpContext,
 ) -> Result(String, InterpolationError) {
@@ -100,12 +121,20 @@ pub fn build_context(
 pub fn interpolate_dict(
   templates: Dict(String, String),
   ctx: InterpContext,
+) -> Result(Dict(String, String), types_output.SadError) {
+  interpolate_dict_pure(templates, ctx)
+  |> result.map_error(fn(err) { to_sad_error(ctx.context.trace_id, err) })
+}
+
+fn interpolate_dict_pure(
+  templates: Dict(String, String),
+  ctx: InterpContext,
 ) -> Result(Dict(String, String), InterpolationError) {
   templates
   |> dict.to_list
   |> list.try_map(fn(pair) {
     let #(k, v) = pair
-    use interpolated <- result.try(interpolate_string(v, ctx))
+    use interpolated <- result.try(interpolate_string_pure(v, ctx))
     Ok(#(k, interpolated))
   })
   |> result.map(dict.from_list)
@@ -114,11 +143,27 @@ pub fn interpolate_dict(
 pub fn interpolate_list(
   templates: List(String),
   ctx: InterpContext,
+) -> Result(List(String), types_output.SadError) {
+  interpolate_list_pure(templates, ctx)
+  |> result.map_error(fn(err) { to_sad_error(ctx.context.trace_id, err) })
+}
+
+fn interpolate_list_pure(
+  templates: List(String),
+  ctx: InterpContext,
 ) -> Result(List(String), InterpolationError) {
-  list.try_map(templates, fn(t) { interpolate_string(t, ctx) })
+  list.try_map(templates, fn(t) { interpolate_string_pure(t, ctx) })
 }
 
 pub fn interpolate_json(
+  template: json.Json,
+  ctx: InterpContext,
+) -> Result(json.Json, types_output.SadError) {
+  interpolate_json_pure(template, ctx)
+  |> result.map_error(fn(err) { to_sad_error(ctx.context.trace_id, err) })
+}
+
+fn interpolate_json_pure(
   template: json.Json,
   ctx: InterpContext,
 ) -> Result(json.Json, InterpolationError) {
@@ -135,6 +180,15 @@ pub fn interpolate_json(
 }
 
 pub fn resolve_json_pointer(
+  trace_id: types_core.TraceId,
+  pointer: String,
+  value: json.Json,
+) -> Result(json.Json, types_output.SadError) {
+  resolve_json_pointer_pure(pointer, value)
+  |> result.map_error(fn(err) { to_sad_error(trace_id, err) })
+}
+
+fn resolve_json_pointer_pure(
   pointer: String,
   value: json.Json,
 ) -> Result(json.Json, InterpolationError) {
@@ -144,6 +198,15 @@ pub fn resolve_json_pointer(
 }
 
 pub fn resolve_placeholder(
+  namespace: String,
+  key: String,
+  ctx: InterpContext,
+) -> Result(String, types_output.SadError) {
+  resolve_placeholder_pure(namespace, key, ctx)
+  |> result.map_error(fn(err) { to_sad_error(ctx.context.trace_id, err) })
+}
+
+fn resolve_placeholder_pure(
   namespace: String,
   key: String,
   ctx: InterpContext,

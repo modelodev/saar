@@ -7,7 +7,9 @@ import gleeunit
 import gleeunit/should
 import sad/bridge/interpolator
 import sad/types/core as types_core
+import sad/types/enums as types_enums
 import sad/types/input as types_input
+import sad/types/output as types_output
 import sad/types/resolved_params
 
 pub fn main() {
@@ -91,14 +93,26 @@ pub fn interpolate_missing_test() {
   let ctx = base_context(dict.new())
 
   interpolator.interpolate_string("{{params.missing}}", ctx)
-  |> should.equal(Error(interpolator.UnknownKey("params", "missing")))
+  |> should.equal(
+    Error(types_output.InteractionError(
+      kind: types_enums.BadRequest,
+      message: "Interpolation failed: Unknown key '{{params.missing}}'",
+      trace_id: ctx.context.trace_id,
+    )),
+  )
 }
 
 pub fn interpolate_invalid_placeholder_literal_test() {
   let ctx = base_context(dict.new())
 
   interpolator.interpolate_string("keep {{bad..key}}", ctx)
-  |> should.equal(Error(interpolator.InvalidPlaceholder("bad..key")))
+  |> should.equal(
+    Error(types_output.InteractionError(
+      kind: types_enums.BadRequest,
+      message: "Interpolation failed: Invalid placeholder '{{bad..key}}'",
+      trace_id: ctx.context.trace_id,
+    )),
+  )
 }
 
 pub fn interpolate_json_nested_objects_test() {
@@ -283,7 +297,13 @@ pub fn interpolate_json_from_pointer_invalid_test() {
     ])
 
   interpolator.interpolate_json(template, ctx)
-  |> should.equal(Error(interpolator.InvalidPointer("/input/missing")))
+  |> should.equal(
+    Error(types_output.InteractionError(
+      kind: types_enums.BadRequest,
+      message: "Interpolation failed: Invalid JSON pointer '/input/missing'",
+      trace_id: ctx.context.trace_id,
+    )),
+  )
 }
 
 pub fn interpolate_helpers_test() {
@@ -321,7 +341,13 @@ pub fn interpolate_runner_test() {
   let transient_ctx = base_context(dict.new())
 
   interpolator.interpolate_string("{{runner.host}}", transient_ctx)
-  |> should.equal(Error(interpolator.UnknownKey("runner", "host")))
+  |> should.equal(
+    Error(types_output.InteractionError(
+      kind: types_enums.BadRequest,
+      message: "Interpolation failed: Unknown key '{{runner.host}}'",
+      trace_id: transient_ctx.context.trace_id,
+    )),
+  )
 }
 
 pub fn interpolate_input_extra_params_test() {
@@ -341,7 +367,13 @@ pub fn interpolate_value_not_scalar_test() {
   let ctx = context_with_input(dict.new(), input)
 
   interpolator.interpolate_string("{{input.files}}", ctx)
-  |> should.equal(Error(interpolator.ValueNotScalar("input.files")))
+  |> should.equal(
+    Error(types_output.InteractionError(
+      kind: types_enums.BadRequest,
+      message: "Interpolation failed: Value for 'input.files' is not scalar",
+      trace_id: ctx.context.trace_id,
+    )),
+  )
 
   let files_input =
     types_input.PayloadFiles([
@@ -356,5 +388,11 @@ pub fn interpolate_value_not_scalar_test() {
   let files_ctx = context_with_input(dict.new(), files_input)
 
   interpolator.interpolate_string("{{helpers.last_user_files}}", files_ctx)
-  |> should.equal(Error(interpolator.ValueNotScalar("helpers.last_user_files")))
+  |> should.equal(
+    Error(types_output.InteractionError(
+      kind: types_enums.BadRequest,
+      message: "Interpolation failed: Value for 'helpers.last_user_files' is not scalar",
+      trace_id: files_ctx.context.trace_id,
+    )),
+  )
 }

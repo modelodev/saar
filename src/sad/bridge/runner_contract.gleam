@@ -143,12 +143,14 @@ fn decode_result(
   use error <- result.try(parse_runner_error(raw.error))
 
   Ok(
-    types_runner.RunnerEventResult(response: types_runner.RunnerResponse(
-      status: status,
-      data: raw.data,
-      artifacts: raw.artifacts,
-      error: error,
-    )),
+    types_runner.RunnerEventResult(
+      response: types_runner.runner_response_from_raw(
+        status,
+        raw.data,
+        raw.artifacts,
+        error,
+      ),
+    ),
   )
 }
 

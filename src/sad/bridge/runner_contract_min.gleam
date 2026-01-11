@@ -42,17 +42,14 @@ fn decode_result(line: String) -> Result(types_runner.RunnerEvent, JsonlError) {
     decoder,
     InvalidJson,
   ))
-  use status_value <- result.try(contract_common.parse_status(
+  use _status_value <- result.try(contract_common.parse_status(
     status,
     UnknownStatus,
   ))
 
   Ok(
-    types_runner.RunnerEventResult(response: types_runner.RunnerResponse(
-      status: status_value,
-      data: None,
-      artifacts: [],
-      error: None,
-    )),
+    types_runner.RunnerEventResult(
+      response: types_runner.RunnerSuccess(data: None, artifacts: []),
+    ),
   )
 }

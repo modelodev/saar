@@ -11,12 +11,6 @@ import test_assertions
 
 const host = "127.0.0.1"
 
-fn is_eperm_reason(reason: String) -> Bool {
-  reason
-  |> string.lowercase
-  |> string.contains("eperm")
-}
-
 pub fn main() {
   gleeunit.main()
 }
@@ -28,14 +22,13 @@ fn instance_id(value: String) -> types_core.InstanceId {
 
 pub fn port_pool_checked_in_use_returns_error_test() {
   case tcp_listener.listen(host, 0) {
+    Error(tcp_listener.ListenPermissionDenied) -> Nil
     Error(tcp_listener.ListenFailed(reason)) ->
-      case is_eperm_reason(reason) {
-        True -> Nil
-        False ->
-          panic as { "Expected Ok, got Error: " <> string.inspect(reason) }
-      }
+      panic as { "Expected Ok, got Error: " <> string.inspect(reason) }
     Error(tcp_listener.ListenInUse) ->
       panic as "Expected Ok, got Error: ListenInUse"
+    Error(tcp_listener.ListenInvalidHost(host: _)) ->
+      panic as "Expected Ok, got Error: ListenInvalidHost"
     Ok(#(listener, port)) -> {
       let pool =
         port_pool.init(port, port)
@@ -51,12 +44,8 @@ pub fn port_pool_checked_in_use_returns_error_test() {
       tcp_listener.close(listener)
 
       case result {
-        Error(port_pool.BindCheckFailed(reason)) ->
-          case is_eperm_reason(reason) {
-            True -> Nil
-            False -> result |> should.equal(Error(port_pool.PortInUse))
-          }
-        _ -> result |> should.equal(Error(port_pool.PortInUse))
+        Error(port_pool.BindCheckPermissionDenied) -> Nil
+        other -> other |> should.equal(Error(port_pool.PortInUse))
       }
     }
   }
@@ -64,14 +53,13 @@ pub fn port_pool_checked_in_use_returns_error_test() {
 
 pub fn port_pool_checked_race_fails_fast_test() {
   case tcp_listener.listen(host, 0) {
+    Error(tcp_listener.ListenPermissionDenied) -> Nil
     Error(tcp_listener.ListenFailed(reason)) ->
-      case is_eperm_reason(reason) {
-        True -> Nil
-        False ->
-          panic as { "Expected Ok, got Error: " <> string.inspect(reason) }
-      }
+      panic as { "Expected Ok, got Error: " <> string.inspect(reason) }
     Error(tcp_listener.ListenInUse) ->
       panic as "Expected Ok, got Error: ListenInUse"
+    Error(tcp_listener.ListenInvalidHost(host: _)) ->
+      panic as "Expected Ok, got Error: ListenInvalidHost"
     Ok(#(seed_listener, seed_port)) -> {
       tcp_listener.close(seed_listener)
 
@@ -108,18 +96,7 @@ pub fn port_pool_checked_race_fails_fast_test() {
         )
 
       case result {
-        Error(port_pool.BindCheckFailed(reason)) ->
-          case is_eperm_reason(reason) {
-            True -> Nil
-            False -> {
-              result |> should.equal(Error(port_pool.PortInUse))
-
-              let assert Ok(result2) =
-                port_pool.allocate(pool0, instance_id("inst-2"))
-              let #(_, port) = result2
-              port |> should.equal(seed_port)
-            }
-          }
+        Error(port_pool.BindCheckPermissionDenied) -> Nil
         _ -> {
           result |> should.equal(Error(port_pool.PortInUse))
 

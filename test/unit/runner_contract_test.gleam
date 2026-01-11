@@ -51,10 +51,7 @@ pub fn allows_result_first_test() {
 }
 
 fn success_result() -> types_runner.RunnerEvent {
-  types_runner.RunnerEventResult(response: types_runner.RunnerResponse(
-    status: types_runner.StatusSuccess,
-    data: option.None,
-    artifacts: [],
-    error: option.None,
-  ))
+  types_runner.RunnerEventResult(
+    response: types_runner.RunnerSuccess(data: option.None, artifacts: []),
+  )
 }

@@ -13,8 +13,10 @@ pub fn jsonl_result_ok_test() {
 
   case runner_contract_min.decode_runner_event(line) {
     Ok(types_runner.RunnerEventResult(response: response)) -> {
-      let types_runner.RunnerResponse(status: status, ..) = response
-      status |> should.equal(types_runner.StatusSuccess)
+      case response {
+        types_runner.RunnerSuccess(..) -> Nil
+        types_runner.RunnerFailure(..) -> panic as "Expected success result"
+      }
     }
     Ok(_) -> panic as "Expected result event"
     Error(_) -> panic as "Expected Ok result"

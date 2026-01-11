@@ -15,9 +15,18 @@
 import sad/net/tcp_listener
 import sad/port_pool
 
-/// Returns `Ok` when the host/port can be bound.
+/// Checks whether `host:port` can be bound.
+///
+/// This function is a small helper for `sad/port_pool`; it tries to listen on
+/// the given address and immediately closes the listener on success.
 ///
 /// Supported hosts: `localhost`, `0.0.0.0`, and IPv4 literals.
+///
+/// Errors:
+/// - `CheckPortInUse` when the port is already in use.
+/// - `CheckInvalidHost` when the host format is unsupported.
+/// - `CheckPermissionDenied` when binding is not permitted.
+/// - `CheckBindFailed` for other bind/listen failures.
 ///
 /// Example:
 /// ```gleam
@@ -35,6 +44,10 @@ pub fn check_available(
       Ok(Nil)
     }
     Error(tcp_listener.ListenInUse) -> Error(port_pool.CheckPortInUse)
+    Error(tcp_listener.ListenInvalidHost(host: host)) ->
+      Error(port_pool.CheckInvalidHost(host: host))
+    Error(tcp_listener.ListenPermissionDenied) ->
+      Error(port_pool.CheckPermissionDenied)
     Error(tcp_listener.ListenFailed(reason)) ->
       Error(port_pool.CheckBindFailed(reason))
   }

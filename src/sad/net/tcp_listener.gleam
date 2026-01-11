@@ -29,13 +29,23 @@ pub type Listener =
 pub type ListenError {
   /// The address/port tuple is already in use.
   ListenInUse
-  /// Binding failed for an OS/runtime reason or invalid host.
+  /// The host string is not supported by this module.
+  ListenInvalidHost(host: String)
+  /// The runtime denied permission to bind/listen.
+  ListenPermissionDenied
+  /// Binding failed for an OS/runtime reason.
   ListenFailed(reason: String)
 }
 
 /// Opens a TCP listener for the given host and port.
 ///
 /// Supported hosts: `localhost`, `0.0.0.0`, and IPv4 literals.
+///
+/// Errors:
+/// - `ListenInvalidHost` when the host format is unsupported.
+/// - `ListenPermissionDenied` when binding is not permitted.
+/// - `ListenInUse` when the address is already in use.
+/// - `ListenFailed` for other runtime failures.
 ///
 /// Example:
 /// ```gleam
@@ -48,23 +58,33 @@ pub type ListenError {
 pub fn listen(host: String, port: Int) -> Result(#(Listener, Int), ListenError) {
   use interface <- result.try(parse_interface(host))
 
-  let options = [
+  let listen_options = [
     options.Ip(interface),
     options.Reuseaddr(True),
     options.ActiveMode(options.Passive),
   ]
 
-  case tcp.listen(port, options) {
-    Ok(listener) ->
-      case tcp.sockname(listener) {
-        Ok(#(_, actual_port)) -> Ok(#(listener, actual_port))
-        Error(reason) -> {
-          let _ = tcp.close(listener)
-          Error(reason_to_listen_error(reason))
-        }
-      }
-    Error(reason) -> Error(reason_to_listen_error(reason))
+  use listener <- result.try(
+    tcp.listen(port, listen_options)
+    |> result.map_error(reason_to_listen_error),
+  )
+
+  case sockname_port(listener) {
+    Ok(actual_port) -> Ok(#(listener, actual_port))
+    Error(error) -> {
+      let _ = tcp.close(listener)
+      Error(error)
+    }
   }
+}
+
+fn sockname_port(listener: Listener) -> Result(Int, ListenError) {
+  tcp.sockname(listener)
+  |> result.map(fn(sockname) {
+    let #(_, actual_port) = sockname
+    actual_port
+  })
+  |> result.map_error(reason_to_listen_error)
 }
 
 /// Closes a TCP listener created with `listen`.
@@ -86,10 +106,9 @@ fn parse_interface(host: String) -> Result(options.Interface, ListenError) {
     "localhost" -> Ok(options.Loopback)
     "0.0.0.0" -> Ok(options.Any)
     _ ->
-      case parse_ipv4(host) {
-        Ok(address) -> Ok(options.Address(address))
-        Error(_) -> Error(ListenFailed("Unsupported host: " <> host))
-      }
+      parse_ipv4(host)
+      |> result.map(options.Address)
+      |> result.map_error(fn(_) { ListenInvalidHost(host: host) })
   }
 }
 
@@ -117,6 +136,8 @@ fn parse_octet(value: String) -> Result(Int, Nil) {
 fn reason_to_listen_error(reason: socket.SocketReason) -> ListenError {
   case reason {
     socket.Eaddrinuse -> ListenInUse
+    socket.Eacces -> ListenPermissionDenied
+    socket.Eperm -> ListenPermissionDenied
     _ -> ListenFailed(string.inspect(reason))
   }
 }

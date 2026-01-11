@@ -42,6 +42,47 @@ pub fn port_pool_allocate_checked_returns_port_test() {
   port |> should.equal(9050)
 }
 
+pub fn port_pool_allocate_checked_with_source_new_reservation_test() {
+  let pool0 = new_pool(9110, 9111)
+  let instance = instance_id("inst-1")
+  let check_ok = fn(_port) { Ok(Nil) }
+
+  let assert Ok(result) =
+    port_pool.allocate_checked_with_source(pool0, instance, check_ok)
+
+  let #(_, port, source) = result
+  port |> should.equal(9110)
+  source |> should.equal(port_pool.NewReservation)
+}
+
+pub fn port_pool_allocate_checked_with_source_existing_reservation_skips_check_test() {
+  let pool0 = new_pool(9120, 9121)
+  let instance = instance_id("inst-1")
+  let check_ok = fn(_port) { Ok(Nil) }
+
+  let assert Ok(result1) =
+    port_pool.allocate_checked_with_source(pool0, instance, check_ok)
+
+  let #(pool1, port, source1) = result1
+  port |> should.equal(9120)
+  source1 |> should.equal(port_pool.NewReservation)
+
+  let check_should_not_run = fn(_port) {
+    Error(port_pool.CheckBindFailed("should not run"))
+  }
+
+  let assert Ok(result2) =
+    port_pool.allocate_checked_with_source(
+      pool1,
+      instance,
+      check_should_not_run,
+    )
+
+  let #(_, same_port, source2) = result2
+  same_port |> should.equal(9120)
+  source2 |> should.equal(port_pool.ExistingReservation)
+}
+
 pub fn port_pool_allocate_checked_skips_in_use_test() {
   let pool0 = new_pool(9060, 9061)
   let instance = instance_id("inst-1")

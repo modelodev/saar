@@ -5,8 +5,8 @@ import gleeunit
 import gleeunit/should
 import port_helpers
 import sad/bridge/port_process
-import sad/ffi
 import sad/bridge/runner_contract
+import sad/ffi
 
 const max_event_bytes = 262_144
 

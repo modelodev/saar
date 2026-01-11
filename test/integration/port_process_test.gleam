@@ -1,5 +1,4 @@
 import gleeunit
-import gleeunit/should
 import port_helpers
 import sad/bridge/port_process
 import sad/bridge/runner_contract_min
@@ -75,8 +74,9 @@ pub fn echo_cli_result_is_received_test() {
   let event = test_assertions.assert_ok(event)
 
   case event {
-    types_runner.RunnerEventResult(response) ->
-      response.status |> should.equal(types_runner.StatusSuccess)
+    types_runner.RunnerEventResult(types_runner.RunnerSuccess(..)) -> Nil
+    types_runner.RunnerEventResult(types_runner.RunnerFailure(..)) ->
+      panic as "Expected success runner result"
     _ -> panic as "Expected t=result event"
   }
 
