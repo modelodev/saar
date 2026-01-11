@@ -197,7 +197,11 @@
           "branch": "feat/s08-t03-managed-port-semantics",
           "commit": "3d92afe56b47b956095745fee60a237a3884730b"
         },
-        "S08-T04": {"status": "pending", "branch": null},
+        "S08-T04": {
+          "status": "completed",
+          "branch": "feat/s08-t04-multipart-limits",
+          "commit": "630e8813cc1a91530a697303774c77b6b20b0413"
+        },
         "S08-T05": {"status": "pending", "branch": null}
       }
     }
