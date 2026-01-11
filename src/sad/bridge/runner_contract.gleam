@@ -1,11 +1,28 @@
+//// Runner JSONL contract.
+////
+//// Mission: decode runner-emitted JSONL events into `types_runner.RunnerEvent`
+//// values and validate basic stream invariants.
+////
+//// Responsibilities:
+//// - Decode event lines (`t=log|chunk|result|provision_result`).
+//// - Validate event sequence constraints (result presence, chunk vs streaming).
+//// - Enforce stdout size limits to avoid unbounded output.
+////
+//// Non-responsibilities:
+//// - Port I/O or JSONL framing (see `sad/bridge/port_process`).
+//// - Higher-level interaction orchestration.
+////
+//// Relationships:
+//// - Consumed by `sad/bridge/runner` when reading stdout.
+//// - Uses `sad/types/runner` and `sad/types/enums`.
+
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
-import gleam/json.{type Json}
+import gleam/json
 import gleam/list
 import gleam/option
 import gleam/result
 import gleam/string
-import sad/bridge/runner_contract_common as contract_common
 import sad/types/enums as types_enums
 import sad/types/runner as types_runner
 
@@ -23,7 +40,7 @@ pub type ContractError {
 pub fn decode_event(
   line: String,
 ) -> Result(types_runner.RunnerEvent, ContractError) {
-  case contract_common.decode_tag(line, InvalidJson) {
+  case decode_tag(line, InvalidJson) {
     Ok("log") -> decode_log(line)
     Ok("chunk") -> decode_chunk(line)
     Ok("result") -> decode_result(line)
@@ -82,7 +99,7 @@ type RawRunnerError {
 type RawResult {
   RawResult(
     status: String,
-    data: option.Option(Json),
+    data: option.Option(json.Json),
     artifacts: List(types_runner.ArtifactRef),
     error: option.Option(RawRunnerError),
   )
@@ -99,7 +116,7 @@ fn decode_log(line: String) -> Result(types_runner.RunnerEvent, ContractError) {
     decode.success(types_runner.RunnerEventLog(message: message, level: level))
   }
 
-  contract_common.parse_json(line, decoder, InvalidJson)
+  parse_json(line, decoder, InvalidJson)
 }
 
 fn decode_chunk(line: String) -> Result(types_runner.RunnerEvent, ContractError) {
@@ -108,7 +125,7 @@ fn decode_chunk(line: String) -> Result(types_runner.RunnerEvent, ContractError)
     decode.success(types_runner.RunnerEventChunk(delta: delta))
   }
 
-  contract_common.parse_json(line, decoder, InvalidJson)
+  parse_json(line, decoder, InvalidJson)
 }
 
 fn decode_result(
@@ -135,11 +152,8 @@ fn decode_result(
     ))
   }
 
-  use raw <- result.try(contract_common.parse_json(line, decoder, InvalidJson))
-  use status <- result.try(contract_common.parse_status(
-    raw.status,
-    UnknownStatus,
-  ))
+  use raw <- result.try(parse_json(line, decoder, InvalidJson))
+  use status <- result.try(parse_status(raw.status, UnknownStatus))
   use error <- result.try(parse_runner_error(raw.error))
 
   Ok(
@@ -167,11 +181,8 @@ fn decode_provision_result(
     decode.success(RawProvisionResult(status: status, log_files: log_files))
   }
 
-  use raw <- result.try(contract_common.parse_json(line, decoder, InvalidJson))
-  use status <- result.try(contract_common.parse_status(
-    raw.status,
-    UnknownStatus,
-  ))
+  use raw <- result.try(parse_json(line, decoder, InvalidJson))
+  use status <- result.try(parse_status(raw.status, UnknownStatus))
 
   Ok(
     types_runner.RunnerEventProvisionResult(
@@ -208,7 +219,7 @@ fn raw_runner_error_decoder() -> decode.Decoder(RawRunnerError) {
   decoder
 }
 
-fn json_option_decoder() -> decode.Decoder(option.Option(Json)) {
+fn json_option_decoder() -> decode.Decoder(option.Option(json.Json)) {
   decode.optional(decode.dynamic)
   |> decode.map(fn(value) { option.map(value, json_from_dynamic) })
 }
@@ -233,4 +244,36 @@ fn parse_error_kind(
 }
 
 @external(erlang, "gleam_stdlib", "identity")
-fn json_from_dynamic(data: Dynamic) -> Json
+fn json_from_dynamic(data: Dynamic) -> json.Json
+
+fn parse_json(
+  line: String,
+  decoder: decode.Decoder(a),
+  on_invalid_json: fn(String) -> e,
+) -> Result(a, e) {
+  json.parse(line, decoder)
+  |> result.map_error(fn(err) { on_invalid_json(string.inspect(err)) })
+}
+
+fn decode_tag(
+  line: String,
+  on_invalid_json: fn(String) -> e,
+) -> Result(String, e) {
+  let decoder = {
+    use tag <- decode.field("t", decode.string)
+    decode.success(tag)
+  }
+
+  parse_json(line, decoder, on_invalid_json)
+}
+
+fn parse_status(
+  status: String,
+  on_unknown: fn(String) -> e,
+) -> Result(types_runner.RunnerStatus, e) {
+  case status {
+    "success" -> Ok(types_runner.StatusSuccess)
+    "error" -> Ok(types_runner.StatusError)
+    other -> Error(on_unknown(other))
+  }
+}
