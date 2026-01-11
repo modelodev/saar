@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": "S08",
+  "current_sprint": null,
   "sprints": {
     "S07": {
       "status": "completed",
@@ -176,10 +176,10 @@
       "stories": {}
     },
     "S08": {
-      "status": "gates_pending",
+      "status": "completed",
       "branch": "sprint/s08-bridge-continuous-sse-managed-port",
       "started_at": "2026-01-11T12:11:30Z",
-      "completed_at": null,
+      "completed_at": "2026-01-11T13:06:10Z",
       "current_story": null,
       "stories": {
         "S08-T01": {
