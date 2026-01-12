@@ -1,0 +1,130 @@
+import envoy
+import gleam/option.{None, Some}
+import gleam/string
+import gleeunit
+import gleeunit/should
+import sad/config_loader
+import sad/types/config as types_config
+import sad/types/core as types_core
+import simplifile
+import test_assertions
+
+pub fn main() {
+  gleeunit.main()
+}
+
+pub fn resolve_config_path_precedence_test() {
+  envoy.unset("SAD_CONFIG_PATH")
+
+  config_loader.resolve_config_path_with_env(None, envoy.get)
+  |> should.equal("./config.toml")
+
+  envoy.set("SAD_CONFIG_PATH", "./from-env.toml")
+
+  config_loader.resolve_config_path_with_env(None, envoy.get)
+  |> should.equal("./from-env.toml")
+
+  config_loader.resolve_config_path_with_env(Some("./from-cli.toml"), envoy.get)
+  |> should.equal("./from-cli.toml")
+
+  envoy.unset("SAD_CONFIG_PATH")
+}
+
+pub fn env_interpolation_works_test() {
+  envoy.set("SAD_TEST_API_KEY", "abc")
+
+  let cfg =
+    config_loader.load_from_path(
+      "test/fixtures/config/test_config.toml",
+      envoy.get,
+      simplifile.read,
+    )
+    |> test_assertions.assert_ok
+
+  envoy.unset("SAD_TEST_API_KEY")
+
+  let types_config.SadConfig(api_key: api_key, ..) = cfg
+  types_core.secret_to_env_value(api_key) |> should.equal("abc")
+}
+
+pub fn missing_env_var_fails_test() {
+  envoy.unset("SAD_TEST_API_KEY")
+
+  let err =
+    config_loader.load_from_path(
+      "test/fixtures/config/test_config.toml",
+      envoy.get,
+      simplifile.read,
+    )
+    |> test_assertions.assert_error
+
+  case err {
+    config_loader.EnvVarMissing(name: "SAD_TEST_API_KEY") -> Nil
+    other ->
+      panic as { "Expected EnvVarMissing, got: " <> string.inspect(other) }
+  }
+}
+
+pub fn unknown_key_fails_test() {
+  let path = "build/test-workspaces/config-unknown-key.toml"
+
+  let contents =
+    "[server]\n"
+    <> "host = \"127.0.0.1\"\n"
+    <> "port = 0\n"
+    <> "unknown = 1\n"
+    <> "\n"
+    <> "[auth]\n"
+    <> "api_key = \"ok\"\n"
+
+  simplifile.write(to: path, contents: contents)
+  |> test_assertions.assert_ok
+
+  let err =
+    config_loader.load_from_path(path, envoy.get, simplifile.read)
+    |> test_assertions.assert_error
+
+  let _ = simplifile.delete(file_or_dir_at: path)
+
+  case err {
+    config_loader.UnknownKey(key: "server.unknown") -> Nil
+    other -> panic as { "Expected UnknownKey, got: " <> string.inspect(other) }
+  }
+}
+
+pub fn missing_config_file_fails_test() {
+  let err =
+    config_loader.load_from_path(
+      "build/test-workspaces/does-not-exist.toml",
+      envoy.get,
+      simplifile.read,
+    )
+    |> test_assertions.assert_error
+
+  case err {
+    config_loader.ConfigFileNotFound(..) -> Nil
+    other ->
+      panic as { "Expected ConfigFileNotFound, got: " <> string.inspect(other) }
+  }
+}
+
+pub fn missing_api_key_fails_test() {
+  let path = "build/test-workspaces/config-missing-api-key.toml"
+
+  let contents = "[server]\n" <> "host = \"127.0.0.1\"\n" <> "port = 0\n"
+
+  simplifile.write(to: path, contents: contents)
+  |> test_assertions.assert_ok
+
+  let err =
+    config_loader.load_from_path(path, envoy.get, simplifile.read)
+    |> test_assertions.assert_error
+
+  let _ = simplifile.delete(file_or_dir_at: path)
+
+  case err {
+    config_loader.MissingApiKey -> Nil
+    other ->
+      panic as { "Expected MissingApiKey, got: " <> string.inspect(other) }
+  }
+}

@@ -1,3 +1,4 @@
+import agent_helpers
 import gleam/dict
 import gleam/erlang/process
 import gleam/option
@@ -22,7 +23,7 @@ pub fn main() {
 }
 
 pub fn start_initializes_supervisors() {
-  let #(ref, names, _pid) = start_root(types_config.default_sad_config())
+  let #(ref, names, _pid) = start_root(agent_helpers.default_config())
 
   let supervisor_names.RootNames(
     registry_name,
@@ -52,7 +53,7 @@ pub fn start_initializes_supervisors() {
 }
 
 pub fn deps_discovered_by_name_not_passed_by_hand() {
-  let #(ref, names, _pid) = start_root(types_config.default_sad_config())
+  let #(ref, names, _pid) = start_root(agent_helpers.default_config())
 
   let supervisor_names.RootNames(
     registry_name,
@@ -80,7 +81,7 @@ pub fn deps_discovered_by_name_not_passed_by_hand() {
 }
 
 pub fn root_supervisor_start_fail_fast() {
-  let cfg0 = types_config.default_sad_config()
+  let cfg0 = agent_helpers.default_config()
   let types_config.SadConfig(runner: runner0, ..) = cfg0
   let types_config.RunnerSystemConfig(..) = runner0
 
@@ -104,7 +105,7 @@ pub fn root_supervisor_start_fail_fast() {
 }
 
 pub fn root_supervisor_rest_for_one_order() {
-  let cfg = types_config.default_sad_config()
+  let cfg = agent_helpers.default_config()
   let names = supervisor_names.new_names()
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
 
@@ -140,7 +141,7 @@ pub fn root_supervisor_rest_for_one_order() {
 }
 
 pub fn root_supervisor_restart_tolerance() {
-  let cfg = types_config.default_sad_config()
+  let cfg = agent_helpers.default_config()
   let names = supervisor_names.new_names()
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
 
@@ -217,7 +218,7 @@ fn kill_child(
 }
 
 pub fn agent_factory_restart_strategy_temporary() {
-  let cfg = types_config.default_sad_config()
+  let cfg = agent_helpers.default_config()
   let name = process.new_name("test_agent_factory_temp")
 
   let assert Ok(actor.Started(data: supervisor, ..)) =

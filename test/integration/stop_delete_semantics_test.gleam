@@ -175,6 +175,8 @@ fn start_root(
   process.Subject(messages.RegistryMsg),
   process.Subject(messages.ArtifactRegistryMsg),
 ) {
+  let cfg = types_config.SadConfig(..cfg, server_port: 0)
+
   let names = supervisor_names.new_names()
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
 

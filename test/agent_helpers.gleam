@@ -13,7 +13,8 @@ pub fn workspace_root() -> String {
 }
 
 pub fn default_config() -> types_config.SadConfig {
-  types_config.default_sad_config()
+  // Use an ephemeral port in tests to avoid collisions.
+  types_config.SadConfig(..types_config.default_sad_config(), server_port: 0)
 }
 
 pub fn with_call_timeout_ms(

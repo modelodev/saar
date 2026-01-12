@@ -21,7 +21,7 @@ pub fn main() {
 }
 
 pub fn registry_crash_rest_for_one_kills_and_restarts_subtree_test() {
-  let cfg = types_config.default_sad_config()
+  let cfg = agent_helpers.default_config()
   let names = supervisor_names.new_names()
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
 
@@ -60,7 +60,7 @@ pub fn registry_crash_rest_for_one_kills_and_restarts_subtree_test() {
 }
 
 pub fn killing_agent_manager_actor_kills_agents_test() {
-  let cfg = types_config.default_sad_config()
+  let cfg = agent_helpers.default_config()
   let names = supervisor_names.new_names()
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
 

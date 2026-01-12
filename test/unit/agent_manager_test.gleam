@@ -14,7 +14,6 @@ import sad/core/registry_api
 import sad/core/root_supervisor
 import sad/core/supervisor_names
 import sad/types/agent as types_agent
-import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/profile as types_profile
@@ -26,7 +25,7 @@ pub fn main() {
 }
 
 pub fn start_agent_same_key_one_wins_test() {
-  let cfg = types_config.default_sad_config()
+  let cfg = agent_helpers.default_config()
   let names = supervisor_names.new_names()
 
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
@@ -75,7 +74,7 @@ pub fn start_agent_same_key_one_wins_test() {
 }
 
 pub fn create_agent_profile_not_found_test() {
-  let cfg = types_config.default_sad_config()
+  let cfg = agent_helpers.default_config()
   let names = supervisor_names.new_names()
 
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
@@ -106,7 +105,7 @@ pub fn create_agent_profile_not_found_test() {
 }
 
 pub fn create_agent_uses_profiles_actor_test() {
-  let cfg = types_config.default_sad_config()
+  let cfg = agent_helpers.default_config()
   let names = supervisor_names.new_names()
 
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
@@ -182,7 +181,7 @@ pub fn create_agent_uses_profiles_actor_test() {
 }
 
 pub fn start_agent_registration_failed_rolls_back_test() {
-  let cfg = types_config.default_sad_config()
+  let cfg = agent_helpers.default_config()
   let names = supervisor_names.new_names()
 
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())

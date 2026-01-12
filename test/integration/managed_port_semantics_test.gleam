@@ -208,6 +208,8 @@ pub fn managed_port_in_use_fails_fast_test() {
 fn start_root(
   cfg: types_config.SadConfig,
 ) -> process.Subject(messages.AgentManagerMsg) {
+  let cfg = types_config.SadConfig(..cfg, server_port: 0)
+
   let names = supervisor_names.new_names()
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
 

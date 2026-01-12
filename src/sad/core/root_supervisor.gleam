@@ -103,7 +103,12 @@ pub fn start(
       agent_factory,
     ))
     |> supervisor.add(agent_factory_child_spec(agent_factory_name))
-    |> supervisor.add(http_server_child_spec(config, agent_manager_subject))
+    |> supervisor.add(http_server_child_spec(
+      config,
+      registry_subject,
+      profiles_subject,
+      agent_manager_subject,
+    ))
 
   supervisor.start(spec)
   |> result.map(fn(started) {
@@ -189,9 +194,13 @@ fn agent_factory_child_spec(
 
 fn http_server_child_spec(
   config: types_config.SadConfig,
-  agent_manager_subject: process.Subject(messages.AgentManagerMsg),
+  registry: process.Subject(messages.RegistryMsg),
+  profiles: process.Subject(messages.ProfilesMsg),
+  agent_manager: process.Subject(messages.AgentManagerMsg),
 ) -> supervision.ChildSpecification(Nil) {
-  supervision.worker(fn() { http_server.start(config, agent_manager_subject) })
+  supervision.worker(fn() {
+    http_server.start(config, registry, profiles, agent_manager)
+  })
 }
 
 /// Returns the named registry subject.
