@@ -64,15 +64,20 @@ fn handle_request(
 ) -> response.Response(mist.ResponseData) {
   let trace_id = request_trace_id()
 
-  case req.path, req.method {
-    "/health", _ -> health.health()
+  case auth.is_public_path(req.path) {
+    True ->
+      case req.path {
+        "/health" -> health.health()
 
-    "/health/ready", _ -> {
-      let timeout_ms = call_timeout_ms(cfg)
-      health.ready(profiles, timeout_ms)
-    }
+        "/health/ready" -> {
+          let timeout_ms = call_timeout_ms(cfg)
+          health.ready(profiles, timeout_ms)
+        }
 
-    _, _ -> {
+        _ -> problem.not_found(trace_id, req.path)
+      }
+
+    False -> {
       let types_config.SadConfig(api_key: api_key, ..) = cfg
 
       case auth.require_bearer(req, api_key) {

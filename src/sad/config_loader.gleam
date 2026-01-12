@@ -617,182 +617,298 @@ fn apply_workspaces(
   }
 }
 
+type TimeoutsOverrides {
+  TimeoutsOverrides(
+    call_timeout_ms: Option(Int),
+    status_timeout_ms: Option(Int),
+    registry_timeout_ms: Option(Int),
+    health_check_timeout_ms: Option(Int),
+    shutdown_timeout_ms: Option(Int),
+  )
+}
+
+type SadLimitsOverrides {
+  SadLimitsOverrides(
+    log_buffer_bytes: Option(Int),
+    max_stdout_bytes: Option(Int),
+    max_runner_event_bytes: Option(Int),
+    max_request_body_bytes: Option(Int),
+    max_http_response_bytes: Option(Int),
+    max_file_fetch_bytes: Option(Int),
+  )
+}
+
+type StreamOverrides {
+  StreamOverrides(sse_keep_alive_interval_ms: Option(Int))
+}
+
+type RunnerPortsOverrides {
+  RunnerPortsOverrides(port_range_min: Option(Int), port_range_max: Option(Int))
+}
+
 fn apply_limits(
   cfg: types_config.SadConfig,
   root: Dict(String, tom.Toml),
 ) -> Result(types_config.SadConfig, ConfigLoadError) {
   case dict.get(root, "limits") {
     Error(_) -> Ok(cfg)
+
     Ok(v) -> {
-      use call_timeout_ms <- result.try(optional_int(
-        v,
-        "call_timeout_ms",
-        "limits.call_timeout_ms",
-      ))
-      use status_timeout_ms <- result.try(optional_int(
-        v,
-        "status_timeout_ms",
-        "limits.status_timeout_ms",
-      ))
-      use registry_timeout_ms <- result.try(optional_int(
-        v,
-        "registry_timeout_ms",
-        "limits.registry_timeout_ms",
-      ))
-      use health_timeout_ms <- result.try(optional_int(
-        v,
-        "health_check_timeout_ms",
-        "limits.health_check_timeout_ms",
-      ))
-      use shutdown_timeout_ms <- result.try(optional_int(
-        v,
-        "shutdown_timeout_ms",
-        "limits.shutdown_timeout_ms",
-      ))
-
-      use log_buffer_bytes <- result.try(optional_int(
-        v,
-        "log_buffer_bytes",
-        "limits.log_buffer_bytes",
-      ))
-      use max_stdout_bytes <- result.try(optional_int(
-        v,
-        "max_stdout_bytes",
-        "limits.max_stdout_bytes",
-      ))
-      use max_runner_event_bytes <- result.try(optional_int(
-        v,
-        "max_runner_event_bytes",
-        "limits.max_runner_event_bytes",
-      ))
-      use max_request_body_bytes <- result.try(optional_int(
-        v,
-        "max_request_body_bytes",
-        "limits.max_request_body_bytes",
-      ))
-      use max_http_response_bytes <- result.try(optional_int(
-        v,
-        "max_http_response_bytes",
-        "limits.max_http_response_bytes",
-      ))
-      use max_file_fetch_bytes <- result.try(optional_int(
-        v,
-        "max_file_fetch_bytes",
-        "limits.max_file_fetch_bytes",
-      ))
-
-      use sse_keep_alive_ms <- result.try(optional_int(
-        v,
-        "sse_keep_alive_interval_ms",
-        "limits.sse_keep_alive_interval_ms",
-      ))
-      use port_range_min <- result.try(optional_int(
-        v,
-        "port_range_min",
-        "limits.port_range_min",
-      ))
-      use port_range_max <- result.try(optional_int(
-        v,
-        "port_range_max",
-        "limits.port_range_max",
-      ))
-
-      let types_config.SadConfig(
-        timeouts: timeouts,
-        limits: limits_cfg,
-        stream: stream_cfg,
-        runner: runner_cfg,
-        ..,
-      ) = cfg
-
-      let types_config.SadTimeouts(
-        call_timeout_ms: old_call,
-        status_timeout_ms: old_status,
-        registry_timeout_ms: old_registry,
-        health_check_timeout_ms: old_health,
-        shutdown_timeout_ms: old_shutdown,
-      ) = timeouts
-
-      let next_timeouts =
-        types_config.SadTimeouts(
-          call_timeout_ms: option.unwrap(call_timeout_ms, old_call),
-          status_timeout_ms: option.unwrap(status_timeout_ms, old_status),
-          registry_timeout_ms: option.unwrap(registry_timeout_ms, old_registry),
-          health_check_timeout_ms: option.unwrap(health_timeout_ms, old_health),
-          shutdown_timeout_ms: option.unwrap(shutdown_timeout_ms, old_shutdown),
-        )
-
-      let types_config.SadLimits(
-        log_buffer_bytes: old_log_buf,
-        max_stdout_bytes: old_max_stdout,
-        max_runner_event_bytes: old_max_event,
-        max_request_body_bytes: old_max_body,
-        max_http_response_bytes: old_max_http,
-        max_file_fetch_bytes: old_max_fetch,
-      ) = limits_cfg
-
-      let next_limits =
-        types_config.SadLimits(
-          log_buffer_bytes: option.unwrap(log_buffer_bytes, old_log_buf),
-          max_stdout_bytes: option.unwrap(max_stdout_bytes, old_max_stdout),
-          max_runner_event_bytes: option.unwrap(
-            max_runner_event_bytes,
-            old_max_event,
-          ),
-          max_request_body_bytes: option.unwrap(
-            max_request_body_bytes,
-            old_max_body,
-          ),
-          max_http_response_bytes: option.unwrap(
-            max_http_response_bytes,
-            old_max_http,
-          ),
-          max_file_fetch_bytes: option.unwrap(
-            max_file_fetch_bytes,
-            old_max_fetch,
-          ),
-        )
-
-      let types_config.StreamConfig(
-        sse_keep_alive_interval_ms: old_keep_alive,
-        log_stream: log_stream,
-        interaction_stream: interaction_stream,
-      ) = stream_cfg
-
-      let next_stream =
-        types_config.StreamConfig(
-          sse_keep_alive_interval_ms: option.unwrap(
-            sse_keep_alive_ms,
-            old_keep_alive,
-          ),
-          log_stream: log_stream,
-          interaction_stream: interaction_stream,
-        )
-
-      let types_config.RunnerSystemConfig(
-        port_range_min: old_min,
-        port_range_max: old_max,
-        ..,
-      ) = runner_cfg
-
-      let next_runner =
-        types_config.RunnerSystemConfig(
-          ..runner_cfg,
-          port_range_min: option.unwrap(port_range_min, old_min),
-          port_range_max: option.unwrap(port_range_max, old_max),
-        )
+      use timeouts_overrides <- result.try(read_timeouts_overrides(v))
+      use sad_limits_overrides <- result.try(read_sad_limits_overrides(v))
+      use stream_overrides <- result.try(read_stream_overrides(v))
+      use runner_ports_overrides <- result.try(read_runner_ports_overrides(v))
 
       Ok(
-        types_config.SadConfig(
-          ..cfg,
-          timeouts: next_timeouts,
-          limits: next_limits,
-          stream: next_stream,
-          runner: next_runner,
-        ),
+        cfg
+        |> apply_timeouts_overrides(timeouts_overrides)
+        |> apply_sad_limits_overrides(sad_limits_overrides)
+        |> apply_stream_overrides(stream_overrides)
+        |> apply_runner_ports_overrides(runner_ports_overrides),
       )
     }
   }
+}
+
+fn read_timeouts_overrides(
+  v: tom.Toml,
+) -> Result(TimeoutsOverrides, ConfigLoadError) {
+  use call_timeout_ms <- result.try(optional_int(
+    v,
+    "call_timeout_ms",
+    "limits.call_timeout_ms",
+  ))
+  use status_timeout_ms <- result.try(optional_int(
+    v,
+    "status_timeout_ms",
+    "limits.status_timeout_ms",
+  ))
+  use registry_timeout_ms <- result.try(optional_int(
+    v,
+    "registry_timeout_ms",
+    "limits.registry_timeout_ms",
+  ))
+  use health_check_timeout_ms <- result.try(optional_int(
+    v,
+    "health_check_timeout_ms",
+    "limits.health_check_timeout_ms",
+  ))
+  use shutdown_timeout_ms <- result.try(optional_int(
+    v,
+    "shutdown_timeout_ms",
+    "limits.shutdown_timeout_ms",
+  ))
+
+  Ok(TimeoutsOverrides(
+    call_timeout_ms: call_timeout_ms,
+    status_timeout_ms: status_timeout_ms,
+    registry_timeout_ms: registry_timeout_ms,
+    health_check_timeout_ms: health_check_timeout_ms,
+    shutdown_timeout_ms: shutdown_timeout_ms,
+  ))
+}
+
+fn read_sad_limits_overrides(
+  v: tom.Toml,
+) -> Result(SadLimitsOverrides, ConfigLoadError) {
+  use log_buffer_bytes <- result.try(optional_int(
+    v,
+    "log_buffer_bytes",
+    "limits.log_buffer_bytes",
+  ))
+  use max_stdout_bytes <- result.try(optional_int(
+    v,
+    "max_stdout_bytes",
+    "limits.max_stdout_bytes",
+  ))
+  use max_runner_event_bytes <- result.try(optional_int(
+    v,
+    "max_runner_event_bytes",
+    "limits.max_runner_event_bytes",
+  ))
+  use max_request_body_bytes <- result.try(optional_int(
+    v,
+    "max_request_body_bytes",
+    "limits.max_request_body_bytes",
+  ))
+  use max_http_response_bytes <- result.try(optional_int(
+    v,
+    "max_http_response_bytes",
+    "limits.max_http_response_bytes",
+  ))
+  use max_file_fetch_bytes <- result.try(optional_int(
+    v,
+    "max_file_fetch_bytes",
+    "limits.max_file_fetch_bytes",
+  ))
+
+  Ok(SadLimitsOverrides(
+    log_buffer_bytes: log_buffer_bytes,
+    max_stdout_bytes: max_stdout_bytes,
+    max_runner_event_bytes: max_runner_event_bytes,
+    max_request_body_bytes: max_request_body_bytes,
+    max_http_response_bytes: max_http_response_bytes,
+    max_file_fetch_bytes: max_file_fetch_bytes,
+  ))
+}
+
+fn read_stream_overrides(
+  v: tom.Toml,
+) -> Result(StreamOverrides, ConfigLoadError) {
+  use sse_keep_alive_interval_ms <- result.try(optional_int(
+    v,
+    "sse_keep_alive_interval_ms",
+    "limits.sse_keep_alive_interval_ms",
+  ))
+
+  Ok(StreamOverrides(sse_keep_alive_interval_ms: sse_keep_alive_interval_ms))
+}
+
+fn read_runner_ports_overrides(
+  v: tom.Toml,
+) -> Result(RunnerPortsOverrides, ConfigLoadError) {
+  use port_range_min <- result.try(optional_int(
+    v,
+    "port_range_min",
+    "limits.port_range_min",
+  ))
+  use port_range_max <- result.try(optional_int(
+    v,
+    "port_range_max",
+    "limits.port_range_max",
+  ))
+
+  Ok(RunnerPortsOverrides(
+    port_range_min: port_range_min,
+    port_range_max: port_range_max,
+  ))
+}
+
+fn apply_timeouts_overrides(
+  cfg: types_config.SadConfig,
+  overrides: TimeoutsOverrides,
+) -> types_config.SadConfig {
+  let types_config.SadConfig(timeouts: timeouts, ..) = cfg
+  let types_config.SadTimeouts(
+    call_timeout_ms: old_call,
+    status_timeout_ms: old_status,
+    registry_timeout_ms: old_registry,
+    health_check_timeout_ms: old_health,
+    shutdown_timeout_ms: old_shutdown,
+  ) = timeouts
+
+  let TimeoutsOverrides(
+    call_timeout_ms: call_timeout_ms,
+    status_timeout_ms: status_timeout_ms,
+    registry_timeout_ms: registry_timeout_ms,
+    health_check_timeout_ms: health_check_timeout_ms,
+    shutdown_timeout_ms: shutdown_timeout_ms,
+  ) = overrides
+
+  let next_timeouts =
+    types_config.SadTimeouts(
+      call_timeout_ms: option.unwrap(call_timeout_ms, old_call),
+      status_timeout_ms: option.unwrap(status_timeout_ms, old_status),
+      registry_timeout_ms: option.unwrap(registry_timeout_ms, old_registry),
+      health_check_timeout_ms: option.unwrap(
+        health_check_timeout_ms,
+        old_health,
+      ),
+      shutdown_timeout_ms: option.unwrap(shutdown_timeout_ms, old_shutdown),
+    )
+
+  types_config.SadConfig(..cfg, timeouts: next_timeouts)
+}
+
+fn apply_sad_limits_overrides(
+  cfg: types_config.SadConfig,
+  overrides: SadLimitsOverrides,
+) -> types_config.SadConfig {
+  let types_config.SadConfig(limits: limits_cfg, ..) = cfg
+  let types_config.SadLimits(
+    log_buffer_bytes: old_log_buf,
+    max_stdout_bytes: old_max_stdout,
+    max_runner_event_bytes: old_max_event,
+    max_request_body_bytes: old_max_body,
+    max_http_response_bytes: old_max_http,
+    max_file_fetch_bytes: old_max_fetch,
+  ) = limits_cfg
+
+  let SadLimitsOverrides(
+    log_buffer_bytes: log_buffer_bytes,
+    max_stdout_bytes: max_stdout_bytes,
+    max_runner_event_bytes: max_runner_event_bytes,
+    max_request_body_bytes: max_request_body_bytes,
+    max_http_response_bytes: max_http_response_bytes,
+    max_file_fetch_bytes: max_file_fetch_bytes,
+  ) = overrides
+
+  let next_limits =
+    types_config.SadLimits(
+      log_buffer_bytes: option.unwrap(log_buffer_bytes, old_log_buf),
+      max_stdout_bytes: option.unwrap(max_stdout_bytes, old_max_stdout),
+      max_runner_event_bytes: option.unwrap(
+        max_runner_event_bytes,
+        old_max_event,
+      ),
+      max_request_body_bytes: option.unwrap(
+        max_request_body_bytes,
+        old_max_body,
+      ),
+      max_http_response_bytes: option.unwrap(
+        max_http_response_bytes,
+        old_max_http,
+      ),
+      max_file_fetch_bytes: option.unwrap(max_file_fetch_bytes, old_max_fetch),
+    )
+
+  types_config.SadConfig(..cfg, limits: next_limits)
+}
+
+fn apply_stream_overrides(
+  cfg: types_config.SadConfig,
+  overrides: StreamOverrides,
+) -> types_config.SadConfig {
+  let types_config.SadConfig(stream: stream_cfg, ..) = cfg
+  let types_config.StreamConfig(
+    sse_keep_alive_interval_ms: old_keep_alive,
+    log_stream: log_stream,
+    interaction_stream: interaction_stream,
+  ) = stream_cfg
+
+  let StreamOverrides(sse_keep_alive_interval_ms: keep_alive) = overrides
+
+  let next_stream =
+    types_config.StreamConfig(
+      sse_keep_alive_interval_ms: option.unwrap(keep_alive, old_keep_alive),
+      log_stream: log_stream,
+      interaction_stream: interaction_stream,
+    )
+
+  types_config.SadConfig(..cfg, stream: next_stream)
+}
+
+fn apply_runner_ports_overrides(
+  cfg: types_config.SadConfig,
+  overrides: RunnerPortsOverrides,
+) -> types_config.SadConfig {
+  let types_config.SadConfig(runner: runner_cfg, ..) = cfg
+  let types_config.RunnerSystemConfig(
+    port_range_min: old_min,
+    port_range_max: old_max,
+    ..,
+  ) = runner_cfg
+
+  let RunnerPortsOverrides(port_range_min: min, port_range_max: max) = overrides
+
+  let next_runner =
+    types_config.RunnerSystemConfig(
+      ..runner_cfg,
+      port_range_min: option.unwrap(min, old_min),
+      port_range_max: option.unwrap(max, old_max),
+    )
+
+  types_config.SadConfig(..cfg, runner: next_runner)
 }
 
 fn apply_network(
