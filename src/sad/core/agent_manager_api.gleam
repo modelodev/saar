@@ -13,6 +13,7 @@
 //// - Uses `sad/otp/safe_call.call_within` for failure-safe calls.
 //// - Targets `sad/core/messages.AgentManagerMsg`.
 
+import gleam/dict
 import gleam/erlang/process
 import gleam/result
 import sad/core/agent
@@ -28,6 +29,20 @@ import sad/types/core as types_core
 pub type ApiCallError(e) {
   CallFailed(safe_call.CallError)
   ActorError(e)
+}
+
+pub fn create_agent(
+  manager: process.Subject(messages.AgentManagerMsg),
+  profile_id: types_core.ProfileId,
+  instance_id: types_core.InstanceId,
+  init_params: dict.Dict(String, types_core.Value),
+  timeout_ms: Int,
+) -> Result(agent.AgentRef, ApiCallError(messages.StartError)) {
+  safe_call.call_within(manager, timeout_ms, fn(reply_to) {
+    messages.CreateAgent(profile_id, instance_id, init_params, reply_to)
+  })
+  |> result.map_error(CallFailed)
+  |> result.try(fn(reply) { reply |> result.map_error(ActorError) })
 }
 
 pub fn start_agent(

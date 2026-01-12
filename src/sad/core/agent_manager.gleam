@@ -36,8 +36,10 @@ import sad/core/agent_internal
 import sad/core/artifact_registry_api
 import sad/core/messages
 import sad/core/port_pool_api
+import sad/core/profiles_api
 import sad/core/registry_api
 import sad/net/port_check
+import sad/params
 import sad/port_pool
 import sad/types/agent as types_agent
 import sad/types/config as types_config
@@ -93,6 +95,9 @@ fn handle_message(
   msg: messages.AgentManagerMsg,
 ) -> actor.Next(State, messages.AgentManagerMsg) {
   case msg {
+    messages.CreateAgent(profile_id, instance_id, init_params, reply_to) ->
+      handle_create_agent(state, profile_id, instance_id, init_params, reply_to)
+
     messages.StartAgent(args, reply_to) ->
       handle_start_agent(state, args, reply_to)
 
@@ -107,6 +112,84 @@ fn handle_message(
     messages.DeleteWorkerDown(_down) -> actor.continue(state)
 
     messages.ListAgents(reply_to) -> handle_list_agents(state, reply_to)
+  }
+}
+
+fn handle_create_agent(
+  state: State,
+  profile_id: types_core.ProfileId,
+  instance_id: types_core.InstanceId,
+  init_params: dict.Dict(String, types_core.Value),
+  reply_to: process.Subject(Result(agent.AgentRef, messages.StartError)),
+) -> actor.Next(State, messages.AgentManagerMsg) {
+  let State(config: config, profiles: profiles, ..) = state
+
+  let profile_out =
+    profiles_api.get_profile(profiles, profile_id, call_timeout_ms(config))
+
+  case profile_out {
+    Error(err) -> {
+      process.send(
+        reply_to,
+        Error(messages.StartChildFailed(
+          "profiles_call_failed:" <> string.inspect(err),
+        )),
+      )
+      actor.continue(state)
+    }
+
+    Ok(None) -> {
+      process.send(reply_to, Error(messages.ProfileNotFound(profile_id)))
+      actor.continue(state)
+    }
+
+    Ok(Some(profile)) ->
+      case resolve_params_for_profile(profile, config, init_params) {
+        Error(err) -> {
+          process.send(reply_to, Error(err))
+          actor.continue(state)
+        }
+
+        Ok(resolved) -> {
+          let types_config.SadConfig(storage: storage, ..) = config
+          let types_config.StorageConfig(workspaces_directory: base_dir, ..) =
+            storage
+
+          let args =
+            messages.StartArgs(
+              profile: profile,
+              instance_id: instance_id,
+              params: resolved,
+              workspace: workspace.workspace_for_instance(base_dir, instance_id),
+              config: config,
+            )
+
+          handle_start_agent(state, args, reply_to)
+        }
+      }
+  }
+}
+
+fn resolve_params_for_profile(
+  profile: types_profile.Profile,
+  config: types_config.SadConfig,
+  init_params: dict.Dict(String, types_core.Value),
+) -> Result(types_input.ResolvedParams, messages.StartError) {
+  let types_profile.Profile(parameters: parameters, ..) = profile
+
+  // TODO(S13): map SadConfig into ConfigParam values.
+  let _ = config
+  let config_values = dict.new()
+
+  case
+    params.resolve_params(parameters, config_values, envoy.get, init_params)
+  {
+    Ok(resolved) -> Ok(resolved)
+
+    Error(errors) ->
+      Error(messages.ParamResolutionFailed(
+        "param_resolution_failed:" <> string.inspect(errors),
+      ))
   }
 }
 

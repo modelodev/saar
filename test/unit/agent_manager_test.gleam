@@ -9,6 +9,7 @@ import sad/app_state
 import sad/core/agent
 import sad/core/agent_manager_api
 import sad/core/messages
+import sad/core/profiles_api
 import sad/core/registry_api
 import sad/core/root_supervisor
 import sad/core/supervisor_names
@@ -16,6 +17,7 @@ import sad/types/agent as types_agent
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
+import test_assertions
 
 pub fn main() {
   gleeunit.main()
@@ -65,6 +67,83 @@ pub fn start_agent_same_key_one_wins_test() {
   let assert Ok(r2) = process.receive(out2, 5000)
 
   assert_one_ok_one_already_exists(r1, r2)
+
+  let assert Ok(count) = registry_api.count(registry, 1000)
+  count |> should.equal(1)
+}
+
+pub fn create_agent_profile_not_found_test() {
+  let cfg = types_config.default_sad_config()
+  let names = supervisor_names.new_names()
+
+  let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
+
+  let assert Ok(actor.Started(..)) = root_supervisor.start(state, names)
+
+  let supervisor_names.RootNames(_, _, _, _profiles_name, agent_manager_name, _) =
+    names
+
+  let manager = process.named_subject(agent_manager_name)
+
+  let assert Ok(instance_id) = types_core.instance_id("inst-missing-profile")
+
+  agent_manager_api.create_agent(
+    manager,
+    types_core.profile_id("missing"),
+    instance_id,
+    dict.new(),
+    5000,
+  )
+  |> should.equal(
+    Error(
+      agent_manager_api.ActorError(
+        messages.ProfileNotFound(types_core.profile_id("missing")),
+      ),
+    ),
+  )
+}
+
+pub fn create_agent_uses_profiles_actor_test() {
+  let cfg = types_config.default_sad_config()
+  let names = supervisor_names.new_names()
+
+  let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
+
+  let assert Ok(actor.Started(..)) = root_supervisor.start(state, names)
+
+  let supervisor_names.RootNames(
+    registry_name,
+    _,
+    _,
+    profiles_name,
+    agent_manager_name,
+    _,
+  ) = names
+
+  let registry = process.named_subject(registry_name)
+  let profiles = process.named_subject(profiles_name)
+  let manager = process.named_subject(agent_manager_name)
+
+  let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
+
+  let assert Ok(_) =
+    profiles_api.set_profiles(
+      profiles,
+      dict.from_list([#(profile.meta.id, profile)]),
+      1000,
+    )
+
+  let assert Ok(instance_id) = types_core.instance_id("inst-from-profile")
+
+  let _ =
+    agent_manager_api.create_agent(
+      manager,
+      profile.meta.id,
+      instance_id,
+      dict.new(),
+      5000,
+    )
+    |> test_assertions.assert_ok
 
   let assert Ok(count) = registry_api.count(registry, 1000)
   count |> should.equal(1)
