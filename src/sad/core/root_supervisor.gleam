@@ -93,7 +93,15 @@ pub fn start(
     |> supervisor.add(artifact_registry_child_spec(artifact_registry_name))
     |> supervisor.add(port_pool_child_spec(port_pool_name, min_port, max_port))
     |> supervisor.add(profiles_child_spec(profiles_name, initial_profiles))
-    |> supervisor.add(agent_manager_child_spec(agent_manager_name))
+    |> supervisor.add(agent_manager_child_spec(
+      agent_manager_name,
+      config,
+      registry_subject,
+      artifact_registry_subject,
+      port_pool_subject,
+      profiles_subject,
+      agent_factory,
+    ))
     |> supervisor.add(agent_factory_child_spec(agent_factory_name))
     |> supervisor.add(http_server_child_spec(config, agent_manager_subject))
 
@@ -145,8 +153,27 @@ fn profiles_child_spec(
 
 fn agent_manager_child_spec(
   name: process.Name(messages.AgentManagerMsg),
+  config: types_config.SadConfig,
+  registry: process.Subject(messages.RegistryMsg),
+  artifact_registry: process.Subject(messages.ArtifactRegistryMsg),
+  port_pool: process.Subject(messages.PortPoolMsg),
+  profiles_subject: process.Subject(messages.ProfilesMsg),
+  agent_factory: factory_supervisor.Supervisor(
+    messages.StartArgs,
+    agent.AgentRef,
+  ),
 ) -> supervision.ChildSpecification(process.Subject(messages.AgentManagerMsg)) {
-  supervision.worker(fn() { agent_manager.start(name) })
+  supervision.worker(fn() {
+    agent_manager.start(
+      name,
+      config,
+      registry,
+      artifact_registry,
+      port_pool,
+      profiles_subject,
+      agent_factory,
+    )
+  })
   |> supervision.timeout(-1)
 }
 

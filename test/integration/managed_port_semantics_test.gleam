@@ -1,28 +1,132 @@
 import gleam/dict
 import gleam/dynamic/decode
+import gleam/erlang/process
 import gleam/http
 import gleam/int
 import gleam/json
 import gleam/option.{None, Some}
+import gleam/otp/actor
 import gleeunit
 import gleeunit/should
 import port_helpers
 import runner_fixtures
+import sad/app_state
 import sad/bridge/client
 import sad/bridge/runner
+import sad/core/agent
+import sad/core/agent_manager_api
+import sad/core/messages
+import sad/core/root_supervisor
+import sad/core/supervisor_names
+import sad/decoders
 import sad/net/tcp_listener
+import sad/types/agent as types_agent
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/input as types_input
 import sad/types/output as types_output
+import sad/types/profile as types_profile
 import sad/types/runner as types_runner
+import simplifile
 import test_assertions
 
 const host = "127.0.0.1"
 
 pub fn main() {
   gleeunit.main()
+}
+
+pub fn managed_port_exhaustion_transitions_to_failed_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let port = pick_free_port()
+  let cfg = config_with_port_range(port)
+
+  let manager = start_root(cfg)
+  let profile = echo_server_profile_managed_port()
+
+  let assert Ok(id1) = types_core.instance_id("inst-exhaust-1")
+  let assert Ok(id2) = types_core.instance_id("inst-exhaust-2")
+
+  let a1 = start_instance(manager, profile, id1, cfg)
+  wait_for_phase(a1, types_agent.ReadyContinuous, 200)
+
+  let a2 = start_instance(manager, profile, id2, cfg)
+  wait_for_failure_reason(a2, "PORT_POOL_EXHAUSTED", 200)
+  Nil
+}
+
+pub fn managed_port_in_use_transitions_to_failed_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let port = pick_free_port()
+  let cfg = config_with_port_range(port)
+
+  // Occupy the port to force `PORT_IN_USE`.
+  let assert Ok(#(listener, _)) = tcp_listener.listen(host, port)
+
+  let manager = start_root(cfg)
+  let profile = echo_server_profile_managed_port()
+
+  let assert Ok(id1) = types_core.instance_id("inst-inuse-1")
+
+  let a1 = start_instance(manager, profile, id1, cfg)
+  wait_for_failure_reason(a1, "PORT_IN_USE", 200)
+
+  tcp_listener.close(listener)
+  Nil
+}
+
+pub fn managed_port_bind_failed_transitions_to_failed_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let port = pick_free_port()
+
+  let cfg =
+    config_with_port_range(port)
+    |> config_with_managed_host("invalid-host")
+
+  let manager = start_root(cfg)
+  let profile = echo_server_profile_managed_port()
+
+  let assert Ok(id1) = types_core.instance_id("inst-bindfail-1")
+
+  let a1 = start_instance(manager, profile, id1, cfg)
+  wait_for_failure_reason(a1, "PORT_BIND_FAILED", 200)
+  Nil
+}
+
+pub fn managed_port_race_fails_fast_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let port = pick_free_port()
+  let cfg = config_with_port_range(port)
+
+  let manager = start_root(cfg)
+  let profile = echo_server_profile_managed_port()
+
+  let assert Ok(id1) = types_core.instance_id("inst-race-1")
+
+  let a1 = start_instance(manager, profile, id1, cfg)
+
+  // Try to occupy the port after the manager started provisioning.
+  let _ =
+    process.spawn(fn() {
+      process.sleep(10)
+
+      case tcp_listener.listen(host, port) {
+        Ok(#(listener, _)) -> {
+          process.sleep(200)
+          tcp_listener.close(listener)
+        }
+
+        Error(_) -> Nil
+      }
+    })
+
+  wait_for_failure_reason(a1, "PORT_IN_USE", 200)
+  Nil
 }
 
 pub fn port_injected_into_env_test() {
@@ -99,6 +203,150 @@ pub fn managed_port_in_use_fails_fast_test() {
   let err = test_assertions.assert_error(result)
   let types_output.InteractionError(kind: kind, ..) = err
   kind |> should.equal(types_enums.InfraError)
+}
+
+fn start_root(
+  cfg: types_config.SadConfig,
+) -> process.Subject(messages.AgentManagerMsg) {
+  let names = supervisor_names.new_names()
+  let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
+
+  let assert Ok(actor.Started(..)) = root_supervisor.start(state, names)
+
+  let supervisor_names.RootNames(_, _, _, _, agent_manager_name, _) = names
+  process.named_subject(agent_manager_name)
+}
+
+fn start_instance(
+  manager: process.Subject(messages.AgentManagerMsg),
+  profile: types_profile.Profile,
+  instance_id: types_core.InstanceId,
+  cfg: types_config.SadConfig,
+) -> agent.AgentRef {
+  let args =
+    messages.StartArgs(
+      profile: profile,
+      instance_id: instance_id,
+      params: dict.new(),
+      workspace: "./workspaces/test",
+      config: cfg,
+    )
+
+  agent_manager_api.start_agent(manager, args, 30_000)
+  |> test_assertions.assert_ok
+}
+
+fn wait_for_phase(
+  agent_ref: agent.AgentRef,
+  phase: types_agent.AgentPhase,
+  attempts: Int,
+) -> Nil {
+  case attempts {
+    0 -> panic as "Timed out waiting for phase"
+
+    _ -> {
+      let status = agent.status(agent_ref, 1000) |> test_assertions.assert_ok
+      case status.phase == phase {
+        True -> Nil
+        False -> {
+          process.sleep(20)
+          wait_for_phase(agent_ref, phase, attempts - 1)
+        }
+      }
+    }
+  }
+}
+
+fn wait_for_failure_reason(
+  agent_ref: agent.AgentRef,
+  expected: String,
+  attempts: Int,
+) -> Nil {
+  case attempts {
+    0 -> panic as "Timed out waiting for failure reason"
+
+    _ -> {
+      let status = agent.status(agent_ref, 1000) |> test_assertions.assert_ok
+
+      case status.failure_reason {
+        Some(reason) ->
+          case reason == expected {
+            True -> Nil
+            False -> {
+              process.sleep(20)
+              wait_for_failure_reason(agent_ref, expected, attempts - 1)
+            }
+          }
+
+        None -> {
+          process.sleep(20)
+          wait_for_failure_reason(agent_ref, expected, attempts - 1)
+        }
+      }
+    }
+  }
+}
+
+fn pick_free_port() -> Int {
+  let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
+  tcp_listener.close(listener)
+  port
+}
+
+fn config_with_port_range(port: Int) -> types_config.SadConfig {
+  let cfg0 = types_config.default_sad_config()
+
+  let types_config.SadConfig(runner: runner0, timeouts: timeouts0, ..) = cfg0
+
+  let runner =
+    types_config.RunnerSystemConfig(
+      ..runner0,
+      port_range_min: port,
+      port_range_max: port,
+      managed_port_host: host,
+    )
+
+  // Keep these tests fast.
+  let timeouts = types_config.SadTimeouts(..timeouts0, shutdown_timeout_ms: 250)
+
+  types_config.SadConfig(..cfg0, runner: runner, timeouts: timeouts)
+}
+
+fn config_with_managed_host(
+  cfg0: types_config.SadConfig,
+  managed_host: String,
+) -> types_config.SadConfig {
+  let types_config.SadConfig(runner: runner0, ..) = cfg0
+  let runner =
+    types_config.RunnerSystemConfig(..runner0, managed_port_host: managed_host)
+  types_config.SadConfig(..cfg0, runner: runner)
+}
+
+fn echo_server_profile_managed_port() -> types_profile.Profile {
+  let assert Ok(raw) =
+    simplifile.read("./test/fixtures/source_local/profiles/echo_server.json")
+
+  let assert Ok(profile0) = json.parse(raw, decoders.profile_decoder())
+
+  let types_profile.Profile(runner: runner0, ..) = profile0
+
+  let runtime =
+    types_runner.RuntimeConfig(
+      mode: types_runner.ManagedPort,
+      port_env_var: None,
+      host_env_var: None,
+    )
+
+  let runner1 =
+    types_runner.Runner(
+      ..runner0,
+      tool_config: types_runner.ToolConfigScript(
+        "./test/fixtures/source_local/runners/echo_server.py",
+      ),
+      runtime: runtime,
+    )
+
+  types_profile.Profile(..profile0, runner: runner1)
 }
 
 fn start_echo_server_with_runtime(

@@ -15,13 +15,13 @@
 //// - Internal event injection is routed through `sad/core/agent_internal`.
 
 import gleam/dict
-import gleam/erlang/port.{type Port}
 import gleam/erlang/process
 import gleam/int
 import gleam/list
 import gleam/option
 import gleam/otp/actor
 import gleam/string
+import sad/bridge/port_owner
 import sad/ffi
 import sad/otp/safe_call
 import sad/streams/sink
@@ -37,18 +37,14 @@ import sad/types/resolved_params.{type ResolvedParams}
 
 /// Opaque resource associated with a continuous agent.
 ///
-/// In v0 this holds low-level BEAM resources such as `Port`.
+/// In v0 this is a dedicated port owner process so stop/delete can reliably
+/// close the underlying wrapper port.
 pub opaque type AgentResource {
-  ProcessResource(port: Port)
+  ContinuousServer(owner: port_owner.PortOwnerRef)
 }
 
-pub fn process_resource(port: Port) -> AgentResource {
-  ProcessResource(port)
-}
-
-pub fn agent_resource_port(resource: AgentResource) -> Port {
-  let ProcessResource(port: port) = resource
-  port
+pub fn port_owner_resource(owner: port_owner.PortOwnerRef) -> AgentResource {
+  ContinuousServer(owner)
 }
 
 /// Unified internal agent state.
@@ -319,10 +315,6 @@ pub type StopReason {
 /// This protocol is intentionally not constructible outside this module.
 /// Callers must use the functions in this module, or `sad/core/agent_internal`.
 pub opaque type AgentMsg {
-  AgentMsg(InnerMsg)
-}
-
-type InnerMsg {
   Interact(
     req: AgentRequest,
     stream_sink: option.Option(sink.StreamSink),
@@ -382,7 +374,10 @@ pub fn default_deps() -> AgentDeps {
       process.spawn(fn() { process.sleep(60_000) })
     },
     cancel_interaction: fn(pid) { process.kill(pid) },
-    stop_server: fn(_resource) { Nil },
+    stop_server: fn(resource) {
+      let ContinuousServer(owner: owner) = resource
+      port_owner.stop_async(owner)
+    },
   )
 }
 
@@ -458,9 +453,7 @@ fn handle_message(
   state: AgentRuntimeState,
   msg: AgentMsg,
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
-  let AgentMsg(inner) = msg
-
-  case inner {
+  case msg {
     GetStatus(reply_to) -> {
       process.send(reply_to, to_status_view(state))
       actor.continue(state)
@@ -642,9 +635,7 @@ fn start_interaction(
   let monitor = process.monitor(worker_pid)
   let selector =
     state.selector
-    |> process.select_specific_monitor(monitor, fn(down) {
-      AgentMsg(WorkerDown(down))
-    })
+    |> process.select_specific_monitor(monitor, fn(down) { WorkerDown(down) })
 
   let started_at_ms = ffi.now_ms()
 
@@ -686,7 +677,7 @@ fn spawn_hard_timeout(
   let timeout_ms = int.max(timeout_ms, 1)
   process.spawn(fn() {
     process.sleep(timeout_ms)
-    process.send(inbox, AgentMsg(HardTimeout(trace_id)))
+    process.send(inbox, HardTimeout(trace_id))
   })
 }
 
@@ -857,9 +848,18 @@ fn handle_stop_instance(
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
   let state = cancel_if_busy(state, "cancelled")
 
-  let params =
-    get_params(state.state)
-    |> option.unwrap(dict.new())
+  let #(params, maybe_resource) = case state.state {
+    ReadyContinuous(params, resource) -> #(params, option.Some(resource))
+    _ -> #(get_params(state.state) |> option.unwrap(dict.new()), option.None)
+  }
+
+  case maybe_resource {
+    option.Some(resource) -> {
+      let AgentDeps(stop_server: stop_server, ..) = state.deps
+      stop_server(resource)
+    }
+    option.None -> Nil
+  }
 
   actor.continue(
     AgentRuntimeState(
@@ -892,6 +892,7 @@ fn handle_start_instance(
   state: AgentRuntimeState,
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
   let next_state = case state.state {
+    Created(params) -> agent_provisioning(params)
     Stopped(params) -> agent_provisioning(params)
     _ -> state.state
   }
@@ -949,7 +950,7 @@ pub fn status(
   timeout_ms: Int,
 ) -> Result(types_agent.AgentStatusView, safe_call.CallError) {
   safe_call.call_within(subject(agent), timeout_ms, fn(reply_to) {
-    AgentMsg(GetStatus(reply_to))
+    GetStatus(reply_to)
   })
 }
 
@@ -961,7 +962,7 @@ pub fn info(
   timeout_ms: Int,
 ) -> Result(types_agent.AgentInfoView, safe_call.CallError) {
   safe_call.call_within(subject(agent), timeout_ms, fn(reply_to) {
-    AgentMsg(GetInfo(reply_to))
+    GetInfo(reply_to)
   })
 }
 
@@ -972,7 +973,7 @@ pub fn attach_logs(
   agent: AgentRef,
   subscriber: process.Subject(types_log.LogEvent),
 ) -> Nil {
-  process.send(subject(agent), AgentMsg(AttachLogs(subscriber)))
+  process.send(subject(agent), AttachLogs(subscriber))
 }
 
 /// Executes a single interaction.
@@ -989,7 +990,7 @@ pub fn interact(
   let AgentRequest(context: context, ..) = req
 
   safe_call.call_within(subject(agent), timeout_ms, fn(reply_to) {
-    AgentMsg(Interact(req, stream_sink, reply_to))
+    Interact(req, stream_sink, reply_to)
   })
   |> unwrap_or_disconnected(context.trace_id)
 }
@@ -1018,17 +1019,17 @@ fn unwrap_or_disconnected(
 
 /// Requests the instance to stop (idempotent).
 pub fn stop_instance(agent: AgentRef, reason: StopReason) -> Nil {
-  process.send(subject(agent), AgentMsg(StopInstance(reason)))
+  process.send(subject(agent), StopInstance(reason))
 }
 
 /// Requests the instance to start again.
 pub fn start_instance(agent: AgentRef) -> Nil {
-  process.send(subject(agent), AgentMsg(StartInstance))
+  process.send(subject(agent), StartInstance)
 }
 
 /// Requests the actor to terminate (delete/shutdown).
 pub fn terminate(agent: AgentRef, reason: StopReason) -> Nil {
-  process.send(subject(agent), AgentMsg(Terminate(reason)))
+  process.send(subject(agent), Terminate(reason))
 }
 
 /// Internal-only: injects the provisioning outcome.
@@ -1038,14 +1039,14 @@ pub fn internal_provisioning_done(
   agent: AgentRef,
   outcome: Result(#(AgentState, option.Option(Int)), String),
 ) -> Nil {
-  process.send(subject(agent), AgentMsg(ProvisioningDone(outcome)))
+  process.send(subject(agent), ProvisioningDone(outcome))
 }
 
 /// Internal-only: ingests a runner log line.
 ///
 /// Prefer calling `sad/core/agent_internal.ingest_log`.
 pub fn internal_ingest_log(agent: AgentRef, event: types_log.LogEvent) -> Nil {
-  process.send(subject(agent), AgentMsg(IngestLog(event)))
+  process.send(subject(agent), IngestLog(event))
 }
 
 /// Internal-only: signals that an interaction is done.
@@ -1055,12 +1056,12 @@ pub fn internal_interaction_done(
   agent: AgentRef,
   result: Result(types_output.InteractionResult, types_output.InteractionError),
 ) -> Nil {
-  process.send(subject(agent), AgentMsg(InteractionDone(result)))
+  process.send(subject(agent), InteractionDone(result))
 }
 
 /// Internal-only: signals that the continuous server died.
 ///
 /// Prefer calling `sad/core/agent_internal.server_died`.
 pub fn internal_server_died(agent: AgentRef, exit_code: Int) -> Nil {
-  process.send(subject(agent), AgentMsg(ServerDied(exit_code)))
+  process.send(subject(agent), ServerDied(exit_code))
 }

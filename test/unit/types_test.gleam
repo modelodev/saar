@@ -1,5 +1,5 @@
 import gleam/list
-import gleam/option.{None}
+import gleam/option.{None, Some}
 import gleam/string
 import gleeunit
 import gleeunit/should
@@ -83,6 +83,19 @@ pub fn instance_id_validation_test() {
   let too_long = string.repeat("a", times: 65)
   types_core.instance_id(too_long)
   |> should.equal(Error(types_core.InstanceIdTooLong(max: 64)))
+}
+
+pub fn config_value_lookup_test() {
+  let cfg = types_config.default_sad_config()
+
+  types_config.config_value(cfg, "server.host")
+  |> should.equal(Some(types_core.StringVal("0.0.0.0")))
+
+  types_config.config_value(cfg, "runners.python_bin")
+  |> should.equal(Some(types_core.StringVal("python3")))
+
+  types_config.config_value(cfg, "unknown.key")
+  |> should.equal(None)
 }
 
 pub fn default_config_invariants_test() {

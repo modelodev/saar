@@ -112,6 +112,15 @@ pub type StartArgs {
 /// This is part of the core OTP skeleton; functional behavior is introduced in
 /// later sprints.
 pub type AgentManagerMsg {
+  /// Creates and starts an agent from a `profile_id`.
+  ///
+  /// This is the gateway-friendly entry point used by `/sys/agents`.
+  CreateAgent(
+    types_core.ProfileId,
+    types_core.InstanceId,
+    Dict(String, types_core.Value),
+    Subject(Result(AgentRef, StartError)),
+  )
   StartAgent(StartArgs, Subject(Result(AgentRef, StartError)))
   StopAgent(types_core.InstanceId, Subject(Result(Nil, StopError)))
   DeleteAgent(types_core.InstanceId, Subject(Result(Nil, DeleteError)))

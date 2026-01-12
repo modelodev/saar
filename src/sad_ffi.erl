@@ -39,12 +39,18 @@ open_port(Command, Args, Env, Cd, MaxRunnerEventBytes) ->
     end.
 
 port_send(Port, Data) ->
-    erlang:port_command(Port, Data),
-    nil.
+    try erlang:port_command(Port, Data) of
+        _ -> nil
+    catch
+        _:_ -> nil
+    end.
 
 port_close(Port) ->
-    erlang:port_close(Port),
-    nil.
+    try erlang:port_close(Port) of
+        _ -> nil
+    catch
+        _:_ -> nil
+    end.
 
 port_receive(Port, TimeoutMs) ->
     receive
