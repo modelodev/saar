@@ -16,6 +16,8 @@
 import gleam/option.{type Option}
 import sad/types/core as types_core
 import sad/types/enums as types_enums
+import sad/types/profile as types_profile
+import sad/types/runner as types_runner
 
 /// Coarse phase of an agent instance.
 ///
@@ -60,5 +62,17 @@ pub type InstanceSummary {
     status: AgentStatusView,
     registered_at: Int,
     status_updated_at: Int,
+  )
+}
+
+/// Public diagnostic information about an agent instance.
+///
+/// This view is safe to log and to expose via HTTP.
+pub type AgentInfoView {
+  AgentInfoView(
+    meta: types_profile.ProfileMeta,
+    runner: types_runner.Runner,
+    interface: types_profile.Interface,
+    status: AgentStatusView,
   )
 }

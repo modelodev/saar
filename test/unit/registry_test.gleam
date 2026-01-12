@@ -1,3 +1,5 @@
+import agent_helpers
+import gleam/dict
 import gleam/erlang/process
 import gleam/list
 import gleam/option
@@ -233,8 +235,19 @@ fn start_registry() -> process.Subject(messages.RegistryMsg) {
 }
 
 fn start_test_agent_ref() -> #(agent.AgentRef, process.Pid) {
-  let pid = process.spawn_unlinked(fn() { process.sleep(10_000) })
-  #(agent.unsafe_from_pid(pid), pid)
+  let config = agent_helpers.default_config()
+  let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
+  let assert Ok(instance_id) = types_core.instance_id("inst-test")
+
+  let agent_ref =
+    agent_helpers.start_agent(
+      profile,
+      instance_id,
+      config,
+      agent.default_deps(),
+    )
+
+  #(agent_ref, agent.pid(agent_ref))
 }
 
 fn status_view(
