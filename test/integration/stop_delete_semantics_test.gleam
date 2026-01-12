@@ -3,9 +3,8 @@ import filepath
 import gleam/dict
 import gleam/erlang/process
 import gleam/json
-import gleam/option.{type Option, None, Some}
+import gleam/option.{None, Some}
 import gleam/otp/actor
-import gleam/string
 import gleeunit
 import gleeunit/should
 import port_helpers
@@ -230,15 +229,8 @@ fn wait_for_phase(
       case status.phase {
         types_agent.Failed ->
           case status.failure_reason {
-            Some(reason) -> {
-              panic as reason
-              Nil
-            }
-
-            None -> {
-              panic as "Agent entered Failed"
-              Nil
-            }
+            Some(reason) -> panic as reason
+            None -> panic as "Agent entered Failed"
           }
 
         _ ->
@@ -252,12 +244,6 @@ fn wait_for_phase(
       }
     }
   }
-}
-
-fn pick_free_port() -> Int {
-  let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
-  tcp_listener.close(listener)
-  port
 }
 
 fn config_with_port_range(port: Int) -> types_config.SadConfig {

@@ -23,23 +23,18 @@ import sad/types/config as types_config
 import sad/types/input as types_input
 import sad/types/output as types_output
 
-pub type PortOwnerRef {
+pub opaque type PortOwnerRef {
   PortOwnerRef(subject: process.Subject(Msg), pid: process.Pid)
 }
 
-pub fn pid(ref: PortOwnerRef) -> process.Pid {
-  let PortOwnerRef(pid: pid, ..) = ref
-  pid
-}
-
-pub fn subject(ref: PortOwnerRef) -> process.Subject(Msg) {
-  let PortOwnerRef(subject: subject, ..) = ref
-  subject
-}
-
-pub type Msg {
+type Msg {
   Stop
   StopSync(process.Subject(Nil))
+}
+
+fn subject(ref: PortOwnerRef) -> process.Subject(Msg) {
+  let PortOwnerRef(subject: subject, ..) = ref
+  subject
 }
 
 type State {

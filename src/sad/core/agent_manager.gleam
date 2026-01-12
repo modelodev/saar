@@ -19,7 +19,6 @@
 
 import envoy
 import gleam/dict
-import gleam/erlang/port.{type Port}
 import gleam/erlang/process
 import gleam/http
 import gleam/int
@@ -31,7 +30,6 @@ import gleam/result
 import gleam/string
 import sad/bridge/client
 import sad/bridge/port_owner
-import sad/bridge/runner
 
 import sad/core/agent
 import sad/core/agent_internal
@@ -39,7 +37,6 @@ import sad/core/artifact_registry_api
 import sad/core/messages
 import sad/core/port_pool_api
 import sad/core/registry_api
-import sad/ffi
 import sad/net/port_check
 import sad/port_pool
 import sad/types/agent as types_agent
@@ -354,7 +351,7 @@ fn start_provisioning_worker(
   agent_ref: agent.AgentRef,
 ) -> process.Pid {
   process.spawn(fn() {
-    let outcome = provision(config, port_pool, args, agent_ref)
+    let outcome = provision(config, port_pool, args)
     agent_internal.provisioning_done(agent_ref, outcome)
     update_registry_status_best_effort(config, registry, agent_ref)
   })
@@ -364,7 +361,6 @@ fn provision(
   config: types_config.SadConfig,
   port_pool: process.Subject(messages.PortPoolMsg),
   args: messages.StartArgs,
-  agent_ref: agent.AgentRef,
 ) -> Result(#(agent.AgentState, Option(Int)), String) {
   let messages.StartArgs(
     profile: profile,
@@ -377,14 +373,7 @@ fn provision(
     types_enums.Transient -> Ok(#(agent.agent_ready_transient(params), None))
 
     types_enums.Continuous ->
-      provision_continuous(
-        config,
-        port_pool,
-        profile,
-        instance_id,
-        params,
-        agent_ref,
-      )
+      provision_continuous(config, port_pool, profile, instance_id, params)
   }
 }
 
@@ -394,7 +383,6 @@ fn provision_continuous(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
-  agent_ref: agent.AgentRef,
 ) -> Result(#(agent.AgentState, Option(Int)), String) {
   let types_runner.RuntimeConfig(mode: mode, ..) = profile.runner.runtime
 
@@ -408,7 +396,6 @@ fn provision_continuous(
         profile,
         instance_id,
         params,
-        agent_ref,
       )
   }
 }
@@ -541,7 +528,6 @@ fn provision_continuous_managed_port(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
-  agent_ref: agent.AgentRef,
 ) -> Result(#(agent.AgentState, Option(Int)), String) {
   let host = managed_port_host(config)
 

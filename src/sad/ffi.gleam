@@ -18,7 +18,6 @@
 ////   function signatures exactly.
 
 import gleam/erlang/port.{type Port}
-import gleam/erlang/process
 
 /// Messages returned by `port_receive`.
 ///
@@ -110,20 +109,6 @@ pub fn port_close(port: Port) -> Nil {
 
 @external(erlang, "sad_ffi", "port_close")
 fn port_close_ffi(port: Port) -> Nil
-
-/// Transfers the controlling process of a port.
-///
-/// This is required when a port needs to live longer than the process that
-/// created it.
-///
-/// Note: this is a best-effort wrapper that may no-op if the underlying port is
-/// already closed.
-pub fn port_connect(port: Port, pid: process.Pid) -> Result(Nil, String) {
-  port_connect_ffi(port, pid)
-}
-
-@external(erlang, "sad_ffi", "port_connect")
-fn port_connect_ffi(port: Port, pid: process.Pid) -> Result(Nil, String)
 
 /// Receives a message from a port.
 ///

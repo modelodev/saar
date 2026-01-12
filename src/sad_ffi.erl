@@ -5,7 +5,6 @@
     open_port/5,
     port_send/2,
     port_close/1,
-    port_connect/2,
     port_receive/2
 ]).
 
@@ -51,14 +50,6 @@ port_close(Port) ->
         _ -> nil
     catch
         _:_ -> nil
-    end.
-
-port_connect(Port, Pid) ->
-    try
-        erlang:port_connect(Port, Pid),
-        {ok, nil}
-    catch
-        _:Reason -> {error, format_error(Reason)}
     end.
 
 port_receive(Port, TimeoutMs) ->
