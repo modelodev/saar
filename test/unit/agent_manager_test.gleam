@@ -17,6 +17,8 @@ import sad/types/agent as types_agent
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
+import sad/types/profile as types_profile
+import sad/types/runner as types_runner
 import test_assertions
 
 pub fn main() {
@@ -124,7 +126,37 @@ pub fn create_agent_uses_profiles_actor_test() {
   let profiles = process.named_subject(profiles_name)
   let manager = process.named_subject(agent_manager_name)
 
-  let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
+  let parameters =
+    dict.from_list([
+      #(
+        "host",
+        types_profile.ConfigParam(
+          "server.host",
+          option.None,
+          types_profile.ParamString,
+        ),
+      ),
+    ])
+
+  let profile =
+    types_profile.Profile(
+      meta: types_profile.ProfileMeta(
+        id: types_core.profile_id("p1"),
+        name: option.None,
+        lifecycle: types_enums.Transient,
+        description: "test",
+      ),
+      parameters: parameters,
+      runner: types_runner.Runner(
+        type_: "test",
+        tool_config: types_runner.ToolConfigScript(""),
+        runtime: types_runner.default_runtime_config(),
+        env_map: dict.new(),
+        args: [],
+        artifact_config: types_runner.default_artifact_config(),
+      ),
+      interface: types_profile.RunnerInterface(capabilities: dict.new()),
+    )
 
   let assert Ok(_) =
     profiles_api.set_profiles(

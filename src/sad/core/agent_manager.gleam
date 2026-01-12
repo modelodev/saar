@@ -177,9 +177,8 @@ fn resolve_params_for_profile(
 ) -> Result(types_input.ResolvedParams, messages.StartError) {
   let types_profile.Profile(parameters: parameters, ..) = profile
 
-  // TODO(S13): map SadConfig into ConfigParam values.
-  let _ = config
-  let config_values = dict.new()
+  let keys = profile_config_param_keys(parameters)
+  let config_values = types_config.config_values_for_keys(config, keys)
 
   case
     params.resolve_params(parameters, config_values, envoy.get, init_params)
@@ -191,6 +190,24 @@ fn resolve_params_for_profile(
         "param_resolution_failed:" <> string.inspect(errors),
       ))
   }
+}
+
+fn profile_config_param_keys(
+  parameters: dict.Dict(String, types_profile.Parameter),
+) -> List(String) {
+  parameters
+  |> dict.to_list
+  |> list.flat_map(fn(entry) {
+    let #(param_name, param) = entry
+
+    case param {
+      types_profile.ConfigParam(key, _, _) -> [key]
+      _ -> {
+        let _ = param_name
+        []
+      }
+    }
+  })
 }
 
 fn handle_start_agent(

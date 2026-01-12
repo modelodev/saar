@@ -15,6 +15,8 @@
 //// - Uses primitives from `sad/types/core` and enums from `sad/types/enums`.
 //// - Consumed by SAD bootstrap/server code.
 
+import gleam/dict
+import gleam/list
 import gleam/option.{type Option}
 import sad/types/core
 import sad/types/enums
@@ -193,6 +195,83 @@ pub fn runner_exec_settings(cfg: SadConfig) -> RunnerExecSettings {
 pub fn server_address(cfg: SadConfig) -> #(String, Int) {
   let SadConfig(server_host: host, server_port: port, ..) = cfg
   #(host, port)
+}
+
+/// Looks up a config value by its canonical string key.
+///
+/// This is used when resolving `ConfigParam` profile parameters.
+///
+/// The key strings are aligned with the plan (e.g. `server.host`,
+/// `runners.python_bin`, `workspaces.directory`).
+///
+/// Returns `None` when a key is unknown or intentionally not exposable.
+pub fn config_value(cfg: SadConfig, key: String) -> option.Option(core.Value) {
+  let SadConfig(
+    server_host: server_host,
+    server_port: server_port,
+    timeouts: timeouts,
+    profiles: profiles,
+    runner: runner,
+    storage: storage,
+    limits: limits,
+    stream: stream,
+    ..,
+  ) = cfg
+
+  case key {
+    "server.host" -> option.Some(core.StringVal(server_host))
+    "server.port" -> option.Some(core.IntVal(server_port))
+
+    "profiles.git_cache_dir" -> {
+      let ProfilesConfig(git_cache_dir: dir, ..) = profiles
+      option.Some(core.StringVal(dir))
+    }
+
+    "runners.python_bin" -> {
+      let RunnerSystemConfig(python_bin: python_bin, ..) = runner
+      option.Some(core.StringVal(python_bin))
+    }
+
+    "workspaces.directory" -> {
+      let StorageConfig(workspaces_directory: dir, ..) = storage
+      option.Some(core.StringVal(dir))
+    }
+
+    // Timeouts
+    "limits.call_timeout_ms" -> {
+      let SadTimeouts(call_timeout_ms: v, ..) = timeouts
+      option.Some(core.IntVal(v))
+    }
+
+    // Stream
+    "limits.sse_keep_alive_interval_ms" -> {
+      let StreamConfig(sse_keep_alive_interval_ms: v, ..) = stream
+      option.Some(core.IntVal(v))
+    }
+
+    // Size limits
+    "limits.max_request_body_bytes" -> {
+      let SadLimits(max_request_body_bytes: v, ..) = limits
+      option.Some(core.IntVal(v))
+    }
+
+    _ -> option.None
+  }
+}
+
+/// Builds a dictionary of config values for the provided keys.
+///
+/// Unknown keys are ignored.
+pub fn config_values_for_keys(
+  cfg: SadConfig,
+  keys: List(String),
+) -> dict.Dict(String, core.Value) {
+  list.fold(keys, dict.new(), fn(acc, k) {
+    case config_value(cfg, k) {
+      option.Some(v) -> dict.insert(acc, k, v)
+      option.None -> acc
+    }
+  })
 }
 
 /// Returns the default configuration used by the SAD server.
