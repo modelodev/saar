@@ -15,13 +15,13 @@
 //// - Internal event injection is routed through `sad/core/agent_internal`.
 
 import gleam/dict
-import gleam/erlang/port.{type Port}
 import gleam/erlang/process
 import gleam/int
 import gleam/list
 import gleam/option
 import gleam/otp/actor
 import gleam/string
+import sad/bridge/port_owner
 import sad/ffi
 import sad/otp/safe_call
 import sad/streams/sink
@@ -37,18 +37,14 @@ import sad/types/resolved_params.{type ResolvedParams}
 
 /// Opaque resource associated with a continuous agent.
 ///
-/// In v0 this holds low-level BEAM resources such as `Port`.
+/// In v0 this is a dedicated port owner process so stop/delete can reliably
+/// close the underlying wrapper port.
 pub opaque type AgentResource {
-  ProcessResource(port: Port)
+  ContinuousServer(owner: port_owner.PortOwnerRef)
 }
 
-pub fn process_resource(port: Port) -> AgentResource {
-  ProcessResource(port)
-}
-
-pub fn agent_resource_port(resource: AgentResource) -> Port {
-  let ProcessResource(port: port) = resource
-  port
+pub fn port_owner_resource(owner: port_owner.PortOwnerRef) -> AgentResource {
+  ContinuousServer(owner)
 }
 
 /// Unified internal agent state.
@@ -382,7 +378,10 @@ pub fn default_deps() -> AgentDeps {
       process.spawn(fn() { process.sleep(60_000) })
     },
     cancel_interaction: fn(pid) { process.kill(pid) },
-    stop_server: fn(_resource) { Nil },
+    stop_server: fn(resource) {
+      let ContinuousServer(owner: owner) = resource
+      port_owner.stop_async(owner)
+    },
   )
 }
 
@@ -857,9 +856,18 @@ fn handle_stop_instance(
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
   let state = cancel_if_busy(state, "cancelled")
 
-  let params =
-    get_params(state.state)
-    |> option.unwrap(dict.new())
+  let #(params, maybe_resource) = case state.state {
+    ReadyContinuous(params, resource) -> #(params, option.Some(resource))
+    _ -> #(get_params(state.state) |> option.unwrap(dict.new()), option.None)
+  }
+
+  case maybe_resource {
+    option.Some(resource) -> {
+      let AgentDeps(stop_server: stop_server, ..) = state.deps
+      stop_server(resource)
+    }
+    option.None -> Nil
+  }
 
   actor.continue(
     AgentRuntimeState(
@@ -892,6 +900,7 @@ fn handle_start_instance(
   state: AgentRuntimeState,
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
   let next_state = case state.state {
+    Created(params) -> agent_provisioning(params)
     Stopped(params) -> agent_provisioning(params)
     _ -> state.state
   }
