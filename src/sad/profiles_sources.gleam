@@ -22,6 +22,7 @@ import gleam/dynamic/decode
 import gleam/erlang/port
 import gleam/erlang/process
 import gleam/int
+import gleam/io
 import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -67,11 +68,70 @@ pub fn load_profiles_from_sources(
     git_cache_dir: git_cache_dir,
   ) = profiles_cfg
 
-  list.fold(sources, Ok(dict.new()), fn(acc, source) {
+  let init = LoadAcc(profiles: dict.new(), origins: dict.new())
+
+  list.fold(sources, Ok(init), fn(acc, source) {
     use acc <- result.try(acc)
     use loaded <- result.try(load_source(source, git_cache_dir))
-    merge_profiles(acc, loaded)
+
+    Ok(insert_loaded_profiles(acc, loaded))
   })
+  |> result.map(fn(acc) { acc.profiles })
+}
+
+type LoadAcc {
+  LoadAcc(
+    profiles: Dict(types_core.ProfileId, types_profile.Profile),
+    origins: Dict(types_core.ProfileId, String),
+  )
+}
+
+type LoadedProfile {
+  LoadedProfile(
+    id: types_core.ProfileId,
+    profile: types_profile.Profile,
+    origin: String,
+  )
+}
+
+fn insert_loaded_profiles(acc: LoadAcc, loaded: List(LoadedProfile)) -> LoadAcc {
+  loaded
+  |> list.fold(acc, fn(acc, item) {
+    let LoadedProfile(id: id, profile: profile, origin: origin) = item
+
+    case dict.has_key(acc.profiles, id) {
+      True -> {
+        let kept_from = case dict.get(acc.origins, id) {
+          Ok(s) -> s
+          Error(_) -> "unknown"
+        }
+
+        log_profile_override_ignored(id, kept_from, origin)
+        acc
+      }
+
+      False ->
+        LoadAcc(
+          profiles: dict.insert(acc.profiles, id, profile),
+          origins: dict.insert(acc.origins, id, origin),
+        )
+    }
+  })
+}
+
+fn log_profile_override_ignored(
+  id: types_core.ProfileId,
+  kept_from: String,
+  ignored_from: String,
+) -> Nil {
+  io.println(
+    "profiles.reload perfil_duplicado id="
+    <> types_core.profile_id_to_string(id)
+    <> " ignorado="
+    <> ignored_from
+    <> " conservado="
+    <> kept_from,
+  )
 }
 
 /// Reloads the `ProfilesActor` atomically.
@@ -103,26 +163,20 @@ pub fn reload_profiles(
 fn load_source(
   source: types_config.ProfileSource,
   git_cache_dir: String,
-) -> Result(
-  Dict(types_core.ProfileId, types_profile.Profile),
-  ProfilesSourceError,
-) {
+) -> Result(List(LoadedProfile), ProfilesSourceError) {
   case source {
     types_config.ProfileSourceDir(path: root) -> load_dir_source(root)
 
     types_config.ProfileSourceGit(url: url, ref: ref) -> {
       use root <- result.try(ensure_git_checkout(git_cache_dir, url, ref))
-      load_dir_source(root)
+      load_git_source(url, ref, root)
     }
   }
 }
 
 fn load_dir_source(
   root: String,
-) -> Result(
-  Dict(types_core.ProfileId, types_profile.Profile),
-  ProfilesSourceError,
-) {
+) -> Result(List(LoadedProfile), ProfilesSourceError) {
   let profiles_dir = root <> "/profiles"
 
   use entries <- result.try(
@@ -142,9 +196,52 @@ fn load_dir_source(
   |> list.sort(string.compare)
   |> list.try_map(fn(name) {
     let path = profiles_dir <> "/" <> name
-    load_profile_file(root, path)
+    use pair <- result.try(load_profile_file(root, path))
+    let #(id, profile) = pair
+    Ok(LoadedProfile(id: id, profile: profile, origin: "dir:" <> path))
   })
-  |> result.map(dict.from_list)
+}
+
+fn load_git_source(
+  url: String,
+  ref: Option(String),
+  root: String,
+) -> Result(List(LoadedProfile), ProfilesSourceError) {
+  let profiles_dir = root <> "/profiles"
+
+  use entries <- result.try(
+    simplifile.read_directory(at: profiles_dir)
+    |> result.map_error(fn(err) {
+      SourceIoError(
+        message: "failed to read directory '"
+        <> profiles_dir
+        <> "': "
+        <> simplifile.describe_error(err),
+      )
+    }),
+  )
+
+  let label =
+    "git:"
+    <> url
+    <> case ref {
+      Some(r) -> "@" <> r
+      None -> ""
+    }
+
+  entries
+  |> list.filter(fn(name) { string.ends_with(name, ".json") })
+  |> list.sort(string.compare)
+  |> list.try_map(fn(name) {
+    let path = profiles_dir <> "/" <> name
+    use pair <- result.try(load_profile_file(root, path))
+    let #(id, profile) = pair
+    Ok(LoadedProfile(
+      id: id,
+      profile: profile,
+      origin: label <> ":profiles/" <> name,
+    ))
+  })
 }
 
 fn load_profile_file(
@@ -281,34 +378,6 @@ fn is_executable_file(path: String) -> Result(Bool, ProfilesSourceError) {
       Ok(int.bitwise_and(mode, 73) != 0)
     }
   }
-}
-
-fn merge_profiles(
-  left: Dict(types_core.ProfileId, types_profile.Profile),
-  right: Dict(types_core.ProfileId, types_profile.Profile),
-) -> Result(
-  Dict(types_core.ProfileId, types_profile.Profile),
-  ProfilesSourceError,
-) {
-  right
-  |> dict.to_list
-  |> list.try_map(fn(pair) {
-    let #(id, _profile) = pair
-    case dict.has_key(left, id) {
-      True ->
-        Error(ProfileDecodeError(
-          path: "profiles.sources",
-          message: "duplicate profile id: "
-            <> types_core.profile_id_to_string(id),
-        ))
-      False -> Ok(pair)
-    }
-  })
-  |> result.map(fn(new_items) {
-    list.fold(new_items, left, fn(acc, pair) {
-      dict.insert(acc, pair.0, pair.1)
-    })
-  })
 }
 
 fn validate_local_git_url_exists(
