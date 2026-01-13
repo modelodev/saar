@@ -28,6 +28,72 @@ import sad/types/input as types_input
 import sad/types/profile as types_profile
 import sad/types/runner as types_runner
 
+/// Describes the "shape" of a dynamic value.
+///
+/// This is intended for error messages at decoding boundaries.
+///
+/// Example:
+/// ```gleam
+/// import gleam/dynamic
+/// import sad/decoders
+///
+/// decoders.describe_dynamic_type(dynamic.int(1))
+/// // -> "number"
+/// ```
+pub fn describe_dynamic_type(value: Dynamic) -> String {
+  case decode.run(value, decode.string) {
+    Ok(_) -> "string"
+    Error(_) ->
+      case decode.run(value, decode.bool) {
+        Ok(_) -> "bool"
+        Error(_) ->
+          case decode.run(value, decode.int) {
+            Ok(_) -> "number"
+            Error(_) ->
+              case decode.run(value, decode.float) {
+                Ok(_) -> "number"
+                Error(_) ->
+                  case decode.run(value, decode.list(of: decode.dynamic)) {
+                    Ok(_) -> "array"
+                    Error(_) ->
+                      case
+                        decode.run(
+                          value,
+                          decode.dict(decode.string, decode.dynamic),
+                        )
+                      {
+                        Ok(_) -> "object"
+                        Error(_) -> "unknown"
+                      }
+                  }
+              }
+          }
+      }
+  }
+}
+
+/// Decodes a scalar value from dynamic input.
+///
+/// Supported shapes: string, int, float, bool.
+pub fn decode_scalar_value(value: Dynamic) -> Result(types_core.Value, Nil) {
+  case decode.run(value, decode.string) {
+    Ok(s) -> Ok(types_core.StringVal(s))
+    Error(_) ->
+      case decode.run(value, decode.int) {
+        Ok(i) -> Ok(types_core.IntVal(i))
+        Error(_) ->
+          case decode.run(value, decode.float) {
+            Ok(f) -> Ok(types_core.FloatVal(f))
+            Error(_) ->
+              case decode.run(value, decode.bool) {
+                Ok(b) -> Ok(types_core.BoolVal(b))
+                Error(_) -> Error(Nil)
+              }
+          }
+      }
+  }
+}
+
 /// Decodes a profile definition from dynamic input.
 ///
 /// Example:

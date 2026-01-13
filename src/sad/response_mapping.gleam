@@ -21,6 +21,7 @@ import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import sad/decoders
 import sad/json_pointer
 import sad/types/core as types_core
 import sad/types/enums as types_enums
@@ -165,40 +166,8 @@ fn decode_optional(
           Error(WrongType(
             expected: expected,
             pointer: pointer,
-            got: describe_dynamic(payload),
+            got: decoders.describe_dynamic_type(payload),
           ))
-      }
-  }
-}
-
-fn describe_dynamic(value: dynamic.Dynamic) -> String {
-  case decode.run(value, decode.string) {
-    Ok(_) -> "string"
-    Error(_) ->
-      case decode.run(value, decode.bool) {
-        Ok(_) -> "bool"
-        Error(_) ->
-          case decode.run(value, decode.int) {
-            Ok(_) -> "number"
-            Error(_) ->
-              case decode.run(value, decode.float) {
-                Ok(_) -> "number"
-                Error(_) ->
-                  case decode.run(value, decode.list(of: decode.dynamic)) {
-                    Ok(_) -> "array"
-                    Error(_) ->
-                      case
-                        decode.run(
-                          value,
-                          decode.dict(decode.string, decode.dynamic),
-                        )
-                      {
-                        Ok(_) -> "object"
-                        Error(_) -> "unknown"
-                      }
-                  }
-              }
-          }
       }
   }
 }

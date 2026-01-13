@@ -35,6 +35,7 @@ import mist
 import sad/core/agent
 import sad/core/boundary_call
 import sad/core/messages
+import sad/decoders
 import sad/gateway/problem
 import sad/profiles_sources
 import sad/types/agent as types_agent
@@ -240,30 +241,11 @@ fn init_params_from_dynamic_dict(
 ) -> Dict(String, types_core.Value) {
   values
   |> dict.fold(dict.new(), fn(acc, key, value) {
-    case dynamic_to_scalar(value) {
+    case decoders.decode_scalar_value(value) {
       Ok(v) -> dict.insert(acc, key, v)
       Error(_) -> acc
     }
   })
-}
-
-fn dynamic_to_scalar(value: Dynamic) -> Result(types_core.Value, Nil) {
-  case decode.run(value, decode.string) {
-    Ok(s) -> Ok(types_core.StringVal(s))
-    Error(_) ->
-      case decode.run(value, decode.int) {
-        Ok(i) -> Ok(types_core.IntVal(i))
-        Error(_) ->
-          case decode.run(value, decode.float) {
-            Ok(f) -> Ok(types_core.FloatVal(f))
-            Error(_) ->
-              case decode.run(value, decode.bool) {
-                Ok(b) -> Ok(types_core.BoolVal(b))
-                Error(_) -> Error(Nil)
-              }
-          }
-      }
-  }
 }
 
 fn list_agents(
