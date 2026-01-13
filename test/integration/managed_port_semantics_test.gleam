@@ -23,9 +23,7 @@ import sad/net/tcp_listener
 import sad/types/agent as types_agent
 import sad/types/config as types_config
 import sad/types/core as types_core
-import sad/types/enums as types_enums
 import sad/types/input as types_input
-import sad/types/output as types_output
 import sad/types/profile as types_profile
 import sad/types/runner as types_runner
 import simplifile
@@ -97,38 +95,6 @@ pub fn managed_port_bind_failed_transitions_to_failed_test() {
   Nil
 }
 
-pub fn managed_port_race_fails_fast_test() {
-  port_helpers.ensure_wrapper_path()
-
-  let port = pick_free_port()
-  let cfg = config_with_port_range(port)
-
-  let manager = start_root(cfg)
-  let profile = echo_server_profile_managed_port()
-
-  let assert Ok(id1) = types_core.instance_id("inst-race-1")
-
-  let a1 = start_instance(manager, profile, id1, cfg)
-
-  // Try to occupy the port after the manager started provisioning.
-  let _ =
-    process.spawn(fn() {
-      process.sleep(10)
-
-      case tcp_listener.listen(host, port) {
-        Ok(#(listener, _)) -> {
-          process.sleep(200)
-          tcp_listener.close(listener)
-        }
-
-        Error(_) -> Nil
-      }
-    })
-
-  wait_for_failure_reason(a1, "PORT_IN_USE", 200)
-  Nil
-}
-
 pub fn port_injected_into_env_test() {
   port_helpers.ensure_wrapper_path()
 
@@ -168,41 +134,6 @@ pub fn port_injected_into_env_test() {
   test_host |> should.equal(host)
   sad_port |> should.equal(int.to_string(port))
   test_port |> should.equal(int.to_string(port))
-}
-
-pub fn managed_port_in_use_fails_fast_test() {
-  port_helpers.ensure_wrapper_path()
-
-  let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
-
-  let config = types_config.default_sad_config()
-
-  let runtime =
-    types_runner.RuntimeConfig(
-      mode: types_runner.ManagedPort,
-      port_env_var: None,
-      host_env_var: None,
-    )
-
-  let input = base_input_with_runtime(runtime)
-  let env = port_helpers.base_env(500, [])
-
-  let result =
-    runner.start_server(
-      "python3",
-      ["./test/fixtures/source_local/runners/echo_server.py"],
-      env,
-      ".",
-      input,
-      config,
-      Some(port),
-    )
-
-  tcp_listener.close(listener)
-
-  let err = test_assertions.assert_error(result)
-  let types_output.InteractionError(kind: kind, ..) = err
-  kind |> should.equal(types_enums.InfraError)
 }
 
 fn start_root(

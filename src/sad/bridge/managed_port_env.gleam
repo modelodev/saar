@@ -7,7 +7,7 @@
 //// - Resolve the bind host from `SadConfig`.
 //// - Inject `SAD_HOST` and `SAD_PORT` when a port is assigned.
 //// - Inject configured `{host_env_var, port_env_var}` for compatibility.
-//// - Perform a fail-fast port availability check for `ManagedPort` mode.
+//// - Provide `ManagedPort` environment variables.
 ////
 //// Non-responsibilities:
 //// - Starting runner processes.
@@ -19,12 +19,8 @@
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import gleam/result
-import gleam/string
-import sad/net/port_check
 import sad/types/config as types_config
 import sad/types/core as types_core
-import sad/types/enums as types_enums
 import sad/types/output as types_output
 import sad/types/runner as types_runner
 
@@ -41,7 +37,7 @@ pub fn managed_port_host(config: types_config.SadConfig) -> String {
 /// It also injects `runner.runtime.{host_env_var,port_env_var}` when configured.
 pub fn inject_managed_port_env(
   env: List(#(String, String)),
-  trace_id: types_core.TraceId,
+  _trace_id: types_core.TraceId,
   config: types_config.SadConfig,
   runtime: types_runner.RuntimeConfig,
   assigned_port: Option(Int),
@@ -75,16 +71,7 @@ pub fn inject_managed_port_env(
       }
 
       case mode {
-        types_runner.ManagedPort ->
-          port_check.check_available(host, port)
-          |> result.map_error(fn(err) {
-            types_output.sad_error(
-              trace_id,
-              types_enums.InfraError,
-              "Managed port check failed: " <> string.inspect(err),
-            )
-          })
-          |> result.map(fn(_) { base_env })
+        types_runner.ManagedPort -> Ok(base_env)
 
         types_runner.NoNetwork -> Ok(base_env)
       }
