@@ -6,7 +6,6 @@ import gleam/otp/actor
 import gleeunit
 import gleeunit/should
 import sad/core/agent
-import sad/core/agent_internal
 import sad/otp/safe_call
 import sad/types/agent as types_agent
 import sad/types/config as types_config
@@ -151,7 +150,7 @@ pub fn interact_while_busy_rejected() {
   }
 
   let ok = test_ok_result(req1.context.trace_id)
-  agent_internal.interaction_done(agent_ref, Ok(ok))
+  agent.internal_interaction_done(agent_ref, Ok(ok))
 
   let assert Ok(Ok(_)) = process.receive(done, 1000)
 }
@@ -260,8 +259,8 @@ pub fn logs_attach_sends_history() {
       instance_id,
     )
 
-  agent_internal.ingest_log(agent_ref, e1)
-  agent_internal.ingest_log(agent_ref, e2)
+  agent.internal_ingest_log(agent_ref, e1)
+  agent.internal_ingest_log(agent_ref, e2)
 
   let subscriber = process.new_subject()
   agent.attach_logs(agent_ref, subscriber)
@@ -299,7 +298,7 @@ pub fn logs_attach_preserves_metadata() {
       option.Some(trace_id),
       instance_id,
     )
-  agent_internal.ingest_log(agent_ref, e1)
+  agent.internal_ingest_log(agent_ref, e1)
 
   let subscriber = process.new_subject()
   agent.attach_logs(agent_ref, subscriber)
@@ -344,14 +343,14 @@ pub fn attach_logs_takeover() {
 
   let e1 =
     types_log.log_event(types_log.StdErr, "one", option.None, instance_id)
-  agent_internal.ingest_log(agent_ref, e1)
+  agent.internal_ingest_log(agent_ref, e1)
   let assert Ok(_) = process.receive(sub1, 1000)
 
   agent.attach_logs(agent_ref, sub2)
 
   let e2 =
     types_log.log_event(types_log.StdErr, "two", option.None, instance_id)
-  agent_internal.ingest_log(agent_ref, e2)
+  agent.internal_ingest_log(agent_ref, e2)
 
   let assert Ok(_) = process.receive(sub2, 1000)
   process.receive(sub1, 20) |> should.equal(Error(Nil))
@@ -381,7 +380,7 @@ pub fn attach_logs_receives_events() {
 
   let e1 =
     types_log.log_event(types_log.StdErr, "one", option.None, instance_id)
-  agent_internal.ingest_log(agent_ref, e1)
+  agent.internal_ingest_log(agent_ref, e1)
 
   let assert Ok(received) = process.receive(subscriber, 1000)
   received |> should.equal(e1)
@@ -428,7 +427,7 @@ pub fn interact_delegates_to_actor() {
 
   let assert Ok("started") = process.receive(started, 1000)
 
-  agent_internal.interaction_done(
+  agent.internal_interaction_done(
     agent_ref,
     Ok(test_ok_result(req.context.trace_id)),
   )
@@ -613,9 +612,9 @@ pub fn hard_timeout_not_extended_by_output() {
     )
 
   // Keep emitting logs while the hard timeout is counting down.
-  agent_internal.ingest_log(agent_ref, e)
-  agent_internal.ingest_log(agent_ref, e)
-  agent_internal.ingest_log(agent_ref, e)
+  agent.internal_ingest_log(agent_ref, e)
+  agent.internal_ingest_log(agent_ref, e)
+  agent.internal_ingest_log(agent_ref, e)
 
   let assert Ok(Error(types_output.InteractionError(message: message, ..))) =
     process.receive(done, 1000)

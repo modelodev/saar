@@ -19,7 +19,7 @@ pub fn start_interaction(
     if streaming {
       execute_http_streaming(ctx, req, agent, timeout_ms, stream_sink_option)
     } else {
-      agent_internal.interaction_done(agent, execute_http_capability(ctx, req, timeout_ms))
+      agent.internal_interaction_done(agent, execute_http_capability(ctx, req, timeout_ms))
     }
   })
 }
@@ -66,7 +66,7 @@ fn finish_streaming_without_connection(
     Some(sink) -> stream_sink.finish(sink, Error(err), stream_cfg.push_timeout_ms) |> ignore
     None -> Nil
   }
-  agent_internal.interaction_done(agent, Error(err))
+  agent.internal_interaction_done(agent, Error(err))
 }
 
 fn finalize_streaming_interaction(
@@ -81,7 +81,7 @@ fn finalize_streaming_interaction(
     Some(sink) -> stream_sink.finish(sink, result, stream_cfg.push_timeout_ms) |> ignore
     None -> Nil
   }
-  agent_internal.interaction_done(agent, result)
+  agent.internal_interaction_done(agent, result)
 }
 
 /// Ejecuta request HTTP con SSE para streaming.
@@ -202,7 +202,7 @@ fn sse_read_loop(
       SseData(data) -> {
         case decode_runner_event(data) {
           Ok(RunnerEventLog(msg)) -> {
-            agent_internal.ingest_log(
+            agent.internal_ingest_log(
               agent,
               log_event(RunnerOut, msg, Some(ctx.trace_id), ctx.instance_id),
             )

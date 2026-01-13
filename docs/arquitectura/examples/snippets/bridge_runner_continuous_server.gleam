@@ -15,21 +15,20 @@ pub fn start_server(
       #("payload", sad_input_to_json(input)),
     ])
     |> json.to_string
-  
+
   // host/port provienen del port pool (ManagedPort): SAD reserva un puerto libre
   // (rango configurable) y lo inyecta en env vars del runner.
   // Configurar env con host/port
   let env = build_server_env(runner, host, port)
-  
+
   // Abrir port para el servidor
-  let port_handle = open_server_port(runner, workspace, env, control_line <> "\n")
+  let port_handle =
+    open_server_port(runner, workspace, env, control_line <> "\n")
   let resource = process_resource(port_handle)
-  
+
   // Spawn proceso para capturar logs del servidor (eventos JSONL por stdout) con instance_id
-  process.spawn_unlinked(fn() {
-    server_log_loop(resource, agent, instance_id)
-  })
-  
+  process.spawn_unlinked(fn() { server_log_loop(resource, agent, instance_id) })
+
   Ok(resource)
 }
 
@@ -55,7 +54,7 @@ fn server_log_loop(
       case decode_runner_event(line) {
         Ok(RunnerEventLog(msg)) -> {
           let event = log_event(RunnerOut, msg, None, instance_id)
-          agent_internal.ingest_log(agent, event)
+          agent.internal_ingest_log(agent, event)
         }
         _ -> Nil
       }
@@ -65,8 +64,8 @@ fn server_log_loop(
     FromPort(PortExit(code)) -> {
       let msg = "Server exited with code " <> int.to_string(code)
       let event = log_event(SystemLog, msg, None, instance_id)
-      agent_internal.ingest_log(agent, event)
-      agent_internal.server_died(agent, code)
+      agent.internal_ingest_log(agent, event)
+      agent.internal_server_died(agent, code)
     }
 
     FromPort(_) -> server_log_loop(resource, agent, instance_id)

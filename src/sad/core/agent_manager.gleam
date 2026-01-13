@@ -33,7 +33,6 @@ import sad/bridge/http_client
 import sad/bridge/port_owner
 
 import sad/core/agent
-import sad/core/agent_internal
 import sad/core/messages
 import sad/net/port_check
 import sad/params
@@ -435,7 +434,7 @@ fn start_provisioning_worker(
 ) -> process.Pid {
   process.spawn(fn() {
     let outcome = provision(config, port_pool, args)
-    agent_internal.provisioning_done(agent_ref, outcome)
+    agent.internal_provisioning_done(agent_ref, outcome)
     update_registry_status_best_effort(config, registry, agent_ref)
   })
 }

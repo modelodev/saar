@@ -18,7 +18,6 @@ src/
     ├── core/
     │   ├── messages.gleam    # Mensajes OTP internos (`AgentMsg`, `RegistryMsg`, ...)
     │   ├── agent.gleam       # AgentActor + API pública (`AgentRef`)
-    │   ├── agent_internal.gleam # API interna (bridge → actor): eventos internos
     │   ├── registry.gleam    # RegistryActor (InstanceId → RegistryEntry con summary cacheado)
     │   ├── registry_api.gleam# API pública del registry
 	    │   ├── artifact_registry.gleam     # Registro de artefactos (SSOT)

@@ -13,7 +13,7 @@ let _ =
 // En el worker de provisioning (spawn en initialiser):
 let start_ms = now_ms()
 let _ =
-  agent_internal.ingest_log(
+  agent.internal_ingest_log(
     agent_ref,
     system_log(
       ProvisioningStarted,

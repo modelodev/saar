@@ -3,9 +3,9 @@
 // Purpose: documentation-only; may not compile as-is.
 
 // En sad/bridge/runner.gleam
+import sad/bridge/bridge.{type BridgeCtx}
 import sad/streams/sink as stream_sink
 import sad/streams/sink.{type StreamSink}
-import sad/bridge/bridge.{type BridgeCtx}
 
 /// Lanza worker que ejecuta el runner y envía mensajes al actor.
 /// Retorna el PID del worker para que el actor lo monitoree.
@@ -14,27 +14,33 @@ pub fn start_interaction(
   ctx: BridgeCtx,
   req: AgentRequest,
   agent: AgentRef,
-  /// Timeout efectivo resuelto por el actor (config + capability limits).
   timeout_ms: Int,
   streaming: Bool,
   stream_sink_option: Option(StreamSink),
 ) -> Pid {
   // Worker BEAM de IO: usar unlinked para que fallos externos no tumben al actor.
   process.spawn_unlinked(fn() {
-    run_interaction_worker(ctx, req, agent, timeout_ms, streaming, stream_sink_option)
+    run_interaction_worker(
+      ctx,
+      req,
+      agent,
+      timeout_ms,
+      streaming,
+      stream_sink_option,
+    )
   })
 }
 
+/// Timeout efectivo resuelto por el actor (config + capability limits).
 /// Fail-fast (v0) — contrato JSONL del runner:
 /// - JSON válido bajo límites (`max_stdout_bytes`, límite por línea/evento)
 /// - `t` conocido (`log`/`chunk`/`result`/`provision_result`)
 /// - forma mínima por evento
 /// Ante violación: terminar inmediatamente el port/wrapper y devolver `ContractViolation` (no intentar “recuperar”).
-
 /// Worker interno que:
 /// 1. Abre port, envía JSON
 /// 2. Lee STDOUT (único canal capturado) como stream de eventos JSONL:
-///    - `t="log"` -> `agent_internal.ingest_log` con metadata (ts_ms, trace_id, instance_id)
+///    - `t="log"` -> `agent.internal_ingest_log` con metadata (ts_ms, trace_id, instance_id)
 ///    - `t="chunk"` (si streaming=true) -> `ContentChunk`
 ///    - `t="result"` -> resultado final (`RunnerResponse`)
 /// 4. En streaming, envía batches al `sad/streams/sink.StreamSink` (gateway); siempre notifica `interaction_done` al actor
@@ -54,10 +60,10 @@ fn run_interaction_worker(
       #("payload", sad_input_to_json(input)),
     ])
     |> json.to_string
-  
+
   // Abrir port
   let port = open_runner_port(ctx.profile.runner, ctx.workspace)
-  
+
   // Enviar JSONL de control por stdin (no cerrar; permite stop posterior)
   port.send(port, control_line <> "\n")
 
@@ -111,9 +117,16 @@ fn flush_pending(
       case pending_events {
         [] -> #(Some(s), [], 0)
         _ -> {
-          case stream_sink.push_batch(s, list.reverse(pending_events), cfg.push_timeout_ms) {
+          case
+            stream_sink.push_batch(
+              s,
+              list.reverse(pending_events),
+              cfg.push_timeout_ms,
+            )
+          {
             Ok(_) -> #(Some(s), [], 0)
-            Error(_) -> #(None, [], 0) // disconnect/timeout => discard
+            Error(_) -> #(None, [], 0)
+            // disconnect/timeout => discard
           }
         }
       }
@@ -128,10 +141,11 @@ fn finalize_interaction(
   result: Result(InteractionResult, InteractionError),
 ) -> Nil {
   case sink {
-    Some(sink) -> stream_sink.finish(sink, result, stream_cfg.push_timeout_ms) |> ignore
+    Some(sink) ->
+      stream_sink.finish(sink, result, stream_cfg.push_timeout_ms) |> ignore
     None -> Nil
   }
-  agent_internal.interaction_done(agent, result)
+  agent.internal_interaction_done(agent, result)
 }
 
 fn abort_interaction_with_error(
@@ -183,10 +197,11 @@ fn interaction_read_loop(
   let within_ms = int.min(stream_cfg.flush_interval_ms, remaining_ms)
   let evt = case process.selector_receive(selector, within_ms) {
     Ok(ev) -> ev
-    Error(Nil) -> case now_ms() >= deadline_ms {
-      True -> TimedOut
-      False -> FlushTick
-    }
+    Error(Nil) ->
+      case now_ms() >= deadline_ms {
+        True -> TimedOut
+        False -> FlushTick
+      }
   }
 
   case evt {
@@ -235,7 +250,9 @@ fn interaction_read_loop(
             stream_cfg,
             InteractionError(
               InfraError,
-              "Runner output exceeded " <> int.to_string(max_size) <> " bytes limit",
+              "Runner output exceeded "
+                <> int.to_string(max_size)
+                <> " bytes limit",
               ctx.trace_id,
             ),
           )
@@ -247,8 +264,9 @@ fn interaction_read_loop(
           // El decoder distingue por `t`.
           case decode_runner_event(line) {
             Ok(RunnerEventLog(msg)) -> {
-              let event = log_event(RunnerOut, msg, Some(ctx.trace_id), ctx.instance_id)
-              agent_internal.ingest_log(agent, event)
+              let event =
+                log_event(RunnerOut, msg, Some(ctx.trace_id), ctx.instance_id)
+              agent.internal_ingest_log(agent, event)
               interaction_read_loop(
                 port,
                 agent,
@@ -278,12 +296,11 @@ fn interaction_read_loop(
               }
 
               // Flush por tamaño.
-              let #(sink, pending_events, pending_bytes) =
-                case sink {
-                  Some(_) if pending_bytes >= stream_cfg.batch_byte_size ->
-                    flush_pending(sink, stream_cfg, pending_events, pending_bytes)
-                  _ -> #(sink, pending_events, pending_bytes)
-                }
+              let #(sink, pending_events, pending_bytes) = case sink {
+                Some(_) if pending_bytes >= stream_cfg.batch_byte_size ->
+                  flush_pending(sink, stream_cfg, pending_events, pending_bytes)
+                _ -> #(sink, pending_events, pending_bytes)
+              }
 
               interaction_read_loop(
                 port,
@@ -308,22 +325,27 @@ fn interaction_read_loop(
                     agent,
                     sink,
                     stream_cfg,
-                    InteractionError(InfraError, "Runner emitted multiple result events", ctx.trace_id),
+                    InteractionError(
+                      InfraError,
+                      "Runner emitted multiple result events",
+                      ctx.trace_id,
+                    ),
                   )
                 }
-                None -> interaction_read_loop(
-                  port,
-                  agent,
-                  ctx,
-                  sink,
-                  stream_cfg,
-                  pending_events,
-                  pending_bytes,
-                  Some(response),
-                  new_size,
-                  max_size,
-                  deadline_ms,
-                )
+                None ->
+                  interaction_read_loop(
+                    port,
+                    agent,
+                    ctx,
+                    sink,
+                    stream_cfg,
+                    pending_events,
+                    pending_bytes,
+                    Some(response),
+                    new_size,
+                    max_size,
+                    deadline_ms,
+                  )
               }
             }
             Error(_) -> {
@@ -333,7 +355,11 @@ fn interaction_read_loop(
                 agent,
                 sink,
                 stream_cfg,
-                InteractionError(InfraError, "Invalid runner event (non-JSONL)", ctx.trace_id),
+                InteractionError(
+                  InfraError,
+                  "Invalid runner event (non-JSONL)",
+                  ctx.trace_id,
+                ),
               )
             }
           }
@@ -348,13 +374,19 @@ fn interaction_read_loop(
 
       // El resultado final llega como evento `t="result"`.
       let result = case result {
-        Some(response) -> runner_response_to_interaction_result(
-          response,
-          artifact_registry,
-          ctx.instance_id,
-          ctx.trace_id,
-        )
-        None -> Error(InteractionError(InfraError, "Runner exited without result event", ctx.trace_id))
+        Some(response) ->
+          runner_response_to_interaction_result(
+            response,
+            artifact_registry,
+            ctx.instance_id,
+            ctx.trace_id,
+          )
+        None ->
+          Error(InteractionError(
+            InfraError,
+            "Runner exited without result event",
+            ctx.trace_id,
+          ))
       }
 
       finalize_interaction(agent, sink, stream_cfg, result)
@@ -365,7 +397,11 @@ fn interaction_read_loop(
         agent,
         sink,
         stream_cfg,
-        Error(InteractionError(InfraError, "Exit code " <> int.to_string(code), ctx.trace_id)),
+        Error(InteractionError(
+          InfraError,
+          "Exit code " <> int.to_string(code),
+          ctx.trace_id,
+        )),
       )
     }
   }
@@ -380,16 +416,14 @@ fn runner_response_to_interaction_result(
 ) -> Result(InteractionResult, InteractionError) {
   case response.status {
     StatusError -> {
-      let err = response.error
+      let err =
+        response.error
         |> option.unwrap(RunnerError(AgentError, "Unknown error"))
       Error(InteractionError(err.kind, err.message, trace_id))
     }
     StatusSuccess -> {
-      let artifacts = register_artifacts(
-        response.artifacts,
-        artifact_registry,
-        instance_id,
-      )
+      let artifacts =
+        register_artifacts(response.artifacts, artifact_registry, instance_id)
       Ok(InteractionResult(
         data: response_data_from_runner(response.data),
         artifacts: artifacts,
@@ -410,7 +444,12 @@ fn register_artifacts(
   refs
   |> list.map(fn(ref) {
     let artifact_id =
-      artifact_registry_api.register_artifact(registry, ref.path, ref.mime, instance_id)
+      artifact_registry_api.register_artifact(
+        registry,
+        ref.path,
+        ref.mime,
+        instance_id,
+      )
     PublicArtifact(
       name: ref.name,
       url: "/artifacts/" <> artifact_id_to_string(artifact_id),

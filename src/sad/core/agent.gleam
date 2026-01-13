@@ -12,7 +12,7 @@
 ////
 //// Relationships:
 //// - `sad/core/registry` stores and monitors `AgentRef` via `pid`.
-//// - Internal event injection is routed through `sad/core/agent_internal`.
+//// - Internal event injection uses the `internal_*` functions below.
 
 import gleam/dict
 import gleam/erlang/process
@@ -313,7 +313,7 @@ pub type StopReason {
 /// Internal message protocol of the AgentActor.
 ///
 /// This protocol is intentionally not constructible outside this module.
-/// Callers must use the functions in this module, or `sad/core/agent_internal`.
+/// Callers must use the functions in this module.
 pub opaque type AgentMsg {
   Interact(
     req: AgentRequest,
@@ -1034,7 +1034,7 @@ pub fn terminate(agent: AgentRef, reason: StopReason) -> Nil {
 
 /// Internal-only: injects the provisioning outcome.
 ///
-/// Prefer calling `sad/core/agent_internal.provisioning_done`.
+/// This is intended for core modules (not the gateway).
 pub fn internal_provisioning_done(
   agent: AgentRef,
   outcome: Result(#(AgentState, option.Option(Int)), String),
@@ -1044,14 +1044,14 @@ pub fn internal_provisioning_done(
 
 /// Internal-only: ingests a runner log line.
 ///
-/// Prefer calling `sad/core/agent_internal.ingest_log`.
+/// This is intended for core modules (not the gateway).
 pub fn internal_ingest_log(agent: AgentRef, event: types_log.LogEvent) -> Nil {
   process.send(subject(agent), IngestLog(event))
 }
 
 /// Internal-only: signals that an interaction is done.
 ///
-/// Prefer calling `sad/core/agent_internal.interaction_done`.
+/// This is intended for core modules (not the gateway).
 pub fn internal_interaction_done(
   agent: AgentRef,
   result: Result(types_output.InteractionResult, types_output.InteractionError),
@@ -1061,7 +1061,7 @@ pub fn internal_interaction_done(
 
 /// Internal-only: signals that the continuous server died.
 ///
-/// Prefer calling `sad/core/agent_internal.server_died`.
+/// This is intended for core modules (not the gateway).
 pub fn internal_server_died(agent: AgentRef, exit_code: Int) -> Nil {
   process.send(subject(agent), ServerDied(exit_code))
 }
