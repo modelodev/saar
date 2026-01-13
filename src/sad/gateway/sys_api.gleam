@@ -220,7 +220,8 @@ fn decode_create_agent(body: String) -> Result(CreateAgentReq, String) {
   )
 
   let #(profile_id, instance_raw, init_params_raw) = decoded
-  let init_params = init_params_from_dynamic_dict(init_params_raw)
+
+  use init_params <- result.try(decode_init_params(init_params_raw))
 
   case types_core.instance_id(instance_raw) {
     Ok(id) ->
@@ -236,14 +237,22 @@ fn decode_create_agent(body: String) -> Result(CreateAgentReq, String) {
   }
 }
 
-fn init_params_from_dynamic_dict(
+fn decode_init_params(
   values: Dict(String, Dynamic),
-) -> Dict(String, types_core.Value) {
+) -> Result(Dict(String, types_core.Value), String) {
   values
-  |> dict.fold(dict.new(), fn(acc, key, value) {
+  |> dict.fold(Ok(dict.new()), fn(acc, key, value) {
+    use acc <- result.try(acc)
+
     case decoders.decode_scalar_value(value) {
-      Ok(v) -> dict.insert(acc, key, v)
-      Error(_) -> acc
+      Ok(v) -> Ok(dict.insert(acc, key, v))
+      Error(_) ->
+        Error(
+          "invalid init_params."
+          <> key
+          <> ": expected scalar, got "
+          <> decoders.describe_dynamic_type(value),
+        )
     }
   })
 }
