@@ -10,8 +10,7 @@ import gleeunit/should
 import port_helpers
 import sad/app_state
 import sad/core/agent
-import sad/core/agent_manager_api
-import sad/core/artifact_registry_api
+import sad/core/boundary_call
 import sad/core/messages
 import sad/core/root_supervisor
 import sad/core/supervisor_names
@@ -50,7 +49,9 @@ pub fn stop_releases_managed_port_test() {
   let a1 = start_instance(manager, profile, id1, cfg)
   wait_for_phase(a1, types_agent.ReadyContinuous, 400)
 
-  agent_manager_api.stop_agent(manager, id1, 5000)
+  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+    messages.StopAgent(id1, reply_to)
+  })
   |> test_assertions.assert_ok
 
   let a2 = start_instance(manager, profile, id2, cfg)
@@ -79,19 +80,19 @@ pub fn delete_purges_artifacts_and_workspace_test() {
   let assert Ok(path) = workspace.workspace_path_validate("artifact.txt")
 
   let artifact_id =
-    artifact_registry_api.register_artifact(
-      artifact_registry,
-      path,
-      "text/plain",
-      instance_id,
-      1000,
-    )
+    boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+      messages.RegisterArtifact(path, "text/plain", instance_id, reply_to)
+    })
     |> test_assertions.assert_ok
 
-  agent_manager_api.delete_agent(manager, instance_id, 5000)
+  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+    messages.DeleteAgent(instance_id, reply_to)
+  })
   |> test_assertions.assert_ok
 
-  artifact_registry_api.lookup_artifact(artifact_registry, artifact_id, 1000)
+  boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+    messages.LookupArtifact(artifact_id, reply_to)
+  })
   |> should.equal(Ok(None))
 
   case simplifile.read(file_path) {
@@ -124,17 +125,17 @@ pub fn delete_cleanup_failure_returns_500_test() {
   let assert Ok(path) = workspace.workspace_path_validate("x.txt")
 
   let _artifact_id =
-    artifact_registry_api.register_artifact(
-      artifact_registry,
-      path,
-      "text/plain",
-      instance_id,
-      1000,
-    )
+    boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+      messages.RegisterArtifact(path, "text/plain", instance_id, reply_to)
+    })
     |> test_assertions.assert_ok
 
-  case agent_manager_api.delete_agent(manager, instance_id, 5000) {
-    Error(agent_manager_api.ActorError(messages.CleanupFailed(_))) -> Nil
+  case
+    boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+      messages.DeleteAgent(instance_id, reply_to)
+    })
+  {
+    Error(boundary_call.ActorError(messages.CleanupFailed(_))) -> Nil
     _ -> panic as "Expected cleanup failure"
   }
 }
@@ -152,18 +153,19 @@ pub fn delete_cleanup_failure_still_purges_artifacts_test() {
   let assert Ok(path) = workspace.workspace_path_validate("x.txt")
 
   let artifact_id =
-    artifact_registry_api.register_artifact(
-      artifact_registry,
-      path,
-      "text/plain",
-      instance_id,
-      1000,
-    )
+    boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+      messages.RegisterArtifact(path, "text/plain", instance_id, reply_to)
+    })
     |> test_assertions.assert_ok
 
-  let _ = agent_manager_api.delete_agent(manager, instance_id, 5000)
+  let _ =
+    boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+      messages.DeleteAgent(instance_id, reply_to)
+    })
 
-  artifact_registry_api.lookup_artifact(artifact_registry, artifact_id, 1000)
+  boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+    messages.LookupArtifact(artifact_id, reply_to)
+  })
   |> should.equal(Ok(None))
 }
 
@@ -214,7 +216,9 @@ fn start_instance(
       config: cfg,
     )
 
-  agent_manager_api.start_agent(manager, args, 5000)
+  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+    messages.StartAgent(args, reply_to)
+  })
   |> test_assertions.assert_ok
 }
 

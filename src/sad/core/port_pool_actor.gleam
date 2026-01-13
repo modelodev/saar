@@ -12,7 +12,7 @@
 ////
 //// Relationships:
 //// - Message protocol lives in `sad/core/messages.PortPoolMsg`.
-//// - Public calls live in `sad/core/port_pool_api`.
+//// - Boundary callers should use `sad/core/boundary_call` with `sad/core/messages.PortPoolMsg`.
 
 import gleam/erlang/process
 import gleam/int

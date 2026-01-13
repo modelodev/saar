@@ -12,12 +12,11 @@
 ////
 //// Relationships:
 //// - Used as an `AgentResource` payload by `sad/core/agent`.
-//// - Wraps `sad/bridge/runner` and `sad/bridge/port_process`.
+//// - Wraps `sad/bridge/runner`.
 
 import gleam/erlang/process
 import gleam/option
 import gleam/otp/actor
-import sad/bridge/port_process
 import sad/bridge/runner
 import sad/types/config as types_config
 import sad/types/input as types_input
@@ -39,7 +38,6 @@ fn subject(ref: PortOwnerRef) -> process.Subject(Msg) {
 
 type State {
   Running(server: runner.ServerHandle)
-  Stopping
 }
 
 pub fn start_link(
@@ -95,46 +93,20 @@ fn handle_message(state: State, msg: Msg) -> actor.Next(State, Msg) {
   case msg {
     Stop -> {
       stop_server_best_effort(state)
-      process.kill(process.self())
-      actor.continue(Stopping)
+      actor.stop()
     }
 
     StopSync(reply_to) -> {
       process.send(reply_to, Nil)
       stop_server_best_effort(state)
-      process.kill(process.self())
-      actor.continue(Stopping)
+      actor.stop()
     }
   }
 }
 
 fn stop_server_best_effort(state: State) -> Nil {
-  case state {
-    Running(server) -> stop_running_server(server)
-    Stopping -> Nil
-  }
-}
-
-fn stop_running_server(server: runner.ServerHandle) -> Nil {
-  let runner.ServerHandle(process: proc, ..) = server
-
-  // Don't close immediately; give the wrapper a chance to act on `stop`.
-  port_process.send(proc, "{\"t\":\"stop\"}\n")
-  drain_loop(proc, 80)
-  port_process.close(proc)
-}
-
-fn drain_loop(port: port_process.PortProcess, attempts: Int) -> Nil {
-  case attempts {
-    0 -> Nil
-
-    _ ->
-      case port_process.receive(port, 50) {
-        Ok(port_process.PortExit(_)) -> Nil
-        Ok(_) -> drain_loop(port, attempts - 1)
-        Error(_) -> drain_loop(port, attempts - 1)
-      }
-  }
+  let Running(server) = state
+  runner.stop_server(server)
 }
 
 fn interaction_error_string(err: types_output.InteractionError) -> String {

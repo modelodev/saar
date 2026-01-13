@@ -11,10 +11,10 @@ import gleeunit/should
 import port_helpers
 import runner_fixtures
 import sad/app_state
-import sad/bridge/client
+import sad/bridge/http_client
 import sad/bridge/runner
 import sad/core/agent
-import sad/core/agent_manager_api
+import sad/core/boundary_call
 import sad/core/messages
 import sad/core/root_supervisor
 import sad/core/supervisor_names
@@ -142,7 +142,7 @@ pub fn port_injected_into_env_test() {
   let url = "http://" <> host <> ":" <> int.to_string(port) <> "/env"
 
   let resp =
-    client.request_sync(http.Get, url, dict.new(), None, 1000, 4096)
+    http_client.request_sync_string(http.Get, url, dict.new(), None, 1000, 4096)
     |> test_assertions.assert_ok
 
   runner.stop_server(server)
@@ -234,7 +234,9 @@ fn start_instance(
       config: cfg,
     )
 
-  agent_manager_api.start_agent(manager, args, 30_000)
+  boundary_call.call_unwrap_result(manager, 30_000, fn(reply_to) {
+    messages.StartAgent(args, reply_to)
+  })
   |> test_assertions.assert_ok
 }
 

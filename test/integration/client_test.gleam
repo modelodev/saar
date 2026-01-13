@@ -8,10 +8,10 @@ import gleeunit
 import gleeunit/should
 import port_helpers
 import runner_fixtures
-import sad/bridge/client
 import sad/bridge/http_client
 import sad/bridge/runner
 import sad/net/tcp_listener
+
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
@@ -33,7 +33,14 @@ pub fn execute_sync_ok_test() {
   let url = "http://" <> host <> ":" <> int.to_string(port) <> "/echo"
 
   let result =
-    client.request_sync(http.Post, url, dict.new(), Some("hello"), 1000, 1024)
+    http_client.request_sync_string(
+      http.Post,
+      url,
+      dict.new(),
+      Some("hello"),
+      1000,
+      1024,
+    )
 
   runner.stop_server(server)
 
@@ -48,7 +55,8 @@ pub fn execute_sync_respects_max_body_test() {
 
   let url = "http://" <> host <> ":" <> int.to_string(port) <> "/big?size=100"
 
-  let result = client.request_sync(http.Get, url, dict.new(), None, 1000, 10)
+  let result =
+    http_client.request_sync_string(http.Get, url, dict.new(), None, 1000, 10)
 
   runner.stop_server(server)
 
@@ -66,12 +74,12 @@ pub fn upstream_sse_requires_result_test() {
     "http://" <> host <> ":" <> int.to_string(port) <> "/sse?mode=no_result"
 
   let conn =
-    client.open_sse(http.Get, url, dict.new(), None, 1000)
+    http_client.open_sse(http.Get, url, dict.new(), None, 1000)
     |> test_assertions.assert_ok
 
-  let result = client.read_sse_until_result(conn, trace_id, 262_144, 200)
+  let result = http_client.read_sse_until_result(conn, trace_id, 262_144, 200)
 
-  client.close_sse(conn)
+  http_client.close_sse(conn)
   runner.stop_server(server)
 
   let err = test_assertions.assert_error(result)
@@ -87,17 +95,80 @@ pub fn upstream_sse_invalid_json_fails_test() {
     "http://" <> host <> ":" <> int.to_string(port) <> "/sse?mode=invalid_json"
 
   let conn =
-    client.open_sse(http.Get, url, dict.new(), None, 1000)
+    http_client.open_sse(http.Get, url, dict.new(), None, 1000)
     |> test_assertions.assert_ok
 
-  let result = client.read_sse_until_result(conn, trace_id, 262_144, 200)
+  let result = http_client.read_sse_until_result(conn, trace_id, 262_144, 200)
 
-  client.close_sse(conn)
+  http_client.close_sse(conn)
   runner.stop_server(server)
 
   let err = test_assertions.assert_error(result)
   let types_output.InteractionError(kind: kind, ..) = err
   kind |> should.equal(types_enums.InfraError)
+}
+
+pub fn upstream_sse_event_too_large_fails_test() {
+  port_helpers.ensure_wrapper_path()
+  let #(server, port, trace_id) = start_echo_server()
+
+  let url = "http://" <> host <> ":" <> int.to_string(port) <> "/sse?mode=ok"
+
+  let conn =
+    http_client.open_sse(http.Get, url, dict.new(), None, 1000)
+    |> test_assertions.assert_ok
+
+  let result = http_client.read_sse_until_result(conn, trace_id, 10, 200)
+
+  http_client.close_sse(conn)
+  runner.stop_server(server)
+
+  let err = test_assertions.assert_error(result)
+  let types_output.InteractionError(kind: kind, ..) = err
+  kind |> should.equal(types_enums.InfraError)
+}
+
+pub fn upstream_sse_unexpected_tag_fails_test() {
+  port_helpers.ensure_wrapper_path()
+  let #(server, port, trace_id) = start_echo_server()
+
+  let url =
+    "http://"
+    <> host
+    <> ":"
+    <> int.to_string(port)
+    <> "/sse?mode=unexpected_tag"
+
+  let conn =
+    http_client.open_sse(http.Get, url, dict.new(), None, 1000)
+    |> test_assertions.assert_ok
+
+  let result = http_client.read_sse_until_result(conn, trace_id, 262_144, 200)
+
+  http_client.close_sse(conn)
+  runner.stop_server(server)
+
+  let err = test_assertions.assert_error(result)
+  let types_output.InteractionError(kind: kind, ..) = err
+  kind |> should.equal(types_enums.InfraError)
+}
+
+pub fn execute_sync_invalid_utf8_body_fails_test() {
+  port_helpers.ensure_wrapper_path()
+  let #(server, port, _trace_id) = start_echo_server()
+
+  let url = "http://" <> host <> ":" <> int.to_string(port) <> "/bin?size=16"
+
+  let result =
+    http_client.request_sync_string(http.Get, url, dict.new(), None, 1000, 1024)
+
+  runner.stop_server(server)
+
+  case result {
+    Error(http_client.InvalidUtf8Body) -> Nil
+    other ->
+      panic as { "Expected InvalidUtf8Body, got " <> string.inspect(other) }
+  }
 }
 
 pub fn continuous_timeout_does_not_kill_server_test() {
@@ -107,7 +178,7 @@ pub fn continuous_timeout_does_not_kill_server_test() {
   let slow = "http://" <> host <> ":" <> int.to_string(port) <> "/sleep?ms=200"
 
   let timed_out =
-    client.request_sync(http.Get, slow, dict.new(), None, 50, 1024)
+    http_client.request_sync_string(http.Get, slow, dict.new(), None, 50, 1024)
 
   case timed_out {
     Error(http_client.Timeout) -> Nil
@@ -116,7 +187,14 @@ pub fn continuous_timeout_does_not_kill_server_test() {
 
   let health = "http://" <> host <> ":" <> int.to_string(port) <> "/health"
 
-  client.request_sync(http.Get, health, dict.new(), None, 1000, 1024)
+  http_client.request_sync_string(
+    http.Get,
+    health,
+    dict.new(),
+    None,
+    1000,
+    1024,
+  )
   |> should.be_ok
 
   runner.stop_server(server)
@@ -141,7 +219,7 @@ pub fn multipart_non_stream_ok_test() {
     )
 
   let result =
-    client.request_multipart_files(
+    http_client.request_multipart_files(
       trace_id,
       http.Post,
       check_url,
@@ -182,7 +260,7 @@ pub fn multipart_streaming_rejected_test() {
     )
 
   let result =
-    client.request_multipart_files(
+    http_client.request_multipart_files(
       trace_id,
       http.Post,
       echo_url,
@@ -227,7 +305,7 @@ pub fn multipart_respects_max_file_fetch_bytes_test() {
     )
 
   let result =
-    client.request_multipart_files(
+    http_client.request_multipart_files(
       trace_id,
       http.Post,
       echo_url,

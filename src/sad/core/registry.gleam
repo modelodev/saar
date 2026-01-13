@@ -12,7 +12,7 @@
 ////
 //// Relationships:
 //// - Message protocol lives in `sad/core/messages.RegistryMsg`.
-//// - Public, typed calls live in `sad/core/registry_api`.
+//// - Boundary callers should use `sad/core/boundary_call` with `sad/core/messages.RegistryMsg`.
 
 import gleam/dict
 import gleam/erlang/process

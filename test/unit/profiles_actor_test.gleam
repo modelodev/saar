@@ -5,9 +5,9 @@ import gleam/option
 import gleam/otp/actor
 import gleeunit
 import gleeunit/should
+import sad/core/boundary_call
 import sad/core/messages
 import sad/core/profiles
-import sad/core/profiles_api
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/profile as types_profile
@@ -23,7 +23,9 @@ pub fn profiles_actor_receives_initial_profiles() {
 
   let actor = start_profiles(dict.from_list([#(profile_id, profile)]))
 
-  profiles_api.get_profile(actor, profile_id, 1000)
+  boundary_call.call(actor, 1000, fn(reply_to) {
+    messages.GetProfile(profile_id, reply_to)
+  })
   |> should.equal(Ok(option.Some(profile)))
 }
 
@@ -34,13 +36,13 @@ pub fn set_profiles_updates_state() {
   let actor = start_profiles(dict.new())
 
   let assert Ok(_) =
-    profiles_api.set_profiles(
-      actor,
-      dict.from_list([#(profile_id, profile)]),
-      1000,
-    )
+    boundary_call.call(actor, 1000, fn(reply_to) {
+      messages.SetProfiles(dict.from_list([#(profile_id, profile)]), reply_to)
+    })
 
-  profiles_api.get_profile(actor, profile_id, 1000)
+  boundary_call.call(actor, 1000, fn(reply_to) {
+    messages.GetProfile(profile_id, reply_to)
+  })
   |> should.equal(Ok(option.Some(profile)))
 }
 
@@ -50,14 +52,15 @@ pub fn set_profiles_returns_count() {
 
   let actor = start_profiles(dict.new())
 
-  profiles_api.set_profiles(
-    actor,
-    dict.from_list([
-      #(p1, dummy_profile(p1)),
-      #(p2, dummy_profile(p2)),
-    ]),
-    1000,
-  )
+  boundary_call.call(actor, 1000, fn(reply_to) {
+    messages.SetProfiles(
+      dict.from_list([
+        #(p1, dummy_profile(p1)),
+        #(p2, dummy_profile(p2)),
+      ]),
+      reply_to,
+    )
+  })
   |> should.equal(Ok(2))
 }
 
@@ -74,7 +77,9 @@ pub fn get_profile_returns_some() {
 pub fn get_profile_returns_none() {
   let actor = start_profiles(dict.new())
 
-  profiles_api.get_profile(actor, types_core.profile_id("missing"), 1000)
+  boundary_call.call(actor, 1000, fn(reply_to) {
+    messages.GetProfile(types_core.profile_id("missing"), reply_to)
+  })
   |> should.equal(Ok(option.None))
 }
 
@@ -90,7 +95,10 @@ pub fn list_profiles_returns_all_ids() {
       ]),
     )
 
-  let assert Ok(ids) = profiles_api.list_profiles(actor, 1000)
+  let assert Ok(ids) =
+    boundary_call.call(actor, 1000, fn(reply_to) {
+      messages.ListProfiles(reply_to)
+    })
 
   ids
   |> list.map(types_core.profile_id_to_string)

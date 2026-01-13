@@ -1,16 +1,15 @@
 import agent_helpers
 import gleam/dict
 import gleam/erlang/process
+import gleam/list
 import gleam/option
 import gleam/otp/actor
 import gleeunit
 import gleeunit/should
 import sad/app_state
 import sad/core/agent
-import sad/core/agent_manager_api
+import sad/core/boundary_call
 import sad/core/messages
-import sad/core/profiles_api
-import sad/core/registry_api
 import sad/core/root_supervisor
 import sad/core/supervisor_names
 import sad/types/agent as types_agent
@@ -56,12 +55,22 @@ pub fn start_agent_same_key_one_wins_test() {
 
   let _ =
     process.spawn(fn() {
-      process.send(out1, agent_manager_api.start_agent(manager, args, 5000))
+      process.send(
+        out1,
+        boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+          messages.StartAgent(args, reply_to)
+        }),
+      )
     })
 
   let _ =
     process.spawn(fn() {
-      process.send(out2, agent_manager_api.start_agent(manager, args, 5000))
+      process.send(
+        out2,
+        boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+          messages.StartAgent(args, reply_to)
+        }),
+      )
     })
 
   let assert Ok(r1) = process.receive(out1, 5000)
@@ -69,8 +78,12 @@ pub fn start_agent_same_key_one_wins_test() {
 
   assert_one_ok_one_already_exists(r1, r2)
 
-  let assert Ok(count) = registry_api.count(registry, 1000)
-  count |> should.equal(1)
+  let assert Ok(items) =
+    boundary_call.call(registry, 1000, fn(reply_to) {
+      messages.ListAll(reply_to)
+    })
+
+  list.length(items) |> should.equal(1)
 }
 
 pub fn create_agent_profile_not_found_test() {
@@ -88,16 +101,17 @@ pub fn create_agent_profile_not_found_test() {
 
   let assert Ok(instance_id) = types_core.instance_id("inst-missing-profile")
 
-  agent_manager_api.create_agent(
-    manager,
-    types_core.profile_id("missing"),
-    instance_id,
-    dict.new(),
-    5000,
-  )
+  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+    messages.CreateAgent(
+      types_core.profile_id("missing"),
+      instance_id,
+      dict.new(),
+      reply_to,
+    )
+  })
   |> should.equal(
     Error(
-      agent_manager_api.ActorError(
+      boundary_call.ActorError(
         messages.ProfileNotFound(types_core.profile_id("missing")),
       ),
     ),
@@ -158,26 +172,27 @@ pub fn create_agent_uses_profiles_actor_test() {
     )
 
   let assert Ok(_) =
-    profiles_api.set_profiles(
-      profiles,
-      dict.from_list([#(profile.meta.id, profile)]),
-      1000,
-    )
+    boundary_call.call(profiles, 1000, fn(reply_to) {
+      messages.SetProfiles(
+        dict.from_list([#(profile.meta.id, profile)]),
+        reply_to,
+      )
+    })
 
   let assert Ok(instance_id) = types_core.instance_id("inst-from-profile")
 
   let _ =
-    agent_manager_api.create_agent(
-      manager,
-      profile.meta.id,
-      instance_id,
-      dict.new(),
-      5000,
-    )
+    boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+      messages.CreateAgent(profile.meta.id, instance_id, dict.new(), reply_to)
+    })
     |> test_assertions.assert_ok
 
-  let assert Ok(count) = registry_api.count(registry, 1000)
-  count |> should.equal(1)
+  let assert Ok(items) =
+    boundary_call.call(registry, 1000, fn(reply_to) {
+      messages.ListAll(reply_to)
+    })
+
+  list.length(items) |> should.equal(1)
 }
 
 pub fn start_agent_registration_failed_rolls_back_test() {
@@ -221,7 +236,10 @@ pub fn start_agent_registration_failed_rolls_back_test() {
       failure_reason: option.None,
     )
 
-  let assert Ok(_) = registry_api.register(registry, status, agent_ref, 1000)
+  let assert Ok(_) =
+    boundary_call.call_unwrap_result(registry, 1000, fn(reply_to) {
+      messages.Register(status, agent_ref, reply_to)
+    })
 
   let args =
     messages.StartArgs(
@@ -232,37 +250,37 @@ pub fn start_agent_registration_failed_rolls_back_test() {
       config: cfg,
     )
 
-  agent_manager_api.start_agent(manager, args, 5000)
+  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+    messages.StartAgent(args, reply_to)
+  })
   |> should.equal(
     Error(
-      agent_manager_api.ActorError(messages.RegistrationFailed(
+      boundary_call.ActorError(messages.RegistrationFailed(
         messages.AlreadyExists,
       )),
     ),
   )
 
-  let assert Ok(count) = registry_api.count(registry, 1000)
-  count |> should.equal(1)
+  let assert Ok(items) =
+    boundary_call.call(registry, 1000, fn(reply_to) {
+      messages.ListAll(reply_to)
+    })
+
+  list.length(items) |> should.equal(1)
 }
 
 fn assert_one_ok_one_already_exists(
-  r1: Result(
-    agent.AgentRef,
-    agent_manager_api.ApiCallError(messages.StartError),
-  ),
-  r2: Result(
-    agent.AgentRef,
-    agent_manager_api.ApiCallError(messages.StartError),
-  ),
+  r1: Result(agent.AgentRef, boundary_call.ApiCallError(messages.StartError)),
+  r2: Result(agent.AgentRef, boundary_call.ApiCallError(messages.StartError)),
 ) -> Nil {
   case r1, r2 {
     Ok(_),
-      Error(agent_manager_api.ActorError(messages.RegistrationFailed(
+      Error(boundary_call.ActorError(messages.RegistrationFailed(
         messages.AlreadyExists,
       )))
     -> Nil
 
-    Error(agent_manager_api.ActorError(messages.RegistrationFailed(
+    Error(boundary_call.ActorError(messages.RegistrationFailed(
       messages.AlreadyExists,
     ))),
       Ok(_)

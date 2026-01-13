@@ -6,9 +6,9 @@ import gleam/otp/actor
 import gleam/string
 import gleeunit
 import gleeunit/should
+import sad/core/boundary_call
 import sad/core/messages
 import sad/core/profiles
-import sad/core/profiles_api
 import sad/profiles_sources
 import sad/types/config as types_config
 import sad/types/core as types_core
@@ -82,7 +82,10 @@ pub fn reload_git_source_failure_keeps_previous_test() {
   )
   |> should.be_ok
 
-  let assert Ok(before_ids) = profiles_api.list_profiles(profiles_actor, 1000)
+  let assert Ok(before_ids) =
+    boundary_call.call(profiles_actor, 1000, fn(reply_to) {
+      messages.ListProfiles(reply_to)
+    })
   list.length(before_ids) |> should.equal(7)
 
   // Then: reload from a failing git source; it must not swap.
@@ -95,7 +98,10 @@ pub fn reload_git_source_failure_keeps_previous_test() {
   profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
   |> should.be_error
 
-  let assert Ok(after_ids) = profiles_api.list_profiles(profiles_actor, 1000)
+  let assert Ok(after_ids) =
+    boundary_call.call(profiles_actor, 1000, fn(reply_to) {
+      messages.ListProfiles(reply_to)
+    })
   list.length(after_ids) |> should.equal(7)
 }
 

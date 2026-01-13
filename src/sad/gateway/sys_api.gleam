@@ -12,7 +12,7 @@
 //// - Artifact/UI proxies (future sprints).
 ////
 //// Relationships:
-//// - Bridges HTTP requests to core actors via `*_api` modules.
+//// - Bridges HTTP requests to core actors via `sad/core/boundary_call`.
 //// - Uses `sad/gateway/problem` for RFC7807 responses.
 
 import gleam/bit_array
@@ -33,10 +33,8 @@ import gleam/string
 import gleam/yielder
 import mist
 import sad/core/agent
-import sad/core/agent_manager_api
+import sad/core/boundary_call
 import sad/core/messages
-import sad/core/profiles_api
-import sad/core/registry_api
 import sad/gateway/problem
 import sad/profiles_sources
 import sad/types/agent as types_agent
@@ -144,12 +142,17 @@ fn create_agent(
           let Deps(agent_manager: manager, ..) = deps
 
           let out =
-            agent_manager_api.create_agent(
+            boundary_call.call_unwrap_result(
               manager,
-              types_core.profile_id(profile_id),
-              instance_id,
-              init_params,
               call_timeout_ms(cfg),
+              fn(reply_to) {
+                messages.CreateAgent(
+                  types_core.profile_id(profile_id),
+                  instance_id,
+                  init_params,
+                  reply_to,
+                )
+              },
             )
 
           case out {
@@ -172,10 +175,10 @@ fn create_agent(
               )
             }
 
-            Error(agent_manager_api.CallFailed(call_err)) ->
+            Error(boundary_call.CallFailed(call_err)) ->
               problem.from_call_error(call_err, trace_id, path)
 
-            Error(agent_manager_api.ActorError(err)) ->
+            Error(boundary_call.ActorError(err)) ->
               start_error_to_response(req, trace_id, err)
           }
         }
@@ -271,7 +274,11 @@ fn list_agents(
 ) -> response.Response(mist.ResponseData) {
   let Deps(agent_manager: manager, ..) = deps
 
-  case agent_manager_api.list_agents(manager, registry_timeout_ms(cfg)) {
+  case
+    boundary_call.call(manager, registry_timeout_ms(cfg), fn(reply_to) {
+      messages.ListAgents(reply_to)
+    })
+  {
     Error(call_err) -> problem.from_call_error(call_err, trace_id, req.path)
 
     Ok(items) -> {
@@ -302,11 +309,9 @@ fn handle_agent_status(
       let Deps(registry: registry, ..) = deps
 
       case
-        registry_api.lookup_by_instance_id(
-          registry,
-          instance_id,
-          registry_timeout_ms(cfg),
-        )
+        boundary_call.call(registry, registry_timeout_ms(cfg), fn(reply_to) {
+          messages.LookupByInstanceId(instance_id, reply_to)
+        })
       {
         Error(call_err) -> problem.from_call_error(call_err, trace_id, req.path)
         Ok(None) -> problem.not_found(trace_id, req.path)
@@ -338,18 +343,18 @@ fn handle_agent_stop(
           let Deps(agent_manager: manager, ..) = deps
 
           case
-            agent_manager_api.stop_agent(
+            boundary_call.call_unwrap_result(
               manager,
-              instance_id,
               call_timeout_ms(cfg),
+              fn(reply_to) { messages.StopAgent(instance_id, reply_to) },
             )
           {
             Ok(_) -> accepted_json(instance_id)
 
-            Error(agent_manager_api.CallFailed(call_err)) ->
+            Error(boundary_call.CallFailed(call_err)) ->
               problem.from_call_error(call_err, trace_id, req.path)
 
-            Error(agent_manager_api.ActorError(_)) ->
+            Error(boundary_call.ActorError(_)) ->
               problem.from_error_kind(
                 types_enums.InfraError,
                 trace_id,
@@ -380,11 +385,9 @@ fn handle_agent_start(
           let Deps(registry: registry, ..) = deps
 
           case
-            registry_api.lookup_by_instance_id(
-              registry,
-              instance_id,
-              registry_timeout_ms(cfg),
-            )
+            boundary_call.call(registry, registry_timeout_ms(cfg), fn(reply_to) {
+              messages.LookupByInstanceId(instance_id, reply_to)
+            })
           {
             Error(call_err) ->
               problem.from_call_error(call_err, trace_id, req.path)
@@ -418,11 +421,9 @@ fn handle_agent_logs_stream(
           let Deps(registry: registry, ..) = deps
 
           case
-            registry_api.lookup_by_instance_id(
-              registry,
-              instance_id,
-              registry_timeout_ms(cfg),
-            )
+            boundary_call.call(registry, registry_timeout_ms(cfg), fn(reply_to) {
+              messages.LookupByInstanceId(instance_id, reply_to)
+            })
           {
             Error(call_err) ->
               problem.from_call_error(call_err, trace_id, req.path)
@@ -554,7 +555,11 @@ fn handle_sys_profiles(
     http.Get -> {
       let Deps(profiles: profiles, ..) = deps
 
-      case profiles_api.list_profiles(profiles, registry_timeout_ms(cfg)) {
+      case
+        boundary_call.call(profiles, registry_timeout_ms(cfg), fn(reply_to) {
+          messages.ListProfiles(reply_to)
+        })
+      {
         Error(call_err) -> problem.from_call_error(call_err, trace_id, req.path)
 
         Ok(ids) -> {
@@ -562,7 +567,11 @@ fn handle_sys_profiles(
             ids
             |> list.filter_map(fn(id) {
               case
-                profiles_api.get_profile(profiles, id, registry_timeout_ms(cfg))
+                boundary_call.call(
+                  profiles,
+                  registry_timeout_ms(cfg),
+                  fn(reply_to) { messages.GetProfile(id, reply_to) },
+                )
               {
                 Ok(Some(profile)) -> {
                   let types_profile.Profile(meta: meta, ..) = profile

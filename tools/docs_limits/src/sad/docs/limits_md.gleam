@@ -22,13 +22,13 @@ import simplifile
 /// Example:
 /// - `gleam run -m sad/docs/limits_md`
 pub fn main() {
-  let toml = read_file("docs/plan/limits.toml")
+  let toml = read_file("../../docs/plan/limits.toml")
   let content = case limits_table.render_markdown_from_toml(toml) {
     Ok(found) -> found
     Error(err) -> panic as { "LIMITS_TOML_PARSE_FAIL reason=" <> err }
   }
 
-  case simplifile.write("docs/plan/limits.md", content) {
+  case simplifile.write("../../docs/plan/limits.md", content) {
     Ok(_) -> Nil
     Error(err) ->
       panic as {

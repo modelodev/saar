@@ -55,8 +55,8 @@ port_close(Port) ->
 port_receive(Port, TimeoutMs) ->
     receive
         {Port, {data, {eol, Line}}} -> {ok, {port_data_chunk, append_newline(Line)}};
-        {Port, {data, {noeol, Line}}} -> {ok, {port_data_chunk, Line}};
-        {Port, {data, Line}} -> {ok, {port_data_chunk, Line}};
+        {Port, {data, {noeol, Line}}} -> {ok, {port_data_chunk, ensure_binary(Line)}};
+        {Port, {data, Line}} -> {ok, {port_data_chunk, ensure_binary(Line)}};
         {Port, {exit_status, Status}} -> maybe_return_exit_after_data(Port, Status);
         {'EXIT', Port, normal} -> maybe_return_exit_after_data(Port, 0);
         {'EXIT', Port, _} -> maybe_return_exit_after_data(Port, 1)
@@ -78,10 +78,14 @@ to_list(Value) when is_binary(Value) ->
 to_list(Value) when is_list(Value) ->
     Value.
 
-append_newline(Line) when is_binary(Line) ->
-    <<Line/binary, "\n">>;
-append_newline(Line) when is_list(Line) ->
-    Line ++ "\n".
+append_newline(Line) ->
+    Bin = ensure_binary(Line),
+    <<Bin/binary, "\n">>.
+
+ensure_binary(Value) when is_binary(Value) ->
+    Value;
+ensure_binary(Value) when is_list(Value) ->
+    list_to_binary(Value).
 
 maybe_return_exit_after_data(Port, Status) ->
     receive
@@ -90,10 +94,10 @@ maybe_return_exit_after_data(Port, Status) ->
             {ok, {port_data_chunk, append_newline(Line)}};
         {Port, {data, {noeol, Line}}} ->
             self() ! {Port, {exit_status, Status}},
-            {ok, {port_data_chunk, Line}};
+            {ok, {port_data_chunk, ensure_binary(Line)}};
         {Port, {data, Line}} ->
             self() ! {Port, {exit_status, Status}},
-            {ok, {port_data_chunk, Line}}
+            {ok, {port_data_chunk, ensure_binary(Line)}}
     after
         0 -> {ok, {port_exit, Status}}
     end.

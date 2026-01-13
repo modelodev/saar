@@ -6,7 +6,7 @@ import gleeunit
 import gleeunit/should
 import sad/app_state
 import sad/core/agent
-import sad/core/agent_manager_api
+import sad/core/boundary_call
 import sad/core/messages
 import sad/core/root_supervisor
 import sad/core/supervisor_names
@@ -43,6 +43,7 @@ pub fn registry_crash_rest_for_one_kills_and_restarts_subtree_test() {
   let agent_monitor = process.monitor(agent.pid(agent_ref))
 
   // Crash the registry; RestForOne must restart later children (including manager and agents).
+  // Note: This uses `process.kill`, so OTP may print supervisor reports (expected).
   let assert Ok(registry_pid) = process.subject_owner(registry_subject)
   process.kill(registry_pid)
 
@@ -79,6 +80,7 @@ pub fn killing_agent_manager_actor_kills_agents_test() {
 
   let agent_monitor = process.monitor(agent.pid(agent_ref))
 
+  // Note: This uses `process.kill`, so OTP may print supervisor reports (expected).
   process.kill(manager_pid)
 
   let selector =
@@ -105,6 +107,8 @@ fn start_instance(
       config: cfg,
     )
 
-  agent_manager_api.start_agent(manager, args, 5000)
+  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+    messages.StartAgent(args, reply_to)
+  })
   |> test_assertions.assert_ok
 }

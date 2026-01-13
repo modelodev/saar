@@ -213,6 +213,7 @@ fn kill_child(
   let assert Ok(actor.Started(data: agent_ref, ..)) =
     factory_supervisor.start_child(supervisor, args)
 
+  // Note: This uses `process.kill`, so OTP may print supervisor reports (expected).
   process.kill(agent.pid(agent_ref))
   process.sleep(20)
 }

@@ -128,3 +128,36 @@ pub fn missing_api_key_fails_test() {
       panic as { "Expected MissingApiKey, got: " <> string.inspect(other) }
   }
 }
+
+pub fn limits_values_are_loaded_test() {
+  envoy.set("SAD_TEST_API_KEY", "abc")
+
+  let path = "build/test-workspaces/config-limits.toml"
+
+  let contents =
+    "[auth]\n"
+    <> "api_key = \"${SAD_TEST_API_KEY}\"\n"
+    <> "\n"
+    <> "[limits]\n"
+    <> "max_request_body_bytes = 123\n"
+    <> "sse_keep_alive_interval_ms = 456\n"
+
+  simplifile.write(to: path, contents: contents)
+  |> test_assertions.assert_ok
+
+  let cfg =
+    config_loader.load_from_path(path, envoy.get, simplifile.read)
+    |> test_assertions.assert_ok
+
+  let _ = simplifile.delete(file_or_dir_at: path)
+  envoy.unset("SAD_TEST_API_KEY")
+
+  let types_config.SadConfig(limits: limits, stream: stream, ..) = cfg
+
+  let types_config.SadLimits(max_request_body_bytes: max_body, ..) = limits
+  max_body |> should.equal(123)
+
+  let types_config.StreamConfig(sse_keep_alive_interval_ms: keep_alive, ..) =
+    stream
+  keep_alive |> should.equal(456)
+}
