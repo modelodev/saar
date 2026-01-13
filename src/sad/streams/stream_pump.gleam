@@ -153,7 +153,7 @@ fn loop(
         Some(batch) -> flush_batch(mode, batch, push_timeout_ms)
       }
 
-      let _ = finish_sink(mode, result, push_timeout_ms)
+      let _ = finish_sink(mode, push_timeout_ms)
       process.send(done, result)
       Nil
     }
@@ -191,15 +191,11 @@ fn flush_batch(
   }
 }
 
-fn finish_sink(
-  mode: Mode,
-  result: Result(output.InteractionResult, output.InteractionError),
-  push_timeout_ms: Int,
-) -> Nil {
+fn finish_sink(mode: Mode, push_timeout_ms: Int) -> Nil {
   case mode {
     Discard -> Nil
     Active(s) -> {
-      let _ = sink.finish(s, result, push_timeout_ms)
+      let _ = sink.finish(s, push_timeout_ms)
       Nil
     }
   }

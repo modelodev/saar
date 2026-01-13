@@ -14,11 +14,8 @@
 //// - Used by `sad/streams/stream_pump` to apply backpressure.
 
 import gleam/erlang/process
-import gleam/json
 import gleam/list
 import sad/otp/safe_call.{type CallError, call_within}
-import sad/types/core
-import sad/types/output
 import sad/types/stream.{type StreamEvent}
 
 /// Minimal interface required to write SSE frames.
@@ -35,11 +32,8 @@ type StreamSinkMsg {
     reply_to: process.Subject(Result(Nil, CallError)),
   )
 
-  /// Emits a terminal event and closes the stream.
-  Finish(
-    result: Result(output.InteractionResult, output.InteractionError),
-    reply_to: process.Subject(Result(Nil, CallError)),
-  )
+  /// Closes the stream.
+  Finish(reply_to: process.Subject(Result(Nil, CallError)))
 }
 
 /// A stream sink used by producers.
@@ -90,15 +84,12 @@ pub fn push_batch(
   |> unwrap_call
 }
 
-/// Sends the final result to the sink so it can emit a terminal event and close.
-pub fn finish(
-  sink: StreamSink,
-  result: Result(output.InteractionResult, output.InteractionError),
-  timeout_ms: Int,
-) -> Result(Nil, CallError) {
-  call_within(subject(sink), timeout_ms, fn(reply_to) {
-    Finish(result, reply_to)
-  })
+/// Closes the sink and waits for an ACK.
+///
+/// This does not emit a terminal event; protocols should decide whether to send
+/// a final event before closing.
+pub fn finish(sink: StreamSink, timeout_ms: Int) -> Result(Nil, CallError) {
+  call_within(subject(sink), timeout_ms, fn(reply_to) { Finish(reply_to) })
   |> unwrap_call
 }
 
@@ -138,9 +129,8 @@ fn loop(
       }
     }
 
-    Ok(Finish(result, reply_to)) -> {
-      let out = write_finish(writer, result)
-      process.send(reply_to, out)
+    Ok(Finish(reply_to)) -> {
+      process.send(reply_to, Ok(Nil))
       writer_close(writer)
     }
 
@@ -172,40 +162,12 @@ fn write_batch(
   })
 }
 
-fn write_finish(
-  writer: SseWriter,
-  result: Result(output.InteractionResult, output.InteractionError),
-) -> Result(Nil, CallError) {
-  writer_write(writer, data_frame(terminal_payload(result)))
-}
-
 fn keep_alive_frame() -> String {
   ": keep-alive\n\n"
 }
 
 fn data_frame(payload: String) -> String {
   "data: " <> payload <> "\n\n"
-}
-
-fn terminal_payload(
-  result: Result(output.InteractionResult, output.InteractionError),
-) -> String {
-  let payload = case result {
-    Ok(output.InteractionResult(trace_id: trace_id, ..)) ->
-      json.object([
-        #("t", json.string("result")),
-        #("trace_id", json.string(core.trace_id_to_string(trace_id))),
-      ])
-
-    Error(output.InteractionError(trace_id: trace_id, message: message, ..)) ->
-      json.object([
-        #("t", json.string("error")),
-        #("trace_id", json.string(core.trace_id_to_string(trace_id))),
-        #("detail", json.string(message)),
-      ])
-  }
-
-  json.to_string(payload)
 }
 
 fn writer_write(writer: SseWriter, data: String) -> Result(Nil, CallError) {

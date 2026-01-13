@@ -1,13 +1,10 @@
-import gleam/dict
 import gleam/erlang/process
-import gleam/option.{None}
 import gleeunit
 import gleeunit/should
 import sad/ffi
 import sad/otp/safe_call
 import sad/streams/sink
 import sad/types/core
-import sad/types/output
 import sad/types/stream
 
 pub fn main() {
@@ -43,14 +40,7 @@ pub fn stream_sink_push_batch_is_ack_backpressure() {
   let _ = process.receive(writes, 1000)
 
   // Close the sink loop.
-  let ok_result =
-    output.InteractionResult(
-      data: output.ResponseData(content: None, metadata: dict.new()),
-      artifacts: [],
-      trace_id: trace_id,
-    )
-
-  sink.finish(stream_sink, Ok(ok_result), 1000) |> should.equal(Ok(Nil))
+  sink.finish(stream_sink, 1000) |> should.equal(Ok(Nil))
   Nil
 }
 
@@ -70,14 +60,7 @@ pub fn stream_sink_finish_closes_stream() {
 
   let trace_id = core.trace_id("trace-2")
 
-  let ok_result =
-    output.InteractionResult(
-      data: output.ResponseData(content: None, metadata: dict.new()),
-      artifacts: [],
-      trace_id: trace_id,
-    )
-
-  sink.finish(stream_sink, Ok(ok_result), 1000) |> should.equal(Ok(Nil))
+  sink.finish(stream_sink, 1000) |> should.equal(Ok(Nil))
 
   let events = [stream.content_chunk(trace_id, "late")]
   sink.push_batch(stream_sink, events, 1000)

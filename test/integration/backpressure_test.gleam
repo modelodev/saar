@@ -1,10 +1,7 @@
 import ffi_inspect
 import gleam/dict
-import gleam/dynamic/decode
 import gleam/erlang/process
-import gleam/json
 import gleam/option.{None, Some}
-import gleam/string
 import gleeunit
 import gleeunit/should
 import sad/otp/safe_call
@@ -12,7 +9,6 @@ import sad/streams/sink
 import sad/streams/stream_pump
 import sad/types/config as types_config
 import sad/types/core
-import sad/types/enums as types_enums
 import sad/types/output
 import sad/types/stream
 
@@ -61,7 +57,7 @@ pub fn interaction_backpressure_or_discard_under_pressure() {
   msg |> should.equal(Ok(min_ok_result(trace_id)))
 
   // Ensure the sink process is closed (the pump may have switched to Discard).
-  sink.finish(stream_sink, Ok(min_ok_result(trace_id)), 2000) |> should.be_ok
+  sink.finish(stream_sink, 2000) |> should.be_ok
 
   let _ = process.receive(sender_done, 1000)
   Nil
@@ -157,11 +153,12 @@ pub fn mailbox_does_not_grow_unbounded() {
   }
 
   // Ensure the sink process is closed.
-  sink.finish(stream_sink, Ok(min_ok_result(trace_id)), 2000) |> should.be_ok
+  sink.finish(stream_sink, 2000) |> should.be_ok
 }
 
-pub fn finish_payload_is_valid_json() {
+pub fn finish_does_not_emit_terminal_payload() {
   let writes = process.new_subject()
+  let closed = process.new_subject()
 
   let writer =
     sink.SseWriter(
@@ -169,37 +166,21 @@ pub fn finish_payload_is_valid_json() {
         process.send(writes, data)
         Ok(Nil)
       },
-      close: fn() { Nil },
+      close: fn() {
+        process.send(closed, True)
+        Nil
+      },
     )
 
   let stream_sink = sink.start_sse_sink(writer, fn(_event) { "{}" }, 0)
 
-  let trace_id = core.trace_id("trace-json")
-  let err =
-    output.InteractionError(
-      kind: types_enums.InfraError,
-      message: "bad \"quote\"",
-      trace_id: trace_id,
-    )
+  sink.finish(stream_sink, 1000) |> should.equal(Ok(Nil))
 
-  sink.finish(stream_sink, Error(err), 1000) |> should.equal(Ok(Nil))
+  // Close must happen...
+  let assert Ok(True) = process.receive(closed, 1000)
 
-  let frame = case process.receive(writes, 1000) {
-    Ok(frame) -> frame
-    Error(_) -> panic as "Expected terminal payload write"
-  }
-
-  let #(head, _rest) = case string.split(frame, "\n\n") {
-    [head, ..rest] -> #(head, rest)
-    _ -> panic as "Unexpected SSE frame"
-  }
-
-  let payload = case string.split(head, "data: ") {
-    ["", payload] -> payload
-    _ -> panic as "Unexpected SSE data frame"
-  }
-
-  json.parse(payload, decode.dynamic) |> should.be_ok
+  // ...but no terminal `data:` frame is emitted.
+  process.receive(writes, 50) |> should.equal(Error(Nil))
 }
 
 pub fn keep_alive_format_is_correct() {
