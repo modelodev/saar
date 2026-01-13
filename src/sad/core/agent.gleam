@@ -21,6 +21,7 @@ import gleam/list
 import gleam/option
 import gleam/otp/actor
 import gleam/string
+import sad/bridge/interaction
 import sad/bridge/port_owner
 import sad/ffi
 import sad/otp/safe_call
@@ -628,9 +629,36 @@ fn start_interaction(
   let timeout_ms =
     resolve_call_timeout_for(state.config, state.profile.interface, capability)
 
-  let AgentDeps(start_interaction: start_interaction, ..) = state.deps
+  let params = get_params(state.state) |> option.unwrap(dict.new())
+
   let worker_pid =
-    start_interaction(state.self_ref, req, timeout_ms, streaming, stream_sink)
+    process.spawn(fn() {
+      let AgentRequest(
+        profile_id: profile_id,
+        instance_id: instance_id,
+        capability: capability_name,
+        inputs: inputs,
+        context: ctx,
+      ) = req
+
+      let out =
+        interaction.run(
+          state.profile,
+          profile_id,
+          instance_id,
+          capability_name,
+          inputs,
+          ctx,
+          params,
+          state.workspace,
+          state.config,
+          state.assigned_port,
+          streaming,
+          stream_sink,
+        )
+
+      internal_interaction_done(state.self_ref, out)
+    })
 
   let monitor = process.monitor(worker_pid)
   let selector =

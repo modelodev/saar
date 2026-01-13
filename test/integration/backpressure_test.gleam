@@ -172,7 +172,7 @@ pub fn finish_does_not_emit_terminal_payload() {
       },
     )
 
-  let stream_sink = sink.start_sse_sink(writer, fn(_event) { "{}" }, 0)
+  let stream_sink = sink.start_sse_sink(writer, sink.AgUi, 0)
 
   sink.finish(stream_sink, 1000) |> should.equal(Ok(Nil))
 
@@ -195,7 +195,7 @@ pub fn keep_alive_format_is_correct() {
       close: fn() { Nil },
     )
 
-  let _sink = sink.start_sse_sink(writer, fn(_event) { "{}" }, 10)
+  let _sink = sink.start_sse_sink(writer, sink.AgUi, 10)
 
   process.sleep(40)
 
@@ -217,7 +217,7 @@ pub fn keep_alive_can_be_disabled_with_zero() {
       close: fn() { Nil },
     )
 
-  let _sink = sink.start_sse_sink(writer, fn(_event) { "{}" }, 0)
+  let _sink = sink.start_sse_sink(writer, sink.AgUi, 0)
   process.sleep(30)
 
   case process.receive(writes, 0) {
@@ -259,7 +259,7 @@ fn start_sink(behavior: WriterBehavior) -> sink.StreamSink {
       close: fn() { Nil },
     )
 
-  sink.start_sse_sink(writer, fn(_event) { "{}" }, 0)
+  sink.start_sse_sink(writer, sink.AgUi, 0)
 }
 
 fn send_chunks(
@@ -270,7 +270,8 @@ fn send_chunks(
   case count {
     0 -> Nil
     _ -> {
-      let event = stream.content_chunk(trace_id, "x")
+      let _ = trace_id
+      let event = stream.event("x")
       stream_pump.push(pump, event)
       send_chunks(pump, trace_id, count - 1)
     }

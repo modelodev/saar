@@ -4,10 +4,11 @@
 //// Responsibilities:
 //// - Provide `push_batch` and `finish` helpers that wait for an ACK.
 //// - Provide an SSE-based sink loop implementation (`start_sse_sink`).
+//// - Preserve the selected wire protocol as metadata on the sink.
 ////
 //// Non-responsibilities:
 //// - Batching policy (size/interval) lives in the producer.
-//// - Choosing adapter/wire protocol; callers provide `wire_event`.
+//// - Producing protocol-specific payloads (AG-UI/A2UI/etc.).
 ////
 //// Relationships:
 //// - Uses `sad/otp/safe_call` to avoid crashing boundary processes.
@@ -16,7 +17,15 @@
 import gleam/erlang/process
 import gleam/list
 import sad/otp/safe_call.{type CallError, call_within}
-import sad/types/stream.{type StreamEvent}
+import sad/types/stream
+
+/// Streaming wire protocols supported by the native gateway.
+///
+/// This value is metadata only: producers must serialize appropriate payloads.
+pub type WireProtocol {
+  AgUi
+  A2uiV08
+}
 
 /// Minimal interface required to write SSE frames.
 ///
@@ -28,7 +37,7 @@ pub type SseWriter {
 type StreamSinkMsg {
   /// Pushes a batch of fully-formed `StreamEvent` values.
   PushBatch(
-    events: List(StreamEvent),
+    events: List(stream.StreamEvent),
     reply_to: process.Subject(Result(Nil, CallError)),
   )
 
@@ -41,7 +50,13 @@ type StreamSinkMsg {
 /// The underlying message protocol is intentionally hidden so only the provided
 /// sink implementations are relied upon.
 pub opaque type StreamSink {
-  StreamSink(process.Subject(StreamSinkMsg))
+  StreamSink(WireProtocol, process.Subject(StreamSinkMsg))
+}
+
+/// Returns the wire protocol attached to this sink.
+pub fn protocol(sink: StreamSink) -> WireProtocol {
+  let StreamSink(protocol, _) = sink
+  protocol
 }
 
 /// Starts a `StreamSink` loop for a single SSE response.
@@ -50,7 +65,7 @@ pub opaque type StreamSink {
 /// disables keep-alives.
 pub fn start_sse_sink(
   writer: SseWriter,
-  wire_event: fn(StreamEvent) -> String,
+  protocol: WireProtocol,
   keep_alive_interval_ms: Int,
 ) -> StreamSink {
   let ready = process.new_subject()
@@ -58,8 +73,8 @@ pub fn start_sse_sink(
   let _pid =
     process.spawn(fn() {
       let subject: process.Subject(StreamSinkMsg) = process.new_subject()
-      process.send(ready, StreamSink(subject))
-      loop(subject, writer, wire_event, keep_alive_interval_ms)
+      process.send(ready, StreamSink(protocol, subject))
+      loop(subject, writer, keep_alive_interval_ms)
     })
 
   case process.receive(ready, 1000) {
@@ -75,7 +90,7 @@ pub fn start_sse_sink(
 /// pushing and degrade to discard mode.
 pub fn push_batch(
   sink: StreamSink,
-  events: List(StreamEvent),
+  events: List(stream.StreamEvent),
   timeout_ms: Int,
 ) -> Result(Nil, CallError) {
   call_within(subject(sink), timeout_ms, fn(reply_to) {
@@ -94,7 +109,7 @@ pub fn finish(sink: StreamSink, timeout_ms: Int) -> Result(Nil, CallError) {
 }
 
 fn subject(sink: StreamSink) -> process.Subject(StreamSinkMsg) {
-  let StreamSink(subject) = sink
+  let StreamSink(_, subject) = sink
   subject
 }
 
@@ -110,7 +125,6 @@ fn unwrap_call(
 fn loop(
   subject: process.Subject(StreamSinkMsg),
   writer: SseWriter,
-  wire_event: fn(StreamEvent) -> String,
   keep_alive_interval_ms: Int,
 ) -> Nil {
   let timeout_ms = case keep_alive_interval_ms <= 0 {
@@ -120,11 +134,11 @@ fn loop(
 
   case process.receive(subject, timeout_ms) {
     Ok(PushBatch(events, reply_to)) -> {
-      let out = write_batch(writer, wire_event, events)
+      let out = write_batch(writer, events)
       process.send(reply_to, out)
 
       case out {
-        Ok(_) -> loop(subject, writer, wire_event, keep_alive_interval_ms)
+        Ok(_) -> loop(subject, writer, keep_alive_interval_ms)
         Error(_) -> writer_close(writer)
       }
     }
@@ -137,11 +151,11 @@ fn loop(
     Error(_) -> {
       // Best-effort keep-alive.
       case keep_alive_interval_ms <= 0 {
-        True -> loop(subject, writer, wire_event, keep_alive_interval_ms)
+        True -> loop(subject, writer, keep_alive_interval_ms)
 
         False -> {
           let _ = writer_write(writer, keep_alive_frame())
-          loop(subject, writer, wire_event, keep_alive_interval_ms)
+          loop(subject, writer, keep_alive_interval_ms)
         }
       }
     }
@@ -150,13 +164,12 @@ fn loop(
 
 fn write_batch(
   writer: SseWriter,
-  wire_event: fn(StreamEvent) -> String,
-  events: List(StreamEvent),
+  events: List(stream.StreamEvent),
 ) -> Result(Nil, CallError) {
   events
   |> list.fold(Ok(Nil), fn(acc, event) {
     case acc {
-      Ok(_) -> writer_write(writer, data_frame(wire_event(event)))
+      Ok(_) -> writer_write(writer, data_frame(stream.payload(event)))
       Error(err) -> Error(err)
     }
   })

@@ -1,4 +1,4 @@
-.PHONY: ci fmt test coverage wrapper e2e-echo e2e-transient e2e-continuous docs-limits
+.PHONY: ci fmt test coverage wrapper e2e-echo e2e-transient e2e-continuous e2e-http-interact docs-limits
 
 fmt:
 	gleam format --check src test tools/docs_limits/src tools/docs_limits/test
@@ -33,3 +33,6 @@ e2e-continuous: wrapper
 
 docs-limits:
 	(cd tools/docs_limits && gleam run -m sad/docs/limits_md)
+
+e2e-http-interact: wrapper
+	SAD_TEST_API_KEY=test-key gleam test

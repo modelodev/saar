@@ -5,7 +5,7 @@
 //// - Batch events by size/interval before calling `StreamSink.push_batch`.
 //// - Apply real backpressure via sink ACKs.
 //// - Degrade to discard mode on `TimedOut`/`Disconnected` without cancelling.
-//// - Always emit the final result on `done`.
+//// - Always deliver the final interaction result to the `done` subject.
 ////
 //// Non-responsibilities:
 //// - Reading runner output or mapping external protocols.
@@ -18,16 +18,15 @@
 import gleam/erlang/process
 import gleam/int
 import gleam/option.{type Option, None, Some}
-import gleam/string
 import sad/ffi
 import sad/streams/batcher
 import sad/streams/sink
 import sad/types/config as types_config
 import sad/types/output
-import sad/types/stream.{type StreamEvent, ContentChunk}
+import sad/types/stream
 
 type StreamPumpMsg {
-  Push(event: StreamEvent)
+  Push(event: stream.StreamEvent)
   Finish(result: Result(output.InteractionResult, output.InteractionError))
 }
 
@@ -88,7 +87,7 @@ pub fn start(
 }
 
 /// Sends an event to the pump.
-pub fn push(pump: StreamPump, event: StreamEvent) -> Nil {
+pub fn push(pump: StreamPump, event: stream.StreamEvent) -> Nil {
   process.send(subject(pump), Push(event))
 }
 
@@ -122,7 +121,7 @@ fn loop(
   ),
   mode: Mode,
   cfg: batcher.BatcherConfig,
-  state: batcher.Batcher(StreamEvent),
+  state: batcher.Batcher(stream.StreamEvent),
   push_timeout_ms: Int,
 ) -> Nil {
   let now_ms = ffi.now_ms()
@@ -177,7 +176,7 @@ fn loop(
 
 fn flush_batch(
   mode: Mode,
-  batch: List(StreamEvent),
+  batch: List(stream.StreamEvent),
   push_timeout_ms: Int,
 ) -> Mode {
   case mode {
@@ -201,16 +200,13 @@ fn finish_sink(mode: Mode, push_timeout_ms: Int) -> Nil {
   }
 }
 
-fn stream_event_bytes(event: StreamEvent) -> Int {
-  case event {
-    ContentChunk(content: content, ..) -> string.byte_size(content)
-    _ -> 64
-  }
+fn stream_event_bytes(event: stream.StreamEvent) -> Int {
+  stream.byte_size(event)
 }
 
 fn next_receive_timeout_ms(
   cfg: batcher.BatcherConfig,
-  state: batcher.Batcher(StreamEvent),
+  state: batcher.Batcher(stream.StreamEvent),
   now_ms: Int,
 ) -> Int {
   let batcher.BatcherConfig(flush_interval_ms: flush_interval_ms, ..) = cfg

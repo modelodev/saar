@@ -4,7 +4,7 @@
 ////
 //// Responsibilities:
 //// - Start an HTTP server bound to `server.host`/`server.port`.
-//// - Route requests to `/health`, `/health/ready`, and `/sys/*`.
+//// - Route requests to `/health`, `/health/ready`, `/sys/*`, and `/agents/*`.
 //// - Enforce v0 API key authentication (Bearer) outside health endpoints.
 ////
 //// Non-responsibilities:
@@ -23,6 +23,7 @@ import gleam/result
 import gleam/string
 import mist
 import sad/core/messages
+import sad/gateway/agents_api
 import sad/gateway/auth
 import sad/gateway/health
 import sad/gateway/problem
@@ -40,14 +41,18 @@ pub fn start(
 ) -> actor.StartResult(Nil) {
   let types_config.SadConfig(server_host: host, server_port: port, ..) = config
 
-  let deps =
+  let sys_deps =
     sys_api.Deps(
       registry: registry,
       profiles: profiles,
       agent_manager: agent_manager,
     )
 
-  let handler = fn(req) { handle_request(req, config, deps, profiles) }
+  let agents_deps = agents_api.Deps(registry: registry)
+
+  let handler = fn(req) {
+    handle_request(req, config, sys_deps, agents_deps, profiles)
+  }
 
   mist.new(handler)
   |> mist.bind(host)
@@ -59,7 +64,8 @@ pub fn start(
 fn handle_request(
   req: request.Request(mist.Connection),
   cfg: types_config.SadConfig,
-  deps: sys_api.Deps,
+  sys_deps: sys_api.Deps,
+  agents_deps: agents_api.Deps,
   profiles: process.Subject(messages.ProfilesMsg),
 ) -> response.Response(mist.ResponseData) {
   let trace_id = request_trace_id()
@@ -83,8 +89,12 @@ fn handle_request(
       case auth.require_bearer(req, api_key) {
         Ok(Nil) ->
           case string.starts_with(req.path, "/sys") {
-            True -> sys_api.handle(req, cfg, deps, trace_id)
-            False -> problem.not_found(trace_id, req.path)
+            True -> sys_api.handle(req, cfg, sys_deps, trace_id)
+            False ->
+              case string.starts_with(req.path, "/agents") {
+                True -> agents_api.handle(req, cfg, agents_deps, trace_id)
+                False -> problem.not_found(trace_id, req.path)
+              }
           }
 
         Error(auth.MissingAuthorization) ->

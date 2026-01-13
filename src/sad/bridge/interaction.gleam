@@ -1,0 +1,772 @@
+////
+//// Mission: execute a single interaction using a profile snapshot.
+////
+//// Responsibilities:
+//// - Execute a capability defined in a profile interface snapshot.
+//// - When streaming, push SSE payloads via a request-scoped `StreamSink`.
+//// - Return a final `InteractionResult` or `InteractionError`.
+////
+//// Non-responsibilities:
+//// - Spawning/monitoring interaction workers (AgentActor responsibility).
+//// - Enforcing hard timeouts (AgentActor responsibility).
+//// - HTTP gateway routing/authentication.
+////
+//// Relationships:
+//// - Called by `sad/core/agent` from a worker process.
+//// - Uses `sad/streams/stream_pump` + `sad/streams/sink` for SSE delivery.
+
+import envoy
+import gleam/dict
+import gleam/erlang/process
+import gleam/http
+import gleam/int
+import gleam/json
+import gleam/list
+import gleam/option.{type Option, None, Some}
+import gleam/result
+import gleam/string
+import sad/artifacts
+import sad/bridge/http_client
+import sad/bridge/interpolator
+import sad/bridge/port_process
+import sad/bridge/runner
+import sad/bridge/runner_contract
+import sad/bridge/serialization
+import sad/streams/sink
+import sad/streams/stream_pump
+import sad/types/config as types_config
+import sad/types/core as types_core
+import sad/types/enums as types_enums
+import sad/types/input as types_input
+import sad/types/output as types_output
+import sad/types/profile as types_profile
+import sad/types/resolved_params
+import sad/types/runner as types_runner
+import sad/types/stream
+
+/// Executes a single interaction.
+///
+/// This function is pure with respect to agent state: concurrency guards and
+/// hard timeouts are enforced by the caller (AgentActor).
+pub fn run(
+  profile: types_profile.Profile,
+  profile_id: types_core.ProfileId,
+  instance_id: types_core.InstanceId,
+  capability_name: String,
+  inputs: types_input.InputPayload,
+  context: types_input.RequestContext,
+  params: resolved_params.ResolvedParams,
+  workspace: String,
+  config: types_config.SadConfig,
+  assigned_port: Option(Int),
+  streaming: Bool,
+  stream_sink: Option(sink.StreamSink),
+) -> Result(types_output.InteractionResult, types_output.InteractionError) {
+  let input =
+    types_input.SadInput(
+      meta: types_input.SadInputMeta(
+        spec_version: "v0",
+        profile_id: profile_id,
+        instance_id: Some(instance_id),
+        mode: profile.meta.lifecycle,
+      ),
+      params: params,
+      input: inputs,
+      context: context,
+      helpers: None,
+      runner_def: profile.runner,
+    )
+
+  case profile.interface {
+    types_profile.RunnerInterface(caps) ->
+      case dict.get(caps, capability_name) {
+        Error(_) ->
+          Error(types_output.sad_error(
+            context.trace_id,
+            types_enums.BadRequest,
+            "Unknown capability",
+          ))
+
+        Ok(cap) ->
+          case streaming && cap.streaming {
+            True ->
+              execute_runner_streaming(input, workspace, config, stream_sink)
+            False -> execute_runner_sync(input, workspace, config)
+          }
+      }
+
+    types_profile.HttpInterface(base_url, headers, _health, caps) ->
+      case dict.get(caps, capability_name) {
+        Error(_) ->
+          Error(types_output.sad_error(
+            context.trace_id,
+            types_enums.BadRequest,
+            "Unknown capability",
+          ))
+
+        Ok(cap) ->
+          case streaming && cap.streaming {
+            True ->
+              Error(types_output.sad_error(
+                context.trace_id,
+                types_enums.InfraError,
+                "http_streaming_not_supported",
+              ))
+
+            False ->
+              execute_http_sync(
+                base_url,
+                headers,
+                cap,
+                input,
+                config,
+                assigned_port,
+              )
+          }
+      }
+  }
+}
+
+fn execute_runner_sync(
+  input: types_input.SadInput,
+  workspace: String,
+  config: types_config.SadConfig,
+) -> Result(types_output.InteractionResult, types_output.InteractionError) {
+  let #(runner_path, runner_args) = runner_command(input.runner_def, config)
+
+  let ctx =
+    interpolator.build_context(
+      input.params,
+      input.input,
+      input.context,
+      None,
+      None,
+    )
+
+  use env_map <- result.try(interpolator.interpolate_dict(
+    input.runner_def.env_map,
+    ctx,
+  ))
+  use args <- result.try(interpolator.interpolate_list(
+    input.runner_def.args,
+    ctx,
+  ))
+
+  let env = list.append(runner_env(), dict.to_list(env_map))
+
+  runner.execute_transient(
+    runner_path,
+    list.append(runner_args, args),
+    env,
+    workspace,
+    input,
+    config,
+    False,
+    0,
+  )
+}
+
+type StreamFlags {
+  StreamFlags(agui_message_started: Bool, a2ui_started: Bool)
+}
+
+fn execute_runner_streaming(
+  input: types_input.SadInput,
+  workspace: String,
+  config: types_config.SadConfig,
+  stream_sink: Option(sink.StreamSink),
+) -> Result(types_output.InteractionResult, types_output.InteractionError) {
+  use sink <- result.try(case stream_sink {
+    Some(s) -> Ok(s)
+    None ->
+      Error(types_output.sad_error(
+        input.context.trace_id,
+        types_enums.InfraError,
+        "missing_stream_sink",
+      ))
+  })
+
+  let types_config.SadConfig(stream: stream_cfg, ..) = config
+  let types_config.StreamConfig(
+    interaction_stream: pump_cfg,
+    sse_keep_alive_interval_ms: _keep_alive_ms,
+    ..,
+  ) = stream_cfg
+
+  let done = process.new_subject()
+  let pump = stream_pump.start(done, Some(sink), pump_cfg)
+
+  // Emit protocol start eagerly.
+  case sink.protocol(sink) {
+    sink.AgUi ->
+      stream_pump.push(pump, agui_run_started(input.context.trace_id))
+    sink.A2uiV08 -> Nil
+  }
+
+  let #(runner_path, runner_args) = runner_command(input.runner_def, config)
+
+  let ctx =
+    interpolator.build_context(
+      input.params,
+      input.input,
+      input.context,
+      None,
+      None,
+    )
+
+  use env_map <- result.try(interpolator.interpolate_dict(
+    input.runner_def.env_map,
+    ctx,
+  ))
+  use args <- result.try(interpolator.interpolate_list(
+    input.runner_def.args,
+    ctx,
+  ))
+
+  let env = list.append(runner_env(), dict.to_list(env_map))
+  let env = append_wrapper_env(env, config)
+
+  let types_config.RunnerExecSettings(
+    max_runner_event_bytes: max_event_bytes,
+    read_timeout_ms: read_timeout_ms,
+    ..,
+  ) = types_config.runner_exec_settings(config)
+
+  use proc <- result.try(
+    port_process.start(
+      runner_path,
+      list.append(runner_args, args),
+      env,
+      workspace,
+      max_event_bytes,
+    )
+    |> result.map_error(fn(err) {
+      types_output.sad_error(
+        input.context.trace_id,
+        types_enums.InfraError,
+        port_error_to_string(err),
+      )
+    }),
+  )
+
+  let control_line =
+    json.object([
+      #("t", json.string("input")),
+      #("payload", serialization.sad_input_to_json(input)),
+    ])
+    |> json.to_string
+
+  port_process.send(proc, control_line <> "\n")
+
+  let flags = StreamFlags(agui_message_started: False, a2ui_started: False)
+
+  read_runner_stream(proc, read_timeout_ms, input, sink, pump, flags)
+}
+
+fn read_runner_stream(
+  proc: port_process.PortProcess,
+  read_timeout_ms: Int,
+  input: types_input.SadInput,
+  sink: sink.StreamSink,
+  pump: stream_pump.StreamPump,
+  flags: StreamFlags,
+) -> Result(types_output.InteractionResult, types_output.InteractionError) {
+  let #(proc, out) = port_process.read_line(proc, read_timeout_ms)
+
+  case out {
+    Error(port_process.Timeout) ->
+      read_runner_stream(proc, read_timeout_ms, input, sink, pump, flags)
+
+    Error(port_process.NoeolFragment(fragment)) ->
+      Error(types_output.sad_error(
+        input.context.trace_id,
+        types_enums.InfraError,
+        "Fragmented output: " <> fragment,
+      ))
+
+    Error(port_process.OversizedEvent(_size, _max)) ->
+      Error(types_output.sad_error(
+        input.context.trace_id,
+        types_enums.InfraError,
+        "Runner event too large",
+      ))
+
+    Error(port_process.PortExited(code)) ->
+      Error(types_output.sad_error(
+        input.context.trace_id,
+        types_enums.InfraError,
+        "Runner exited with code " <> int.to_string(code),
+      ))
+
+    Ok(line) ->
+      runner_contract.decode_event(line)
+      |> result.map_error(fn(err) {
+        types_output.sad_error(
+          input.context.trace_id,
+          types_enums.InfraError,
+          "Invalid runner event: " <> string.inspect(err),
+        )
+      })
+      |> result.try(fn(event) {
+        case event {
+          types_runner.RunnerEventLog(_, _) ->
+            read_runner_stream(proc, read_timeout_ms, input, sink, pump, flags)
+
+          types_runner.RunnerEventChunk(delta) -> {
+            let flags =
+              emit_chunk(pump, sink, input.context.trace_id, delta, flags)
+            read_runner_stream(proc, read_timeout_ms, input, sink, pump, flags)
+          }
+
+          types_runner.RunnerEventResult(response) -> {
+            let final =
+              runner_response_to_result(
+                response,
+                input.runner_def.artifact_config,
+                input.context.trace_id,
+              )
+
+            emit_terminal(pump, sink, input.context.trace_id, final, flags)
+            stream_pump.finish(pump, final)
+            final
+          }
+
+          _ ->
+            Error(types_output.sad_error(
+              input.context.trace_id,
+              types_enums.InfraError,
+              "Unexpected runner event",
+            ))
+        }
+      })
+  }
+}
+
+fn emit_chunk(
+  pump: stream_pump.StreamPump,
+  sink: sink.StreamSink,
+  trace_id: types_core.TraceId,
+  delta: String,
+  flags: StreamFlags,
+) -> StreamFlags {
+  let StreamFlags(
+    agui_message_started: agui_started,
+    a2ui_started: a2ui_started,
+  ) = flags
+
+  case sink.protocol(sink) {
+    sink.AgUi -> {
+      case agui_started {
+        False -> stream_pump.push(pump, agui_text_message_start())
+        True -> Nil
+      }
+
+      stream_pump.push(pump, agui_text_message_content(delta))
+      StreamFlags(agui_message_started: True, a2ui_started: a2ui_started)
+    }
+
+    sink.A2uiV08 -> {
+      case a2ui_started {
+        False -> stream_pump.push(pump, a2ui_begin_rendering(trace_id))
+        True -> Nil
+      }
+
+      stream_pump.push(pump, a2ui_data_model_update(trace_id, delta))
+      StreamFlags(agui_message_started: agui_started, a2ui_started: True)
+    }
+  }
+}
+
+fn emit_terminal(
+  pump: stream_pump.StreamPump,
+  sink: sink.StreamSink,
+  trace_id: types_core.TraceId,
+  result: Result(types_output.InteractionResult, types_output.InteractionError),
+  flags: StreamFlags,
+) -> Nil {
+  case sink.protocol(sink) {
+    sink.A2uiV08 -> Nil
+
+    sink.AgUi ->
+      case result {
+        Ok(ok) -> {
+          let StreamFlags(agui_message_started: started, ..) = flags
+          case started {
+            True -> stream_pump.push(pump, agui_text_message_end())
+            False -> Nil
+          }
+
+          stream_pump.push(pump, agui_run_finished(trace_id, ok.artifacts))
+        }
+
+        Error(err) -> stream_pump.push(pump, agui_run_error(trace_id, err))
+      }
+  }
+}
+
+fn agui_run_started(trace_id: types_core.TraceId) -> stream.StreamEvent {
+  stream.event(
+    json.to_string(
+      json.object([
+        #("type", json.string("RUN_STARTED")),
+        #("threadId", json.string(types_core.trace_id_to_string(trace_id))),
+        #("runId", json.string(types_core.trace_id_to_string(trace_id))),
+      ]),
+    ),
+  )
+}
+
+fn agui_text_message_start() -> stream.StreamEvent {
+  stream.event(
+    json.to_string(
+      json.object([
+        #("type", json.string("TEXT_MESSAGE_START")),
+        #("messageId", json.string("msg-1")),
+        #("role", json.string("assistant")),
+      ]),
+    ),
+  )
+}
+
+fn agui_text_message_content(delta: String) -> stream.StreamEvent {
+  stream.event(
+    json.to_string(
+      json.object([
+        #("type", json.string("TEXT_MESSAGE_CONTENT")),
+        #("messageId", json.string("msg-1")),
+        #("delta", json.string(delta)),
+      ]),
+    ),
+  )
+}
+
+fn agui_text_message_end() -> stream.StreamEvent {
+  stream.event(
+    json.to_string(
+      json.object([
+        #("type", json.string("TEXT_MESSAGE_END")),
+        #("messageId", json.string("msg-1")),
+      ]),
+    ),
+  )
+}
+
+fn agui_run_finished(
+  trace_id: types_core.TraceId,
+  artifacts: List(types_output.PublicArtifact),
+) -> stream.StreamEvent {
+  stream.event(
+    json.to_string(
+      json.object([
+        #("type", json.string("RUN_FINISHED")),
+        #("threadId", json.string(types_core.trace_id_to_string(trace_id))),
+        #("runId", json.string(types_core.trace_id_to_string(trace_id))),
+        #("artifacts", json.array(artifacts, encode_artifact)),
+      ]),
+    ),
+  )
+}
+
+fn agui_run_error(
+  trace_id: types_core.TraceId,
+  err: types_output.InteractionError,
+) -> stream.StreamEvent {
+  stream.event(
+    json.to_string(
+      json.object([
+        #("type", json.string("RUN_ERROR")),
+        #("threadId", json.string(types_core.trace_id_to_string(trace_id))),
+        #("runId", json.string(types_core.trace_id_to_string(trace_id))),
+        #(
+          "error",
+          json.object([
+            #("kind", json.string(types_enums.error_kind_to_string(err.kind))),
+            #("message", json.string(err.message)),
+            #(
+              "trace_id",
+              json.string(types_core.trace_id_to_string(err.trace_id)),
+            ),
+          ]),
+        ),
+      ]),
+    ),
+  )
+}
+
+fn a2ui_begin_rendering(trace_id: types_core.TraceId) -> stream.StreamEvent {
+  stream.event(
+    json.to_string(
+      json.object([
+        #(
+          "beginRendering",
+          json.object([
+            #("surfaceId", json.string(types_core.trace_id_to_string(trace_id))),
+          ]),
+        ),
+      ]),
+    ),
+  )
+}
+
+fn a2ui_data_model_update(
+  trace_id: types_core.TraceId,
+  delta: String,
+) -> stream.StreamEvent {
+  stream.event(
+    json.to_string(
+      json.object([
+        #(
+          "dataModelUpdate",
+          json.object([
+            #("surfaceId", json.string(types_core.trace_id_to_string(trace_id))),
+            #("delta", json.string(delta)),
+          ]),
+        ),
+      ]),
+    ),
+  )
+}
+
+fn encode_artifact(artifact: types_output.PublicArtifact) -> json.Json {
+  json.object([
+    #("id", json.string(types_core.artifact_id_to_string(artifact.id))),
+    #("name", json.string(artifact.name)),
+    #("url", case artifact.url {
+      Some(u) -> json.string(u)
+      None -> json.null()
+    }),
+    #("mime", json.string(artifact.mime)),
+  ])
+}
+
+fn runner_response_to_result(
+  response: types_runner.RunnerResponse,
+  artifact_cfg: types_runner.ArtifactConfig,
+  trace_id: types_core.TraceId,
+) -> Result(types_output.InteractionResult, types_output.InteractionError) {
+  case response {
+    types_runner.RunnerFailure(error: err, ..) ->
+      Error(types_output.sad_error(trace_id, err.kind, err.message))
+
+    types_runner.RunnerSuccess(data: data, artifacts: runner_artifacts) -> {
+      let response_data = case data {
+        None -> types_output.ResponseData(content: None, metadata: dict.new())
+        Some(payload) ->
+          types_output.ResponseData(
+            content: None,
+            metadata: dict.from_list([#("raw", payload)]),
+          )
+      }
+
+      let artifacts =
+        artifacts.collect(runner_artifacts, artifact_cfg)
+        |> result.map_error(fn(err) {
+          types_output.sad_error(
+            trace_id,
+            types_enums.InfraError,
+            "Invalid artifact path: " <> string.inspect(err),
+          )
+        })
+
+      use public_artifacts <- result.try(artifacts)
+
+      Ok(types_output.InteractionResult(
+        data: response_data,
+        artifacts: public_artifacts,
+        trace_id: trace_id,
+      ))
+    }
+  }
+}
+
+fn execute_http_sync(
+  base_url: String,
+  headers: dict.Dict(String, String),
+  capability: types_profile.HttpCapability,
+  input: types_input.SadInput,
+  config: types_config.SadConfig,
+  assigned_port: Option(Int),
+) -> Result(types_output.InteractionResult, types_output.InteractionError) {
+  let ctx =
+    interpolator.build_context(
+      input.params,
+      input.input,
+      input.context,
+      Some(managed_port_host(config)),
+      assigned_port,
+    )
+
+  use base <- result.try(interpolator.interpolate_string(base_url, ctx))
+  use hdrs <- result.try(interpolator.interpolate_dict(headers, ctx))
+
+  let url = base <> capability.path
+
+  let method = http_method(capability.method)
+  let body = json.to_string(input_payload_to_json(input.input))
+
+  let types_config.SadConfig(limits: limits, timeouts: timeouts, ..) = config
+  let types_config.SadLimits(max_http_response_bytes: max_resp, ..) = limits
+  let types_config.SadTimeouts(call_timeout_ms: timeout_ms, ..) = timeouts
+
+  http_client.request_sync_string(
+    method,
+    url,
+    hdrs,
+    Some(body),
+    timeout_ms,
+    max_resp,
+  )
+  |> result.map_error(fn(err) {
+    types_output.sad_error(
+      input.context.trace_id,
+      types_enums.InfraError,
+      http_client.http_error_to_string(err),
+    )
+  })
+  |> result.map(fn(resp) {
+    types_output.InteractionResult(
+      data: types_output.ResponseData(
+        content: Some(resp.body),
+        metadata: dict.new(),
+      ),
+      artifacts: [],
+      trace_id: input.context.trace_id,
+    )
+  })
+}
+
+fn http_method(method: types_profile.HttpMethod) -> http.Method {
+  case method {
+    types_profile.HttpGet -> http.Get
+    types_profile.HttpPost -> http.Post
+    types_profile.HttpPut -> http.Put
+    types_profile.HttpDelete -> http.Delete
+  }
+}
+
+fn runner_env() -> List(#(String, String)) {
+  let path_env = case envoy.get("PATH") {
+    Ok(path) -> [#("PATH", path)]
+    Error(_) -> []
+  }
+
+  let force_fallback = case envoy.get("SAD_WRAPPER_FORCE_FALLBACK") {
+    Ok(value) -> value
+    Error(_) -> "1"
+  }
+
+  list.append(path_env, [#("SAD_WRAPPER_FORCE_FALLBACK", force_fallback)])
+}
+
+fn runner_command(
+  runner_def: types_runner.Runner,
+  config: types_config.SadConfig,
+) -> #(String, List(String)) {
+  let types_config.SadConfig(runner: runner_cfg, ..) = config
+  let types_config.RunnerSystemConfig(python_bin: python_bin, ..) = runner_cfg
+
+  case runner_def.tool_config {
+    types_runner.ToolConfigScript(script) -> #(python_bin, [script])
+
+    types_runner.ToolConfigPackage(package, command, with_packages) -> #(
+      command,
+      [package, ..with_packages],
+    )
+  }
+}
+
+fn managed_port_host(config: types_config.SadConfig) -> String {
+  let types_config.SadConfig(runner: runner_cfg, ..) = config
+  let types_config.RunnerSystemConfig(managed_port_host: host, ..) = runner_cfg
+  host
+}
+
+fn append_wrapper_env(
+  env: List(#(String, String)),
+  config: types_config.SadConfig,
+) -> List(#(String, String)) {
+  let types_config.RunnerExecSettings(
+    shutdown_timeout_ms: shutdown_timeout_ms,
+    wrapper: wrapper,
+    ..,
+  ) = types_config.runner_exec_settings(config)
+
+  let types_config.WrapperConfig(
+    read_buffer_bytes: read_buffer_bytes,
+    control_line_bytes: control_line_bytes,
+    poll_interval_ms: poll_interval_ms,
+    post_kill_wait_ms: post_kill_wait_ms,
+  ) = wrapper
+
+  list.append(env, [
+    #("SAD_SHUTDOWN_MS", int.to_string(shutdown_timeout_ms)),
+    #("SAD_WRAPPER_READ_BUFFER_BYTES", int.to_string(read_buffer_bytes)),
+    #("SAD_WRAPPER_CONTROL_LINE_BYTES", int.to_string(control_line_bytes)),
+    #("SAD_WRAPPER_POLL_MS", int.to_string(poll_interval_ms)),
+    #("SAD_WRAPPER_POST_KILL_WAIT_MS", int.to_string(post_kill_wait_ms)),
+  ])
+}
+
+fn port_error_to_string(err: port_process.PortError) -> String {
+  case err {
+    port_process.WrapperNotFound(name) -> "Wrapper not found: " <> name
+    port_process.SpawnFailed(reason) -> "Failed to start runner: " <> reason
+  }
+}
+
+fn input_payload_to_json(payload: types_input.InputPayload) -> json.Json {
+  case payload {
+    types_input.PayloadChat(messages, extra) -> {
+      let base = [#("messages", json.array(messages, chat_message_to_json))]
+      let extra_fields =
+        extra
+        |> dict.to_list
+        |> list.map(fn(pair) { #(pair.0, input_value_to_json(pair.1)) })
+      json.object(list.append(base, extra_fields))
+    }
+
+    types_input.PayloadFiles(files) ->
+      json.object([#("files", json.array(files, file_ref_to_json))])
+
+    types_input.PayloadMixed(messages, files, extra) -> {
+      let base = [
+        #("messages", json.array(messages, chat_message_to_json)),
+        #("files", json.array(files, file_ref_to_json)),
+      ]
+      let extra_fields =
+        extra
+        |> dict.to_list
+        |> list.map(fn(pair) { #(pair.0, input_value_to_json(pair.1)) })
+      json.object(list.append(base, extra_fields))
+    }
+  }
+}
+
+fn chat_message_to_json(message: types_input.ChatMessage) -> json.Json {
+  json.object([
+    #("role", json.string(message.role)),
+    #("content", json.string(message.content)),
+  ])
+}
+
+fn file_ref_to_json(file: types_input.FileRef) -> json.Json {
+  json.object([
+    #("url", json.string(file.url)),
+    #("mime", json.string(file.mime)),
+    #("name", json.string(file.name)),
+    #("context", case file.context {
+      Some(ctx) -> json.string(ctx)
+      None -> json.null()
+    }),
+  ])
+}
+
+fn input_value_to_json(value: types_input.InputValue) -> json.Json {
+  case value {
+    types_core.StringVal(s) -> json.string(s)
+    types_core.IntVal(i) -> json.int(i)
+    types_core.FloatVal(f) -> json.float(f)
+    types_core.BoolVal(b) -> json.bool(b)
+    types_core.ListVal(items) -> json.array(items, json.string)
+  }
+}

@@ -1,55 +1,45 @@
 ////
-//// Mission: define typed streaming events emitted during an interaction.
+//// Mission: represent streaming events as wire payloads.
 ////
 //// Responsibilities:
-//// - Provide a small, stable event set for streaming transports.
-//// - Carry `trace_id` and timestamps for correlation.
+//// - Carry already-serialized payloads for SSE `data:` frames.
+//// - Provide small helpers to build and size events.
 ////
 //// Non-responsibilities:
-//// - SSE framing, encoding, or delivery guarantees.
-//// - Adapter-specific envelopes (AG-UI/A2A/etc.).
+//// - Selecting or implementing higher-level wire protocols (AG-UI/A2UI).
+//// - SSE framing (`data: ...\n\n`) and transport concerns.
 ////
 //// Relationships:
-//// - Used by `sad/streams/*` modules and gateway SSE loops.
-//// - Reuses `TraceId` from `sad/types/core` and `InteractionError` from `sad/types/output`.
+//// - Produced by bridge workers and consumed by `sad/streams/*`.
 
-import sad/ffi
-import sad/types/core.{type TraceId}
-import sad/types/output.{type InteractionError}
+import gleam/string
 
-/// Streaming events emitted while an interaction is running.
+/// A single streaming event payload.
 ///
-/// These events are transport-agnostic (no SSE framing).
-pub type StreamEvent {
-  /// Marks the start of a stream.
-  StreamStarted(trace_id: TraceId, timestamp: Int)
-
-  /// A chunk of streamed textual content.
-  ContentChunk(trace_id: TraceId, content: String, timestamp: Int)
-
-  /// Marks the end of a stream (success path).
-  StreamFinished(trace_id: TraceId, timestamp: Int)
-
-  /// Marks the end of a stream due to an error.
-  StreamError(trace_id: TraceId, error: InteractionError, timestamp: Int)
+/// `payload` is the exact string written after `data: ` in SSE frames.
+pub opaque type StreamEvent {
+  StreamEvent(payload: String)
 }
 
-/// Builds a `StreamStarted` event with a fresh timestamp.
-pub fn stream_started(trace_id: TraceId) -> StreamEvent {
-  StreamStarted(trace_id: trace_id, timestamp: ffi.now_ms())
+/// Builds a `StreamEvent` from a wire payload.
+///
+/// Example:
+/// ```gleam
+/// stream.event("{\"type\":\"RUN_STARTED\"}")
+/// ```
+pub fn event(payload: String) -> StreamEvent {
+  StreamEvent(payload: payload)
 }
 
-/// Builds a `ContentChunk` event with a fresh timestamp.
-pub fn content_chunk(trace_id: TraceId, content: String) -> StreamEvent {
-  ContentChunk(trace_id: trace_id, content: content, timestamp: ffi.now_ms())
+/// Returns the payload carried by the event.
+pub fn payload(event: StreamEvent) -> String {
+  let StreamEvent(payload: payload) = event
+  payload
 }
 
-/// Builds a `StreamFinished` event with a fresh timestamp.
-pub fn stream_finished(trace_id: TraceId) -> StreamEvent {
-  StreamFinished(trace_id: trace_id, timestamp: ffi.now_ms())
-}
-
-/// Builds a `StreamError` event with a fresh timestamp.
-pub fn stream_error(trace_id: TraceId, error: InteractionError) -> StreamEvent {
-  StreamError(trace_id: trace_id, error: error, timestamp: ffi.now_ms())
+/// Returns the UTF-8 byte size of the payload.
+///
+/// This is used for batching and backpressure accounting.
+pub fn byte_size(event: StreamEvent) -> Int {
+  event |> payload |> string.byte_size
 }
