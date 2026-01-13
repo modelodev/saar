@@ -1,25 +1,27 @@
-//// Bridge HTTP client (sync).
+//// Bridge HTTP client.
 ////
 //// Mission: execute outbound HTTP requests for the bridge with explicit
-//// timeouts and size limits.
+//// timeouts, size limits, and optional SSE consumption.
 ////
 //// Responsibilities:
 //// - Build `gleam/http` requests for string and binary bodies.
 //// - Execute requests via `httpp/hackney` in async mode.
 //// - Enforce response size limits and request deadlines.
+//// - Provide a small SSE upstream helper for consuming runner-style events.
+//// - Provide multipart helpers for URL-backed file references.
 ////
 //// Non-responsibilities:
-//// - SSE parsing/streaming semantics.
-//// - Profile interpolation and higher-level error translation.
-//// - Multipart body construction.
+//// - Retrying requests.
+//// - Profile interpolation and higher-level orchestration.
 ////
 //// Relationships:
-//// - Used by `sad/bridge/health_check` and `sad/bridge/multipart_proxy`.
-//// - Uses `httpp/hackney` for the transport.
+//// - Used by bridge and core orchestration.
+//// - Uses `httpp/hackney` and `httpp/streaming` for the transport.
 
 import gleam/bit_array
 import gleam/bytes_tree
 import gleam/dict.{type Dict}
+import gleam/dynamic
 import gleam/erlang/process
 import gleam/http.{type Method, Get}
 import gleam/http/request
@@ -30,7 +32,15 @@ import gleam/result
 import gleam/string
 import gleam/uri
 import httpp/hackney
+import httpp/streaming
+import sad/bridge/runner_contract
 import sad/ffi
+import sad/types/config as types_config
+import sad/types/core as types_core
+import sad/types/enums as types_enums
+import sad/types/input as types_input
+import sad/types/output as types_output
+import sad/types/runner as types_runner
 
 /// Simplified HTTP response for bridge use.
 pub type HttpResponse {
@@ -378,4 +388,439 @@ fn hackney_error_to_http_error(err: hackney.Error) -> HttpError {
 
 fn now_ms() -> Int {
   ffi.now_ms()
+}
+
+// --- Multipart helpers (URL-backed file references) ---
+
+/// Rejects multipart when `streaming` is enabled.
+pub fn ensure_multipart_allowed(
+  trace_id: types_core.TraceId,
+  streaming: Bool,
+) -> Result(Nil, types_output.InteractionError) {
+  case streaming {
+    True ->
+      Error(types_output.sad_error(
+        trace_id,
+        types_enums.BadRequest,
+        "Multipart body is not supported for streaming in v0",
+      ))
+    False -> Ok(Nil)
+  }
+}
+
+/// Builds and sends a multipart request for a single input file.
+///
+/// The file content is fetched from `file.url` and bounded by `limits.max_file_fetch_bytes`.
+pub fn request_multipart_file(
+  trace_id: types_core.TraceId,
+  method: Method,
+  url: String,
+  headers: Dict(String, String),
+  fields: Dict(String, String),
+  file_field: String,
+  file: types_input.FileRef,
+  streaming: Bool,
+  config: types_config.SadConfig,
+  timeout_ms: Int,
+) -> Result(HttpResponse, types_output.InteractionError) {
+  use _ <- result.try(ensure_multipart_allowed(trace_id, streaming))
+
+  let types_config.SadConfig(limits: limits, ..) = config
+  let types_config.SadLimits(
+    max_file_fetch_bytes: max_file_bytes,
+    max_http_response_bytes: max_resp_bytes,
+    ..,
+  ) = limits
+
+  use file_bits <- result.try(
+    fetch_bits(file.url, timeout_ms, max_file_bytes)
+    |> result.map_error(fn(err) {
+      types_output.sad_error(
+        trace_id,
+        types_enums.InfraError,
+        "File fetch failed: " <> http_error_to_string(err),
+      )
+    }),
+  )
+
+  let #(boundary, body) = build_multipart(fields, file_field, file, file_bits)
+
+  let headers =
+    headers
+    |> dict.insert("content-type", "multipart/form-data; boundary=" <> boundary)
+
+  request_sync_bytes(
+    method,
+    url,
+    headers,
+    Some(body),
+    timeout_ms,
+    max_resp_bytes,
+  )
+  |> result.map_error(fn(err) {
+    types_output.sad_error(
+      trace_id,
+      types_enums.InfraError,
+      http_error_to_string(err),
+    )
+  })
+}
+
+/// Sends multiple multipart uploads as N requests (fail-fast).
+///
+/// Returns a list of responses in the same order as `files`.
+pub fn request_multipart_files(
+  trace_id: types_core.TraceId,
+  method: Method,
+  url: String,
+  headers: Dict(String, String),
+  fields: Dict(String, String),
+  file_field: String,
+  files: List(types_input.FileRef),
+  streaming: Bool,
+  config: types_config.SadConfig,
+  timeout_ms: Int,
+) -> Result(List(HttpResponse), types_output.InteractionError) {
+  use _ <- result.try(ensure_multipart_allowed(trace_id, streaming))
+
+  files
+  |> list.try_map(fn(file) {
+    request_multipart_file(
+      trace_id,
+      method,
+      url,
+      headers,
+      fields,
+      file_field,
+      file,
+      streaming,
+      config,
+      timeout_ms,
+    )
+  })
+}
+
+fn build_multipart(
+  fields: Dict(String, String),
+  file_field: String,
+  file: types_input.FileRef,
+  file_bits: BitArray,
+) -> #(String, bytes_tree.BytesTree) {
+  let boundary =
+    "sad_boundary_" <> int.to_string(int.absolute_value(ffi.now_ms()))
+
+  let field_trees =
+    fields
+    |> dict.to_list
+    |> list.map(fn(pair) {
+      bytes_tree.from_string(
+        "--"
+        <> boundary
+        <> "\r\n"
+        <> "Content-Disposition: form-data; name=\""
+        <> pair.0
+        <> "\"\r\n\r\n"
+        <> pair.1
+        <> "\r\n",
+      )
+    })
+
+  let types_input.FileRef(url: _, mime: mime, name: name, context: _) = file
+
+  let file_headers =
+    bytes_tree.from_string(
+      "--"
+      <> boundary
+      <> "\r\n"
+      <> "Content-Disposition: form-data; name=\""
+      <> file_field
+      <> "\"; filename=\""
+      <> name
+      <> "\"\r\n"
+      <> "Content-Type: "
+      <> mime
+      <> "\r\n\r\n",
+    )
+
+  let file_body = bytes_tree.from_bit_array(file_bits)
+  let file_trailer = bytes_tree.from_string("\r\n")
+  let end = bytes_tree.from_string("--" <> boundary <> "--\r\n")
+
+  let body =
+    bytes_tree.concat(
+      list.append(field_trees, [file_headers, file_body, file_trailer, end]),
+    )
+
+  #(boundary, body)
+}
+
+// --- SSE upstream support ---
+
+/// Active SSE connection.
+pub opaque type SseConnection {
+  SseConnection(
+    control: process.Subject(SseManagerMessage),
+    events: process.Subject(SseEvent),
+  )
+}
+
+/// Events received from an SSE connection.
+pub type SseEvent {
+  SseData(String)
+  SseClosed
+  SseTimeout
+}
+
+type SseManagerMessage {
+  Shutdown
+}
+
+type SseState {
+  SseState(buffer: String)
+}
+
+/// Opens an SSE connection.
+///
+/// This forces `Accept: text/event-stream` and uses `httpp/streaming`.
+///
+/// Note: `initial_response_timeout_ms` only bounds status+headers.
+pub fn open_sse(
+  method: Method,
+  url: String,
+  headers: Dict(String, String),
+  body: Option(String),
+  initial_response_timeout_ms: Int,
+) -> Result(SseConnection, HttpError) {
+  use req <- result.try(build_request_sse(method, url, headers, body))
+
+  let events: process.Subject(SseEvent) = process.new_subject()
+
+  let handler =
+    streaming.StreamingRequestHandler(
+      req: req
+        |> request.map(bytes_tree.from_string)
+        |> request.set_header("accept", "text/event-stream")
+        |> request.set_header("connection", "keep-alive"),
+      initial_state: SseState(buffer: ""),
+      on_data: fn(message, _response, state) {
+        sse_on_data(events, message, state)
+      },
+      on_message: fn(message, _response, state) {
+        sse_on_message(events, message, state)
+      },
+      on_error: fn(_err, _response, _state) {
+        process.send(events, SseClosed)
+        Error(process.Normal)
+      },
+      initial_response_timeout: int.max(initial_response_timeout_ms, 1),
+    )
+
+  streaming.start(handler)
+  |> result.map(fn(started) {
+    let #(_client_ref, control) = started
+    SseConnection(control: control, events: events)
+  })
+  |> result.map_error(fn(_) { ConnectionError("SSE start failed") })
+}
+
+/// Receives the next SSE event.
+pub fn sse_receive(conn: SseConnection, timeout_ms: Int) -> SseEvent {
+  case process.receive(conn.events, timeout_ms) {
+    Ok(event) -> event
+    Error(_) -> SseTimeout
+  }
+}
+
+/// Closes an SSE connection.
+pub fn close_sse(conn: SseConnection) -> Nil {
+  process.send(conn.control, Shutdown)
+}
+
+/// Reads SSE events until a `t="result"` is received.
+///
+/// Contract (v0): each SSE `data:` field is either empty/commentary (ignored)
+/// or a JSON object with runner-style tags: `log`, `chunk`, `result`.
+///
+/// Errors:
+/// - Connection closes without a result -> `InfraError`.
+/// - Invalid JSON or unknown tags -> `InfraError`.
+pub fn read_sse_until_result(
+  conn: SseConnection,
+  trace_id: types_core.TraceId,
+  max_event_bytes: Int,
+  timeout_ms: Int,
+) -> Result(types_runner.RunnerResponse, types_output.InteractionError) {
+  let deadline_ms = ffi.now_ms() + int.max(timeout_ms, 1)
+  read_sse_loop(conn, trace_id, max_event_bytes, deadline_ms)
+}
+
+fn read_sse_loop(
+  conn: SseConnection,
+  trace_id: types_core.TraceId,
+  max_event_bytes: Int,
+  deadline_ms: Int,
+) -> Result(types_runner.RunnerResponse, types_output.InteractionError) {
+  case ffi.now_ms() >= deadline_ms {
+    True ->
+      Error(types_output.sad_error(
+        trace_id,
+        types_enums.InfraError,
+        "SSE timeout",
+      ))
+
+    False ->
+      case sse_receive(conn, 50) {
+        SseTimeout ->
+          read_sse_loop(conn, trace_id, max_event_bytes, deadline_ms)
+
+        SseClosed ->
+          Error(types_output.sad_error(
+            trace_id,
+            types_enums.InfraError,
+            "SSE closed without result",
+          ))
+
+        SseData(data) ->
+          case string.trim(data) {
+            "" -> read_sse_loop(conn, trace_id, max_event_bytes, deadline_ms)
+
+            _ ->
+              case string.byte_size(data) > max_event_bytes {
+                True ->
+                  Error(types_output.sad_error(
+                    trace_id,
+                    types_enums.InfraError,
+                    "SSE event too large",
+                  ))
+
+                False ->
+                  runner_contract.decode_event(data)
+                  |> result.map_error(fn(err) {
+                    types_output.sad_error(
+                      trace_id,
+                      types_enums.InfraError,
+                      "Invalid SSE event: " <> string.inspect(err),
+                    )
+                  })
+                  |> result.try(fn(event) {
+                    case event {
+                      types_runner.RunnerEventLog(_, _) ->
+                        read_sse_loop(
+                          conn,
+                          trace_id,
+                          max_event_bytes,
+                          deadline_ms,
+                        )
+
+                      types_runner.RunnerEventChunk(_) ->
+                        read_sse_loop(
+                          conn,
+                          trace_id,
+                          max_event_bytes,
+                          deadline_ms,
+                        )
+
+                      types_runner.RunnerEventResult(response) -> Ok(response)
+
+                      _ ->
+                        Error(types_output.sad_error(
+                          trace_id,
+                          types_enums.InfraError,
+                          "Unexpected SSE runner event",
+                        ))
+                    }
+                  })
+              }
+          }
+      }
+  }
+}
+
+fn build_request_sse(
+  method: Method,
+  url: String,
+  headers: Dict(String, String),
+  body: Option(String),
+) -> Result(request.Request(String), HttpError) {
+  request.to(url)
+  |> result.map_error(fn(_) { InvalidUrl(url) })
+  |> result.map(fn(req) {
+    let req = request.set_method(req, method)
+
+    let req =
+      headers
+      |> dict.to_list
+      |> list.fold(req, fn(r, pair) { request.set_header(r, pair.0, pair.1) })
+
+    case body {
+      None -> req
+      Some(payload) -> request.set_body(req, payload)
+    }
+  })
+}
+
+fn sse_on_message(
+  events: process.Subject(SseEvent),
+  message: SseManagerMessage,
+  _state: SseState,
+) -> Result(SseState, process.ExitReason) {
+  case message {
+    Shutdown -> {
+      process.send(events, SseClosed)
+      Error(process.Normal)
+    }
+  }
+}
+
+fn sse_on_data(
+  events: process.Subject(SseEvent),
+  message: streaming.Message,
+  state: SseState,
+) -> Result(SseState, process.ExitReason) {
+  case message {
+    streaming.Done -> {
+      process.send(events, SseClosed)
+      Error(process.Normal)
+    }
+
+    streaming.Bits(bits) -> {
+      use incoming <- result.try(
+        bit_array.to_string(bits)
+        |> result.replace_error(
+          process.Abnormal(dynamic.string("SSE non-UTF8")),
+        ),
+      )
+
+      let SseState(buffer: buffer) = state
+      let full = buffer <> incoming
+      let parts = string.split(full, "\n\n")
+
+      let candidates = list.take(parts, list.length(parts) - 1)
+      let assert Ok(rest) = list.last(parts)
+
+      candidates |> list.each(fn(block) { send_sse_block(events, block) })
+
+      Ok(SseState(buffer: rest))
+    }
+  }
+}
+
+fn send_sse_block(events: process.Subject(SseEvent), block: String) -> Nil {
+  let data =
+    block
+    |> string.split("\n")
+    |> list.filter_map(fn(line) {
+      case line {
+        ":" <> _ -> Error(Nil)
+        "data: " <> value | "data:" <> value -> Ok(value)
+        _ -> Error(Nil)
+      }
+    })
+    |> list.map(string.trim_end)
+    |> string.join("\n")
+
+  case string.trim(data) {
+    "" -> Nil
+    _ -> process.send(events, SseData(data))
+  }
 }

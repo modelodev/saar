@@ -5,7 +5,7 @@ import gleam/list
 import gleam/option
 import gleam/result
 import sad/artifacts
-import sad/bridge/client
+import sad/bridge/managed_port_env
 import sad/bridge/port_process
 import sad/bridge/runner_contract
 import sad/bridge/serialization
@@ -169,7 +169,7 @@ pub fn start_server(
 
   let env = append_wrapper_env(env, wrapper, shutdown_timeout_ms)
 
-  use env <- result.try(client.inject_managed_port_env(
+  use env <- result.try(managed_port_env.inject_managed_port_env(
     env,
     input.context.trace_id,
     config,
@@ -196,7 +196,7 @@ pub fn start_server(
   port_process.send(process, control_line <> "\n")
 
   let host = case assigned_port {
-    option.Some(_) -> client.managed_port_host(config)
+    option.Some(_) -> managed_port_env.managed_port_host(config)
     option.None -> ""
   }
 
@@ -209,10 +209,27 @@ pub fn start_server(
 }
 
 /// Sends a stop signal to a continuous server and closes its port.
+///
+/// This performs a short drain loop to give the wrapper a chance to react to
+/// the stop signal.
 pub fn stop_server(server: ServerHandle) -> Nil {
   let ServerHandle(process: process, ..) = server
   port_process.send(process, "{\"t\":\"stop\"}\n")
+  drain_loop(process, 80)
   port_process.close(process)
+}
+
+fn drain_loop(port: port_process.PortProcess, attempts: Int) -> Nil {
+  case attempts {
+    0 -> Nil
+
+    _ ->
+      case port_process.receive(port, 50) {
+        Ok(port_process.PortExit(_)) -> Nil
+        Ok(_) -> drain_loop(port, attempts - 1)
+        Error(_) -> drain_loop(port, attempts - 1)
+      }
+  }
 }
 
 /// Detects whether a continuous server has exited.

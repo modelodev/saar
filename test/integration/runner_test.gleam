@@ -10,7 +10,6 @@ import gleeunit
 import gleeunit/should
 import port_helpers
 import runner_fixtures
-import sad/bridge/client
 import sad/bridge/http_client
 import sad/bridge/runner
 import sad/net/tcp_listener
@@ -374,7 +373,14 @@ pub fn continuous_health_check_timeout_test() {
   let health_url = "http://" <> host <> ":" <> int.to_string(port) <> "/health"
 
   case
-    client.request_sync(http.Get, health_url, dict.new(), option.None, 50, 1024)
+    http_client.request_sync_string(
+      http.Get,
+      health_url,
+      dict.new(),
+      option.None,
+      50,
+      1024,
+    )
   {
     Error(http_client.Timeout) -> Nil
     other -> panic as { "Expected Timeout, got " <> string.inspect(other) }
@@ -402,7 +408,7 @@ pub fn continuous_server_died_test() {
 
   let url = "http://" <> host <> ":" <> int.to_string(port) <> "/echo"
 
-  client.request_sync(
+  http_client.request_sync_string(
     http.Post,
     url,
     dict.new(),

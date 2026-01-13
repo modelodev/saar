@@ -5,7 +5,7 @@ import gleam/http
 import gleam/int
 import gleam/list
 import gleam/option
-import sad/bridge/client
+import sad/bridge/http_client
 import sad/bridge/port_process
 import test_assertions
 
@@ -145,7 +145,14 @@ pub fn wait_for_http_200(url: String, attempts: Int, delay_ms: Int) {
 
     _ ->
       case
-        client.request_sync(http.Get, url, dict.new(), option.None, 200, 2048)
+        http_client.request_sync_string(
+          http.Get,
+          url,
+          dict.new(),
+          option.None,
+          200,
+          2048,
+        )
       {
         Ok(resp) if resp.status == 200 -> Nil
         _ -> {

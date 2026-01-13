@@ -12,15 +12,15 @@
 ////
 //// Relationships:
 //// - Used by `sad/gateway/http_server`.
-//// - Readiness depends on the `ProfilesActor` via `sad/core/profiles_api`.
+//// - Readiness depends on the `ProfilesActor` message protocol.
 
 import gleam/bytes_tree
 import gleam/erlang/process
 import gleam/http/response
 import gleam/json
 import mist
+import sad/core/boundary_call
 import sad/core/messages
-import sad/core/profiles_api
 
 /// Returns a liveness response.
 pub fn health() -> response.Response(mist.ResponseData) {
@@ -41,7 +41,11 @@ pub fn ready(
   profiles: process.Subject(messages.ProfilesMsg),
   timeout_ms: Int,
 ) -> response.Response(mist.ResponseData) {
-  let status_code = case profiles_api.list_profiles(profiles, timeout_ms) {
+  let status_code = case
+    boundary_call.call(profiles, timeout_ms, fn(reply_to) {
+      messages.ListProfiles(reply_to)
+    })
+  {
     Ok(ids) ->
       case ids != [] {
         True -> 200

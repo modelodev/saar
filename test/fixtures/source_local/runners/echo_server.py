@@ -77,6 +77,10 @@ class Handler(BaseHTTPRequestHandler):
                 emit("{not json}")
                 return
 
+            if mode == "unexpected_tag":
+                emit(json.dumps({"t": "ping"}))
+                return
+
             emit(json.dumps({"t": "log", "message": "hello", "level": "info"}))
             emit(json.dumps({"t": "chunk", "delta": "hi"}))
 

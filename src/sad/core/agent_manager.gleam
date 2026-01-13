@@ -14,7 +14,8 @@
 ////
 //// Relationships:
 //// - Started under `sad/core/root_supervisor`.
-//// - Uses `sad/core/registry_api`, `sad/core/port_pool_api`, and `sad/core/artifact_registry_api`.
+//// - Uses the core message protocols (`sad/core/messages`) and crash-only `process.call`.
+//// - Boundary layers should call this actor via `sad/core/boundary_call`.
 //// - Spawns AgentActor children via a named `factory_supervisor`.
 
 import envoy
@@ -28,16 +29,12 @@ import gleam/otp/actor
 import gleam/otp/factory_supervisor
 import gleam/result
 import gleam/string
-import sad/bridge/client
+import sad/bridge/http_client
 import sad/bridge/port_owner
 
 import sad/core/agent
 import sad/core/agent_internal
-import sad/core/artifact_registry_api
 import sad/core/messages
-import sad/core/port_pool_api
-import sad/core/profiles_api
-import sad/core/registry_api
 import sad/net/port_check
 import sad/params
 import sad/port_pool
@@ -125,25 +122,17 @@ fn handle_create_agent(
   let State(config: config, profiles: profiles, ..) = state
 
   let profile_out =
-    profiles_api.get_profile(profiles, profile_id, call_timeout_ms(config))
+    process.call(profiles, call_timeout_ms(config), fn(reply) {
+      messages.GetProfile(profile_id, reply)
+    })
 
   case profile_out {
-    Error(err) -> {
-      process.send(
-        reply_to,
-        Error(messages.StartChildFailed(
-          "profiles_call_failed:" <> string.inspect(err),
-        )),
-      )
-      actor.continue(state)
-    }
-
-    Ok(None) -> {
+    None -> {
       process.send(reply_to, Error(messages.ProfileNotFound(profile_id)))
       actor.continue(state)
     }
 
-    Ok(Some(profile)) ->
+    Some(profile) ->
       case resolve_params_for_profile(profile, config, init_params) {
         Error(err) -> {
           process.send(reply_to, Error(err))
@@ -234,23 +223,24 @@ fn handle_start_agent(
     Ok(actor.Started(data: agent_ref, ..)) -> {
       let status = initial_status(profile, instance_id)
 
-      case
-        registry_api.register(
-          registry,
-          status,
-          agent_ref,
-          registry_timeout_ms(config),
-        )
-      {
+      let register_out =
+        process.call(registry, registry_timeout_ms(config), fn(reply_to) {
+          messages.Register(status, agent_ref, reply_to)
+        })
+
+      case register_out {
         Ok(_) -> {
           // Transition to Provisioning quickly, then provision asynchronously.
           agent.start_instance(agent_ref)
-          registry_api.update_status(
+
+          process.send(
             registry,
-            instance_id,
-            types_agent.AgentStatusView(
-              ..status,
-              phase: types_agent.Provisioning,
+            messages.UpdateStatus(
+              instance_id,
+              types_agent.AgentStatusView(
+                ..status,
+                phase: types_agent.Provisioning,
+              ),
             ),
           )
 
@@ -266,22 +256,11 @@ fn handle_start_agent(
           actor.continue(state)
         }
 
-        Error(registry_api.ActorError(registry_err)) -> {
+        Error(registry_err) -> {
           agent.terminate(agent_ref, agent.SupervisorCleanup)
           process.send(
             reply_to,
             Error(messages.RegistrationFailed(registry_err)),
-          )
-          actor.continue(state)
-        }
-
-        Error(registry_api.CallFailed(call_err)) -> {
-          agent.terminate(agent_ref, agent.SupervisorCleanup)
-          process.send(
-            reply_to,
-            Error(messages.StartChildFailed(
-              "registry_call_failed:" <> string.inspect(call_err),
-            )),
           )
           actor.continue(state)
         }
@@ -313,19 +292,18 @@ fn handle_stop_agent(
   let State(config: config, registry: registry, port_pool: port_pool, ..) =
     state
 
-  case
-    registry_api.lookup_by_instance_id(
-      registry,
-      instance_id,
-      registry_timeout_ms(config),
-    )
-  {
-    Ok(None) | Error(_) -> {
+  let found =
+    process.call(registry, registry_timeout_ms(config), fn(reply_to) {
+      messages.LookupByInstanceId(instance_id, reply_to)
+    })
+
+  case found {
+    None -> {
       process.send(reply_to, Ok(Nil))
       actor.continue(state)
     }
 
-    Ok(Some(agent_ref)) -> {
+    Some(agent_ref) -> {
       let maybe_status =
         agent.status(agent_ref, agent.status_timeout_ms(config))
 
@@ -345,7 +323,10 @@ fn handle_stop_agent(
       }
 
       let _ =
-        port_pool_api.release(port_pool, instance_id, call_timeout_ms(config))
+        process.call(port_pool, call_timeout_ms(config), fn(reply_to) {
+          messages.Release(instance_id, reply_to)
+        })
+
       update_registry_status_best_effort(config, registry, agent_ref)
 
       process.send(reply_to, Ok(Nil))
@@ -367,32 +348,32 @@ fn handle_delete_agent(
     ..,
   ) = state
 
-  case
-    registry_api.lookup_by_instance_id(
-      registry,
-      instance_id,
-      registry_timeout_ms(config),
-    )
-  {
-    Ok(None) | Error(_) -> {
+  let found =
+    process.call(registry, registry_timeout_ms(config), fn(reply_to) {
+      messages.LookupByInstanceId(instance_id, reply_to)
+    })
+
+  case found {
+    None -> {
       process.send(reply_to, Ok(Nil))
       actor.continue(state)
     }
 
-    Ok(Some(agent_ref)) -> {
+    Some(agent_ref) -> {
       agent.stop_instance(agent_ref, agent.Deleted)
       agent.terminate(agent_ref, agent.Deleted)
 
       let _ =
-        artifact_registry_api.purge_by_instance(
-          artifact_registry,
-          instance_id,
-          call_timeout_ms(config),
-        )
+        process.call(artifact_registry, call_timeout_ms(config), fn(reply_to) {
+          messages.PurgeByInstance(instance_id, reply_to)
+        })
 
-      registry_api.unregister_by_instance_id(registry, instance_id)
+      process.send(registry, messages.UnregisterByInstanceId(instance_id))
+
       let _ =
-        port_pool_api.release(port_pool, instance_id, call_timeout_ms(config))
+        process.call(port_pool, call_timeout_ms(config), fn(reply_to) {
+          messages.Release(instance_id, reply_to)
+        })
 
       case cleanup_workspace(config, instance_id) {
         Ok(_) -> process.send(reply_to, Ok(Nil))
@@ -411,10 +392,12 @@ fn handle_list_agents(
 ) -> actor.Next(State, messages.AgentManagerMsg) {
   let State(config: config, registry: registry, ..) = state
 
-  case registry_api.list_all(registry, registry_timeout_ms(config)) {
-    Ok(items) -> process.send(reply_to, items)
-    Error(_) -> process.send(reply_to, [])
-  }
+  let items =
+    process.call(registry, registry_timeout_ms(config), fn(reply_to) {
+      messages.ListAll(reply_to)
+    })
+
+  process.send(reply_to, items)
 
   actor.continue(state)
 }
@@ -565,7 +548,7 @@ fn wait_for_http_status(
       let url = "http://" <> host <> ":" <> int.to_string(port) <> path
 
       let out =
-        client.request_sync(
+        http_client.request_sync_string(
           http_method(method),
           url,
           headers,
@@ -638,48 +621,29 @@ fn provision_continuous_managed_port(
     host,
   ))
 
-  case port_check.check_available(host, port) {
-    Ok(_) -> Ok(Nil)
+  // Port availability is checked once by the port pool allocation.
+  process.sleep(20)
 
-    Error(port_pool.CheckPortInUse) -> {
-      release_port_best_effort(config, port_pool_subject, instance_id)
-      Error("PORT_IN_USE")
-    }
+  case start_port_owner(config, profile, instance_id, params, port) {
+    Ok(owner) ->
+      case wait_for_health_ready(profile.interface, host, port, config) {
+        Ok(_) -> {
+          let resource = agent.port_owner_resource(owner)
+          Ok(#(agent.agent_ready_continuous(params, resource), Some(port)))
+        }
 
-    Error(_) -> {
+        Error(_) -> {
+          let _ = port_owner.stop(owner, 1000)
+          release_port_best_effort(config, port_pool_subject, instance_id)
+          Error("PORT_BIND_FAILED")
+        }
+      }
+
+    Error(reason) -> {
       release_port_best_effort(config, port_pool_subject, instance_id)
-      Error("PORT_BIND_FAILED")
+      Error(reason)
     }
   }
-  |> result.try(fn(_) {
-    process.sleep(20)
-
-    case start_port_owner(config, profile, instance_id, params, port) {
-      Ok(owner) ->
-        case wait_for_health_ready(profile.interface, host, port, config) {
-          Ok(_) -> {
-            let resource = agent.port_owner_resource(owner)
-            Ok(#(agent.agent_ready_continuous(params, resource), Some(port)))
-          }
-
-          Error(_) -> {
-            let _ = port_owner.stop(owner, 1000)
-            release_port_best_effort(config, port_pool_subject, instance_id)
-            Error("PORT_BIND_FAILED")
-          }
-        }
-
-      Error(_) -> {
-        let reason = case port_check.check_available(host, port) {
-          Error(port_pool.CheckPortInUse) -> "PORT_IN_USE"
-          _ -> "PORT_BIND_FAILED"
-        }
-
-        release_port_best_effort(config, port_pool_subject, instance_id)
-        Error(reason)
-      }
-    }
-  })
 }
 
 fn allocate_port(
@@ -688,19 +652,14 @@ fn allocate_port(
   instance_id: types_core.InstanceId,
   host: String,
 ) -> Result(Int, String) {
-  case
-    port_pool_api.allocate_checked(
-      port_pool_subject,
-      host,
-      instance_id,
-      call_timeout_ms(config),
-    )
-  {
-    Error(_) -> Error("PORT_BIND_FAILED")
+  let out =
+    process.call(port_pool_subject, call_timeout_ms(config), fn(reply_to) {
+      messages.AllocateChecked(host, instance_id, reply_to)
+    })
 
-    Ok(Ok(port)) -> Ok(port)
-
-    Ok(Error(err)) -> Error(port_pool_error_to_failure_reason(err))
+  case out {
+    Ok(port) -> Ok(port)
+    Error(err) -> Error(port_pool_error_to_failure_reason(err))
   }
 }
 
@@ -743,7 +702,22 @@ fn start_port_owner(
     )
   {
     Ok(actor.Started(data: owner, ..)) -> Ok(owner)
+    Error(actor.InitFailed(reason)) ->
+      Error(port_owner_start_failure_reason(reason))
     Error(_) -> Error("START_SERVER_FAILED")
+  }
+}
+
+fn port_owner_start_failure_reason(reason: String) -> String {
+  // When a port is assigned (managed_port), `managed_port_env` performs a bind-check.
+  // Map that error back to stable provisioning failure reasons.
+  case string.contains(reason, "CheckPortInUse") {
+    True -> "PORT_IN_USE"
+    False ->
+      case string.contains(reason, "Managed port check failed") {
+        True -> "PORT_BIND_FAILED"
+        False -> "START_SERVER_FAILED"
+      }
   }
 }
 
@@ -811,11 +785,9 @@ fn release_port_best_effort(
   instance_id: types_core.InstanceId,
 ) -> Nil {
   let _ =
-    port_pool_api.release(
-      port_pool_subject,
-      instance_id,
-      call_timeout_ms(config),
-    )
+    process.call(port_pool_subject, call_timeout_ms(config), fn(reply_to) {
+      messages.Release(instance_id, reply_to)
+    })
   Nil
 }
 
@@ -828,7 +800,7 @@ fn update_registry_status_best_effort(
 
   case agent.status(agent_ref, timeout_ms) {
     Ok(status) ->
-      registry_api.update_status(registry, status.instance_id, status)
+      process.send(registry, messages.UpdateStatus(status.instance_id, status))
     Error(_) -> Nil
   }
 }

@@ -7,7 +7,6 @@ import gleam/option.{None, Some}
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/gateway/sse_loop
 import sad/otp/safe_call
 import sad/streams/sink
 import sad/streams/stream_pump
@@ -173,7 +172,7 @@ pub fn finish_payload_is_valid_json() {
       close: fn() { Nil },
     )
 
-  let stream_sink = sse_loop.start(writer, fn(_event) { "{}" }, 0)
+  let stream_sink = sink.start_sse_sink(writer, fn(_event) { "{}" }, 0)
 
   let trace_id = core.trace_id("trace-json")
   let err =
@@ -215,7 +214,7 @@ pub fn keep_alive_format_is_correct() {
       close: fn() { Nil },
     )
 
-  let _sink = sse_loop.start(writer, fn(_event) { "{}" }, 10)
+  let _sink = sink.start_sse_sink(writer, fn(_event) { "{}" }, 10)
 
   process.sleep(40)
 
@@ -237,7 +236,7 @@ pub fn keep_alive_can_be_disabled_with_zero() {
       close: fn() { Nil },
     )
 
-  let _sink = sse_loop.start(writer, fn(_event) { "{}" }, 0)
+  let _sink = sink.start_sse_sink(writer, fn(_event) { "{}" }, 0)
   process.sleep(30)
 
   case process.receive(writes, 0) {

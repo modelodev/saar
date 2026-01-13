@@ -15,7 +15,7 @@
 ////
 //// Relationships:
 //// - Produces `Dict(ProfileId, Profile)` used by `/sys/reload-profiles`.
-//// - Uses `sad/core/profiles_api.set_profiles` to swap the full set.
+//// - Uses `sad/core/messages.ProfilesMsg.SetProfiles` to swap the full set.
 
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
@@ -27,8 +27,8 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import sad/core/boundary_call
 import sad/core/messages
-import sad/core/profiles_api
 import sad/decoders
 import sad/ffi
 import sad/types/config as types_config
@@ -86,7 +86,9 @@ pub fn reload_profiles(
 
   // Only swap on success.
   use count <- result.try(
-    profiles_api.set_profiles(profiles, loaded, timeout_ms)
+    boundary_call.call(profiles, timeout_ms, fn(reply_to) {
+      messages.SetProfiles(loaded, reply_to)
+    })
     |> result.map_error(fn(call_err) {
       SourceIoError(
         message: "profiles actor call failed: " <> string.inspect(call_err),

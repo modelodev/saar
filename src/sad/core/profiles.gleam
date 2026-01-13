@@ -12,7 +12,7 @@
 ////
 //// Relationships:
 //// - Message protocol lives in `sad/core/messages.ProfilesMsg`.
-//// - Public calls live in `sad/core/profiles_api`.
+//// - Public calls are done via messages (see `sad/core/messages`).
 
 import gleam/dict
 import gleam/erlang/process
