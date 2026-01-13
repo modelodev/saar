@@ -76,7 +76,7 @@ pub fn start(
 
   let args = ["--", runner_path, ..runner_args]
 
-  case ffi.open_port(wrapper, args, env, cwd, max_runner_event_bytes) {
+  case ffi.open_port(wrapper, args, env, cwd) {
     Ok(port) ->
       Ok(PortProcess(
         port: port,

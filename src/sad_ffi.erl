@@ -2,7 +2,7 @@
 -export([
     now_ms/0,
     message_queue_len/1,
-    open_port/5,
+    open_port/4,
     port_send/2,
     port_close/1,
     port_receive/2
@@ -17,7 +17,7 @@ message_queue_len(Pid) ->
         _ -> 0
     end.
 
-open_port(Command, Args, Env, Cd, MaxRunnerEventBytes) ->
+open_port(Command, Args, Env, Cd) ->
     EnvList = env_pairs(Env),
     ArgsList = arg_list(Args),
     CommandList = to_list(Command),
@@ -26,7 +26,6 @@ open_port(Command, Args, Env, Cd, MaxRunnerEventBytes) ->
         {args, ArgsList},
         {env, EnvList},
         {cd, CdList},
-        {line, MaxRunnerEventBytes},
         binary,
         exit_status,
         use_stdio
@@ -54,9 +53,7 @@ port_close(Port) ->
 
 port_receive(Port, TimeoutMs) ->
     receive
-        {Port, {data, {eol, Line}}} -> {ok, {port_data_chunk, append_newline(Line)}};
-        {Port, {data, {noeol, Line}}} -> {ok, {port_data_chunk, ensure_binary(Line)}};
-        {Port, {data, Line}} -> {ok, {port_data_chunk, ensure_binary(Line)}};
+        {Port, {data, Data}} -> {ok, {port_data_chunk, ensure_binary(Data)}};
         {Port, {exit_status, Status}} -> maybe_return_exit_after_data(Port, Status);
         {'EXIT', Port, normal} -> maybe_return_exit_after_data(Port, 0);
         {'EXIT', Port, _} -> maybe_return_exit_after_data(Port, 1)
@@ -78,10 +75,6 @@ to_list(Value) when is_binary(Value) ->
 to_list(Value) when is_list(Value) ->
     Value.
 
-append_newline(Line) ->
-    Bin = ensure_binary(Line),
-    <<Bin/binary, "\n">>.
-
 ensure_binary(Value) when is_binary(Value) ->
     Value;
 ensure_binary(Value) when is_list(Value) ->
@@ -89,15 +82,9 @@ ensure_binary(Value) when is_list(Value) ->
 
 maybe_return_exit_after_data(Port, Status) ->
     receive
-        {Port, {data, {eol, Line}}} ->
+        {Port, {data, Data}} ->
             self() ! {Port, {exit_status, Status}},
-            {ok, {port_data_chunk, append_newline(Line)}};
-        {Port, {data, {noeol, Line}}} ->
-            self() ! {Port, {exit_status, Status}},
-            {ok, {port_data_chunk, ensure_binary(Line)}};
-        {Port, {data, Line}} ->
-            self() ! {Port, {exit_status, Status}},
-            {ok, {port_data_chunk, ensure_binary(Line)}}
+            {ok, {port_data_chunk, ensure_binary(Data)}}
     after
         0 -> {ok, {port_exit, Status}}
     end.

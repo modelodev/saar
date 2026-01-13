@@ -51,23 +51,22 @@ fn now_ms_ffi() -> Int
 
 /// Opens an Erlang port running a command.
 ///
-/// The Erlang implementation enforces `max_runner_event_bytes` with the
-/// port `line` option, ensuring a hard cap on JSONL line size.
+/// Output chunking is controlled by the Erlang VM and the OS. Callers are
+/// responsible for applying higher-level framing and size limits.
 ///
 /// Example:
 /// ```gleam
 /// import sad/ffi
 ///
-/// ffi.open_port("/bin/echo", ["hello"], [], ".", 1024)
+/// ffi.open_port("/bin/echo", ["hello"], [], ".")
 /// ```
 pub fn open_port(
   command: String,
   args: List(String),
   env: List(#(String, String)),
   cd: String,
-  max_runner_event_bytes: Int,
 ) -> Result(Port, String) {
-  open_port_ffi(command, args, env, cd, max_runner_event_bytes)
+  open_port_ffi(command, args, env, cd)
 }
 
 @external(erlang, "sad_ffi", "open_port")
@@ -76,7 +75,6 @@ fn open_port_ffi(
   args: List(String),
   env: List(#(String, String)),
   cd: String,
-  max_runner_event_bytes: Int,
 ) -> Result(Port, String)
 
 /// Sends data to an open port.

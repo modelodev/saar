@@ -21,9 +21,9 @@ pub fn ffi_now_ms_monotonic_test() {
   }
 }
 
-pub fn ffi_open_port_line_mode_test() {
+pub fn ffi_open_port_binary_mode_test() {
   let port =
-    ffi.open_port("/bin/echo", ["hello"], [], ".", 1024)
+    ffi.open_port("/bin/echo", ["hello"], [], ".")
     |> test_assertions.assert_ok
 
   let result = read_until_message(port, 5)
@@ -31,7 +31,6 @@ pub fn ffi_open_port_line_mode_test() {
   case result {
     Ok(ffi.PortDataChunk(line)) -> {
       string.contains(line, "hello") |> should.equal(True)
-      string.ends_with(line, "\n") |> should.equal(True)
     }
     Ok(ffi.PortExit(_)) -> panic as "Port exited before emitting line"
     Error(_) -> panic as "Timed out waiting for port data"

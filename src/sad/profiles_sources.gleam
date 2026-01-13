@@ -451,7 +451,7 @@ fn run_git(
   label: String,
 ) -> Result(Nil, ProfilesSourceError) {
   use port <- result.try(
-    ffi.open_port("git", args, [], cwd, 262_144)
+    ffi.open_port("git", args, [], cwd)
     |> result.map_error(fn(reason) {
       GitCommandFailed(command: label <> ": " <> reason)
     }),
