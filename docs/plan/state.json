@@ -1,7 +1,15 @@
 {
   "version": "1.0",
-  "current_sprint": null,
+  "current_sprint": "S15",
   "sprints": {
+    "S15": {
+      "status": "in_progress",
+      "branch": "sprint/s15-artefactos-ui-proxy-regresiones",
+      "started_at": "2026-01-13T15:36:52Z",
+      "completed_at": null,
+      "current_story": null,
+      "stories": {}
+    },
     "S07": {
       "status": "completed",
       "branch": "sprint/s07-port-pool-managed-port",
