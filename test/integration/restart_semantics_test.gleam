@@ -177,7 +177,7 @@ fn wait_for_ready_or_failure(
   case attempts {
     0 ->
       case agent.status(agent_ref, 1000) {
-        Ok(status) -> Error(status.failure_reason)
+        Ok(status) -> Error(failure_reason_from_phase(status.phase))
         Error(_) -> Error(option.None)
       }
 
@@ -189,7 +189,7 @@ fn wait_for_ready_or_failure(
 
             False ->
               case status.phase {
-                types_agent.Failed -> Error(status.failure_reason)
+                types_agent.Failed(reason) -> Error(option.Some(reason))
                 _ -> {
                   process.sleep(25)
                   wait_for_ready_or_failure(
@@ -206,6 +206,15 @@ fn wait_for_ready_or_failure(
           wait_for_ready_or_failure(agent_ref, expected_phase, attempts - 1)
         }
       }
+  }
+}
+
+fn failure_reason_from_phase(
+  phase: types_agent.AgentPhase,
+) -> option.Option(types_agent.FailureReason) {
+  case phase {
+    types_agent.Failed(reason) -> option.Some(reason)
+    _ -> option.None
   }
 }
 

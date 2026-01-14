@@ -287,8 +287,8 @@ fn wait_for_failure_reason(
     _ -> {
       let status = agent.status(agent_ref, 1000) |> test_assertions.assert_ok
 
-      case status.failure_reason {
-        Some(reason) ->
+      case status.phase {
+        types_agent.Failed(reason) ->
           case reason == expected {
             True -> Nil
             False -> {
@@ -297,7 +297,7 @@ fn wait_for_failure_reason(
             }
           }
 
-        None -> {
+        _ -> {
           process.sleep(20)
           wait_for_failure_reason(agent_ref, expected, attempts - 1)
         }
@@ -323,16 +323,10 @@ fn wait_for_ready_or_failed_reason_any(
         True -> Nil
         False ->
           case status.phase {
-            types_agent.Failed ->
-              case status.failure_reason {
-                Some(reason) ->
-                  case reason == expected_a || reason == expected_b {
-                    True -> Nil
-                    False ->
-                      panic as types_agent.failure_reason_to_string(reason)
-                  }
-
-                None -> panic as "Agent entered Failed"
+            types_agent.Failed(reason) ->
+              case reason == expected_a || reason == expected_b {
+                True -> Nil
+                False -> panic as types_agent.failure_reason_to_string(reason)
               }
 
             _ -> {

@@ -289,16 +289,14 @@ fn status_after_down(
       phase: types_agent.Stopped,
       mode: types_agent.RunIdle,
       assigned_port: None,
-      failure_reason: None,
     )
 
   let failed_status =
     types_agent.AgentStatusView(
       ..status,
-      phase: types_agent.Failed,
+      phase: types_agent.Failed(types_agent.AgentDown),
       mode: types_agent.RunIdle,
       assigned_port: None,
-      failure_reason: Some(types_agent.AgentDown),
     )
 
   case down {

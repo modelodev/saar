@@ -590,12 +590,8 @@ fn wait_for_phase(
       let status = agent.status(agent_ref, 1000) |> test_assertions.assert_ok
 
       case status.phase {
-        types_agent.Failed ->
-          case status.failure_reason {
-            Some(reason) ->
-              panic as types_agent.failure_reason_to_string(reason)
-            None -> panic as "Agent entered Failed"
-          }
+        types_agent.Failed(reason) ->
+          panic as types_agent.failure_reason_to_string(reason)
 
         _ ->
           case status.phase == phase {

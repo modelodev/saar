@@ -527,7 +527,7 @@ fn to_status_view(state: AgentRuntimeState) -> types_agent.AgentStatusView {
     ReadyTransient(_) -> types_agent.ReadyTransient
     ReadyContinuous(_, _) -> types_agent.ReadyContinuous
     Stopped(_) -> types_agent.Stopped
-    Failed(_) -> types_agent.Failed
+    Failed(reason) -> types_agent.Failed(reason)
   }
 
   let mode = case state.mode {
@@ -542,7 +542,6 @@ fn to_status_view(state: AgentRuntimeState) -> types_agent.AgentStatusView {
     phase: phase,
     mode: mode,
     assigned_port: state.assigned_port,
-    failure_reason: get_failure_reason(state.state),
   )
 }
 

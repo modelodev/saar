@@ -364,6 +364,5 @@ fn status_view(
     phase: types_agent.Created,
     mode: types_agent.RunIdle,
     assigned_port: option.None,
-    failure_reason: option.None,
   )
 }
