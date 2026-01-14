@@ -8,6 +8,8 @@
 //// Non-responsibilities:
 //// - Implementing any actor logic.
 //// - Providing HTTP-facing request/response types.
+//// - Defining the artifact registry protocol (see
+////   `sad/core/artifact_registry_protocol`).
 ////
 //// Relationships:
 //// - Used by core actors under `sad/core/*`.
@@ -27,7 +29,6 @@ import sad/types/config.{type SadConfig}
 import sad/types/core as types_core
 import sad/types/profile.{type Profile}
 import sad/types/resolved_params.{type ResolvedParams}
-import sad/workspace.{type WorkspacePath}
 
 /// Composite key used to identify an instance.
 ///
@@ -153,27 +154,6 @@ pub type DeleteError {
   DeleteTimeout
   CleanupFailed(String)
   DeleteWorkerCrashed
-}
-
-/// Internal artifact registry entry.
-pub type ArtifactEntry {
-  ArtifactEntry(
-    path: WorkspacePath,
-    mime: String,
-    instance_id: types_core.InstanceId,
-  )
-}
-
-/// Message protocol for the ArtifactRegistryActor.
-pub type ArtifactRegistryMsg {
-  RegisterArtifact(
-    path: WorkspacePath,
-    mime: String,
-    instance_id: types_core.InstanceId,
-    reply_to: Subject(types_core.ArtifactId),
-  )
-  LookupArtifact(types_core.ArtifactId, Subject(Option(ArtifactEntry)))
-  PurgeByInstance(types_core.InstanceId, Subject(Int))
 }
 
 /// Message protocol for the ProfilesActor.
