@@ -2,43 +2,6 @@
   "version": "1.0",
   "current_sprint": "S15",
   "sprints": {
-    "S15": {
-      "status": "in_progress",
-      "branch": "sprint/s15-artefactos-ui-proxy-regresiones",
-      "started_at": "2026-01-13T15:36:52Z",
-      "completed_at": null,
-      "current_story": null,
-      "stories": {}
-    },
-    "S07": {
-      "status": "completed",
-      "branch": "sprint/s07-port-pool-managed-port",
-      "started_at": "2026-01-08T17:41:44Z",
-      "completed_at": "2026-01-08T18:03:04Z",
-      "current_story": null,
-      "stories": {
-        "S07-T01": {
-          "status": "completed",
-          "branch": "feat/s07-t01-port-pool",
-          "commit": "1d369ceefa1fed0e044c9429dab76f657e24401d"
-        },
-        "S07-T02": {
-          "status": "completed",
-          "branch": "feat/s07-t02-port-pool-exhausted",
-          "commit": "54f8ea3901380ae066cc6494f5076c1f94f77a79"
-        },
-        "S07-T03": {
-          "status": "completed",
-          "branch": "sprint/s07-port-pool-managed-port",
-          "commit": "1d369ceefa1fed0e044c9429dab76f657e24401d"
-        },
-        "S07-T04": {
-          "status": "completed",
-          "branch": "feat/s07-t04-port-pool-tests",
-          "commit": "1d369ceefa1fed0e044c9429dab76f657e24401d"
-        }
-      }
-    },
     "S01": {
       "status": "completed",
       "branch": "sprint/s01-scaffolding-ci-zoo",
@@ -107,37 +70,81 @@
         }
       }
     },
-    "S06": {
+    "S03": {
       "status": "completed",
-      "branch": "sprint/s06-interpolacion-strict-response",
-      "started_at": "2026-01-08T16:22:40Z",
-      "completed_at": "2026-01-08T16:52:57Z",
+      "branch": null,
+      "started_at": "2026-01-07T18:18:04Z",
+      "completed_at": "2026-01-08T09:17:35Z",
       "current_story": null,
       "stories": {
-        "S06-T01": {
+        "S03-T01": {
           "status": "completed",
-          "branch": "feat/s06-t01-interpolate-string-dict-list",
-          "commit": "7b52f47673734876e03c392d52e86681db993835"
+          "branch": null,
+          "commit": "b5648dac19b833fd05d9866d19e56875752bff04"
         },
-        "S06-T02": {
+        "S03-T02": {
           "status": "completed",
-          "branch": "feat/s06-t02-interpolate-json-from",
-          "commit": "8e4bb5eaed6c62aaeceddc4ae7d46290d32cf73a"
+          "branch": null,
+          "commit": "75213e9be7fa49f1a1d62f5eea5e74ace3dc0de3"
         },
-        "S06-T03": {
+        "S03-T03": {
           "status": "completed",
-          "branch": "sprint/s06-interpolacion-strict-response",
-          "commit": "9a30b1491fdaea35e9b6dd4c772df100c1f1032b"
+          "branch": null,
+          "commit": "5b7569ad9f3986a7994f9b36495b21054e03500c"
         },
-        "S06-T04": {
+        "S03-T04": {
           "status": "completed",
-          "branch": "sprint/s06-interpolacion-strict-response",
-          "commit": "fcffeab7181de144ef5a659cae8d036a1b30533b"
+          "branch": null,
+          "commit": "774df2fe4cecc4d8db3c2ab39c167ced9900ce8c"
         },
-        "S06-T05": {
+        "S03-T05": {
           "status": "completed",
-          "branch": "sprint/s06-interpolacion-strict-response",
-          "commit": "650067ed9f19b7a6c32d9b470ff4ac7a901f0f3c"
+          "branch": null,
+          "commit": "97515954be269a7d7388e73df0f56893ccbef200"
+        },
+        "S03-T06": {
+          "status": "completed",
+          "branch": null,
+          "commit": "c3b8f46fcd454240074d5b328383236930ddedeb"
+        }
+      }
+    },
+    "S04": {
+      "status": "completed",
+      "branch": null,
+      "started_at": "2026-01-07T21:43:02Z",
+      "completed_at": "2026-01-07T22:35:55Z",
+      "current_story": null,
+      "stories": {
+        "S04-T01": {
+          "status": "completed",
+          "branch": null,
+          "commit": "69f4a7d11553d2ca7b7e7af7413c595d31b5a528"
+        },
+        "S04-T02": {
+          "status": "completed",
+          "branch": null,
+          "commit": "d673ca09caebea73d4f35199ef2fcd6b7fc14b02"
+        },
+        "S04-T03": {
+          "status": "completed",
+          "branch": null,
+          "commit": "584bbb318892c19c5b930de7768cbe040c305f2b"
+        },
+        "S04-T04": {
+          "status": "completed",
+          "branch": null,
+          "commit": "e40090f795e1027b046573c471b37132fb95e533"
+        },
+        "S04-T05": {
+          "status": "completed",
+          "branch": null,
+          "commit": "41b930bb1035d21a8282cedc43446d41278ace0b"
+        },
+        "S04-T06": {
+          "status": "completed",
+          "branch": null,
+          "commit": "2e82ec42564ab2af266d85fb50c14e8ae14452f7"
         }
       }
     },
@@ -175,13 +182,68 @@
         }
       }
     },
-    "S04": {
+    "S06": {
       "status": "completed",
-      "branch": null,
-      "started_at": null,
-      "completed_at": null,
+      "branch": "sprint/s06-interpolacion-strict-response",
+      "started_at": "2026-01-08T16:22:40Z",
+      "completed_at": "2026-01-08T16:52:57Z",
       "current_story": null,
-      "stories": {}
+      "stories": {
+        "S06-T01": {
+          "status": "completed",
+          "branch": "feat/s06-t01-interpolate-string-dict-list",
+          "commit": "7b52f47673734876e03c392d52e86681db993835"
+        },
+        "S06-T02": {
+          "status": "completed",
+          "branch": "feat/s06-t02-interpolate-json-from",
+          "commit": "8e4bb5eaed6c62aaeceddc4ae7d46290d32cf73a"
+        },
+        "S06-T03": {
+          "status": "completed",
+          "branch": "sprint/s06-interpolacion-strict-response",
+          "commit": "9a30b1491fdaea35e9b6dd4c772df100c1f1032b"
+        },
+        "S06-T04": {
+          "status": "completed",
+          "branch": "sprint/s06-interpolacion-strict-response",
+          "commit": "fcffeab7181de144ef5a659cae8d036a1b30533b"
+        },
+        "S06-T05": {
+          "status": "completed",
+          "branch": "sprint/s06-interpolacion-strict-response",
+          "commit": "650067ed9f19b7a6c32d9b470ff4ac7a901f0f3c"
+        }
+      }
+    },
+    "S07": {
+      "status": "completed",
+      "branch": "sprint/s07-port-pool-managed-port",
+      "started_at": "2026-01-08T17:41:44Z",
+      "completed_at": "2026-01-08T18:03:04Z",
+      "current_story": null,
+      "stories": {
+        "S07-T01": {
+          "status": "completed",
+          "branch": "feat/s07-t01-port-pool",
+          "commit": "1d369ceefa1fed0e044c9429dab76f657e24401d"
+        },
+        "S07-T02": {
+          "status": "completed",
+          "branch": "feat/s07-t02-port-pool-exhausted",
+          "commit": "54f8ea3901380ae066cc6494f5076c1f94f77a79"
+        },
+        "S07-T03": {
+          "status": "completed",
+          "branch": "sprint/s07-port-pool-managed-port",
+          "commit": "1d369ceefa1fed0e044c9429dab76f657e24401d"
+        },
+        "S07-T04": {
+          "status": "completed",
+          "branch": "feat/s07-t04-port-pool-tests",
+          "commit": "1d369ceefa1fed0e044c9429dab76f657e24401d"
+        }
+      }
     },
     "S08": {
       "status": "completed",
@@ -214,6 +276,249 @@
           "status": "completed",
           "branch": "feat/s08-t05-e2e-continuous-tests",
           "commit": "16d8a9dfee74d2233ce75760884da6c0b9a3ce95"
+        }
+      }
+    },
+    "S09": {
+      "status": "completed",
+      "branch": "refactor/sprint-S09",
+      "started_at": "2026-01-11T17:53:09Z",
+      "completed_at": "2026-01-11T17:53:09Z",
+      "current_story": null,
+      "stories": {
+        "S09-T01": {
+          "status": "completed",
+          "branch": "refactor/sprint-S09",
+          "commit": "cc441234d85a0b3e1d71d16955b9d811c95e13da"
+        },
+        "S09-T02": {
+          "status": "completed",
+          "branch": "refactor/sprint-S09",
+          "commit": "cc441234d85a0b3e1d71d16955b9d811c95e13da"
+        },
+        "S09-T03": {
+          "status": "completed",
+          "branch": "refactor/sprint-S09",
+          "commit": "cc441234d85a0b3e1d71d16955b9d811c95e13da"
+        },
+        "S09-T04": {
+          "status": "completed",
+          "branch": "refactor/sprint-S09",
+          "commit": "cc441234d85a0b3e1d71d16955b9d811c95e13da"
+        },
+        "S09-T05": {
+          "status": "completed",
+          "branch": "refactor/sprint-S09",
+          "commit": "cc441234d85a0b3e1d71d16955b9d811c95e13da"
+        }
+      }
+    },
+    "S10": {
+      "status": "completed",
+      "branch": "refactor/sprint-S10",
+      "started_at": "2026-01-12T08:51:12Z",
+      "completed_at": "2026-01-12T08:51:12Z",
+      "current_story": null,
+      "stories": {
+        "S10-T01": {
+          "status": "completed",
+          "branch": "refactor/sprint-S10",
+          "commit": "93a3115303516481567b0758cebd7dd8dc0953b1"
+        },
+        "S10-T02": {
+          "status": "completed",
+          "branch": "refactor/sprint-S10",
+          "commit": "93a3115303516481567b0758cebd7dd8dc0953b1"
+        },
+        "S10-T03": {
+          "status": "completed",
+          "branch": "refactor/sprint-S10",
+          "commit": "93a3115303516481567b0758cebd7dd8dc0953b1"
+        },
+        "S10-T04": {
+          "status": "completed",
+          "branch": "refactor/sprint-S10",
+          "commit": "93a3115303516481567b0758cebd7dd8dc0953b1"
+        },
+        "S10-T05": {
+          "status": "completed",
+          "branch": "refactor/sprint-S10",
+          "commit": "93a3115303516481567b0758cebd7dd8dc0953b1"
+        },
+        "S10-T06": {
+          "status": "completed",
+          "branch": "refactor/sprint-S10",
+          "commit": "93a3115303516481567b0758cebd7dd8dc0953b1"
+        }
+      }
+    },
+    "S11": {
+      "status": "completed",
+      "branch": "refactor/sprint-s11",
+      "started_at": "2026-01-12T11:55:43Z",
+      "completed_at": "2026-01-12T11:55:43Z",
+      "current_story": null,
+      "stories": {
+        "S11-T01": {
+          "status": "completed",
+          "branch": "refactor/sprint-s11",
+          "commit": "b4fa49047f1eda3dd7e3d972aaa439b238994954"
+        },
+        "S11-T02": {
+          "status": "completed",
+          "branch": "refactor/sprint-s11",
+          "commit": "b4fa49047f1eda3dd7e3d972aaa439b238994954"
+        },
+        "S11-T03": {
+          "status": "completed",
+          "branch": "refactor/sprint-s11",
+          "commit": "b4fa49047f1eda3dd7e3d972aaa439b238994954"
+        },
+        "S11-T04": {
+          "status": "completed",
+          "branch": "refactor/sprint-s11",
+          "commit": "b4fa49047f1eda3dd7e3d972aaa439b238994954"
+        },
+        "S11-T05": {
+          "status": "completed",
+          "branch": "refactor/sprint-s11",
+          "commit": "b4fa49047f1eda3dd7e3d972aaa439b238994954"
+        }
+      }
+    },
+    "S12": {
+      "status": "completed",
+      "branch": "sprint/s12-agentmanager-provisioning-async",
+      "started_at": "2026-01-12T15:25:47Z",
+      "completed_at": "2026-01-12T15:25:47Z",
+      "current_story": null,
+      "stories": {
+        "S12-T01": {
+          "status": "completed",
+          "branch": "sprint/s12-agentmanager-provisioning-async",
+          "commit": "647ac8a0f7d3e36fd3260e409f619df80f124252"
+        },
+        "S12-T02": {
+          "status": "completed",
+          "branch": "sprint/s12-agentmanager-provisioning-async",
+          "commit": "647ac8a0f7d3e36fd3260e409f619df80f124252"
+        },
+        "S12-T03": {
+          "status": "completed",
+          "branch": "sprint/s12-agentmanager-provisioning-async",
+          "commit": "647ac8a0f7d3e36fd3260e409f619df80f124252"
+        },
+        "S12-T04": {
+          "status": "completed",
+          "branch": "sprint/s12-agentmanager-provisioning-async",
+          "commit": "647ac8a0f7d3e36fd3260e409f619df80f124252"
+        },
+        "S12-T05": {
+          "status": "completed",
+          "branch": "sprint/s12-agentmanager-provisioning-async",
+          "commit": "647ac8a0f7d3e36fd3260e409f619df80f124252"
+        }
+      }
+    },
+    "S13": {
+      "status": "completed",
+      "branch": "refactor/sprint-S13",
+      "started_at": "2026-01-12T17:47:48Z",
+      "completed_at": "2026-01-12T17:47:48Z",
+      "current_story": null,
+      "stories": {
+        "S13-T01": {
+          "status": "completed",
+          "branch": "refactor/sprint-S13",
+          "commit": "a8ef3af90c981e12b5855172f024701fd6e659a0"
+        },
+        "S13-T02": {
+          "status": "completed",
+          "branch": "refactor/sprint-S13",
+          "commit": "a8ef3af90c981e12b5855172f024701fd6e659a0"
+        },
+        "S13-T03": {
+          "status": "completed",
+          "branch": "refactor/sprint-S13",
+          "commit": "a8ef3af90c981e12b5855172f024701fd6e659a0"
+        },
+        "S13-T04": {
+          "status": "completed",
+          "branch": "refactor/sprint-S13",
+          "commit": "a8ef3af90c981e12b5855172f024701fd6e659a0"
+        },
+        "S13-T05": {
+          "status": "completed",
+          "branch": "refactor/sprint-S13",
+          "commit": "a8ef3af90c981e12b5855172f024701fd6e659a0"
+        },
+        "S13-T06": {
+          "status": "completed",
+          "branch": "refactor/sprint-S13",
+          "commit": "a8ef3af90c981e12b5855172f024701fd6e659a0"
+        }
+      }
+    },
+    "S14": {
+      "status": "completed",
+      "branch": "refactor/sprint-S14",
+      "started_at": "2026-01-13T15:28:33Z",
+      "completed_at": "2026-01-13T15:28:33Z",
+      "current_story": null,
+      "stories": {
+        "S14-T01": {
+          "status": "completed",
+          "branch": "refactor/sprint-S14",
+          "commit": "c790f2dd9794244f29a77b33d9fe6a6962d09580"
+        },
+        "S14-T02": {
+          "status": "completed",
+          "branch": "refactor/sprint-S14",
+          "commit": "c790f2dd9794244f29a77b33d9fe6a6962d09580"
+        },
+        "S14-T03": {
+          "status": "completed",
+          "branch": "refactor/sprint-S14",
+          "commit": "c790f2dd9794244f29a77b33d9fe6a6962d09580"
+        },
+        "S14-T04": {
+          "status": "completed",
+          "branch": "refactor/sprint-S14",
+          "commit": "c790f2dd9794244f29a77b33d9fe6a6962d09580"
+        },
+        "S14-T05": {
+          "status": "completed",
+          "branch": "refactor/sprint-S14",
+          "commit": "c790f2dd9794244f29a77b33d9fe6a6962d09580"
+        }
+      }
+    },
+    "S15": {
+      "status": "completed",
+      "branch": "sprint/s15-artefactos-ui-proxy-regresiones",
+      "started_at": "2026-01-13T15:36:52Z",
+      "completed_at": "2026-01-14T13:44:42Z",
+      "current_story": null,
+      "stories": {
+        "S15-T01": {
+          "status": "completed",
+          "branch": "sprint/s15-artefactos-ui-proxy-regresiones",
+          "commit": "093799805c3ac80375e2c6fcd27fb821fe9c7cee"
+        },
+        "S15-T02": {
+          "status": "completed",
+          "branch": "sprint/s15-artefactos-ui-proxy-regresiones",
+          "commit": "093799805c3ac80375e2c6fcd27fb821fe9c7cee"
+        },
+        "S15-T03": {
+          "status": "completed",
+          "branch": "sprint/s15-artefactos-ui-proxy-regresiones",
+          "commit": "093799805c3ac80375e2c6fcd27fb821fe9c7cee"
+        },
+        "S15-T04": {
+          "status": "completed",
+          "branch": "sprint/s15-artefactos-ui-proxy-regresiones",
+          "commit": "649c83c178a43949edfac925b9b0161d31fae8d4"
         }
       }
     }
