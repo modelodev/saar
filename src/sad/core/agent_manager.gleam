@@ -312,7 +312,6 @@ fn initial_status(
     phase: types_agent.Created,
     mode: types_agent.RunIdle,
     assigned_port: None,
-    failure_reason: None,
   )
 }
 
@@ -363,7 +362,6 @@ fn handle_stop_agent(
           phase: types_agent.Stopped,
           mode: types_agent.RunIdle,
           assigned_port: None,
-          failure_reason: None,
         )
 
       process.send(registry, messages.UpdateStatus(instance_id, stopped_status))

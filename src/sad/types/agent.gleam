@@ -22,13 +22,15 @@ import sad/types/runner as types_runner
 /// Coarse phase of an agent instance.
 ///
 /// This is intended to be stable for clients.
+///
+/// `Failed` carries the stable failure reason.
 pub type AgentPhase {
   Created
   Provisioning
   ReadyTransient
   ReadyContinuous
   Stopped
-  Failed
+  Failed(FailureReason)
 }
 
 /// Coarse execution mode of an agent.
@@ -74,6 +76,8 @@ pub fn failure_reason_to_string(reason: FailureReason) -> String {
 /// Public, serializable view of an agent instance state.
 ///
 /// This value is safe to log and to expose via HTTP.
+///
+/// When the phase is `Failed`, it carries the failure reason.
 pub type AgentStatusView {
   AgentStatusView(
     profile_id: types_core.ProfileId,
@@ -82,7 +86,6 @@ pub type AgentStatusView {
     phase: AgentPhase,
     mode: AgentRunMode,
     assigned_port: Option(Int),
-    failure_reason: Option(FailureReason),
   )
 }
 

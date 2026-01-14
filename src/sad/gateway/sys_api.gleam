@@ -658,10 +658,13 @@ fn encode_status(status: types_agent.AgentStatusView) -> json.Json {
       Some(p) -> json.int(p)
       None -> json.null()
     }),
-    #("failure_reason", case status.failure_reason {
-      Some(r) -> json.string(types_agent.failure_reason_to_string(r))
-      None -> json.null()
-    }),
+    #(
+      "failure_reason",
+      case failure_reason_from_phase(status.phase) {
+        Some(r) -> json.string(types_agent.failure_reason_to_string(r))
+        None -> json.null()
+      },
+    ),
   ])
 }
 
@@ -695,10 +698,13 @@ fn encode_instance_summary(
       Some(p) -> json.int(p)
       None -> json.null()
     }),
-    #("failure_reason", case status.failure_reason {
-      Some(r) -> json.string(types_agent.failure_reason_to_string(r))
-      None -> json.null()
-    }),
+    #(
+      "failure_reason",
+      case failure_reason_from_phase(status.phase) {
+        Some(r) -> json.string(types_agent.failure_reason_to_string(r))
+        None -> json.null()
+      },
+    ),
     #("registered_at", json.int(registered_at)),
     #("status_updated_at", json.int(status_updated_at)),
   ])
@@ -711,7 +717,16 @@ fn agent_phase_to_string(phase: types_agent.AgentPhase) -> String {
     types_agent.ReadyTransient -> "ready_transient"
     types_agent.ReadyContinuous -> "ready_continuous"
     types_agent.Stopped -> "stopped"
-    types_agent.Failed -> "failed"
+    types_agent.Failed(_) -> "failed"
+  }
+}
+
+fn failure_reason_from_phase(
+  phase: types_agent.AgentPhase,
+) -> Option(types_agent.FailureReason) {
+  case phase {
+    types_agent.Failed(reason) -> Some(reason)
+    _ -> None
   }
 }
 
@@ -794,7 +809,6 @@ fn initial_status(
     phase: types_agent.Provisioning,
     mode: types_agent.RunIdle,
     assigned_port: None,
-    failure_reason: None,
   )
 }
 
