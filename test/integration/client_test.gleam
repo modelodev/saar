@@ -332,10 +332,9 @@ fn start_echo_server() -> #(runner.ServerHandle, Int, types_core.TraceId) {
   let config = types_config.default_sad_config()
 
   let runtime =
-    types_runner.RuntimeConfig(
-      mode: types_runner.ManagedPort,
-      port_env_var: Some("TEST_PORT"),
+    types_runner.ManagedPort(
       host_env_var: Some("TEST_HOST"),
+      port_env_var: Some("TEST_PORT"),
     )
 
   let base_input =

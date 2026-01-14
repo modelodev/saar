@@ -488,11 +488,7 @@ fn start_continuous_server_result(
   tcp_listener.close(listener)
 
   let runtime =
-    types_runner.RuntimeConfig(
-      mode: types_runner.ManagedPort,
-      port_env_var: option.None,
-      host_env_var: option.None,
-    )
+    types_runner.ManagedPort(host_env_var: option.None, port_env_var: option.None)
 
   let base_input =
     runner_fixtures.base_input(

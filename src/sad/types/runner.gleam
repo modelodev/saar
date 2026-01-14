@@ -108,8 +108,8 @@ pub type ToolConfig {
 /// - `ManagedPort`: runner can bind a managed port.
 /// - `NoNetwork`: no network access.
 pub type NetworkMode {
-  ManagedPort
-  NoNetwork
+  ManagedPortMode
+  NoNetworkMode
 }
 
 /// Parses a `NetworkMode` from its string representation.
@@ -117,8 +117,8 @@ pub type NetworkMode {
 /// Valid values: `managed_port`, `no_network`.
 pub fn network_mode_from_string(s: String) -> Result(NetworkMode, String) {
   case s {
-    "managed_port" -> Ok(ManagedPort)
-    "no_network" -> Ok(NoNetwork)
+    "managed_port" -> Ok(ManagedPortMode)
+    "no_network" -> Ok(NoNetworkMode)
     other ->
       Error(
         "Unknown network mode: '"
@@ -131,8 +131,8 @@ pub fn network_mode_from_string(s: String) -> Result(NetworkMode, String) {
 /// Converts a `NetworkMode` to its stable string representation.
 pub fn network_mode_to_string(mode: NetworkMode) -> String {
   case mode {
-    ManagedPort -> "managed_port"
-    NoNetwork -> "no_network"
+    ManagedPortMode -> "managed_port"
+    NoNetworkMode -> "no_network"
   }
 }
 
@@ -141,18 +141,18 @@ pub fn network_mode_to_string(mode: NetworkMode) -> String {
 /// `port_env_var` and `host_env_var` name env vars exported when using
 /// `ManagedPort`.
 pub type RuntimeConfig {
-  RuntimeConfig(
-    mode: NetworkMode,
-    port_env_var: Option(String),
+  ManagedPort(
     host_env_var: Option(String),
+    port_env_var: Option(String),
   )
+  NoNetwork
 }
 
 /// Returns a safe default runtime configuration.
 ///
 /// Defaults to `NoNetwork`.
 pub fn default_runtime_config() -> RuntimeConfig {
-  RuntimeConfig(NoNetwork, None, None)
+  NoNetwork
 }
 
 /// Artifact include/exclude patterns for runner output.
