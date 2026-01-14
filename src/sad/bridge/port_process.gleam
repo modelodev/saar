@@ -40,7 +40,7 @@ pub type PortProcess {
 /// Errors returned when starting a port process.
 pub type PortError {
   WrapperNotFound(String)
-  SpawnFailed(String)
+  SpawnFailed(ffi.FfiError)
 }
 
 /// Events emitted by the port boundary.

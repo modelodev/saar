@@ -47,6 +47,7 @@ pub type ProfilesSourceError {
   ProfileDecodeError(path: String, message: String)
   RunnerMissing(profile_id: String, runner_type: String)
   RunnerNotExecutable(path: String)
+  GitPortFailed(command: String, reason: ffi.FfiError)
   GitCommandFailed(command: String)
 }
 
@@ -478,7 +479,7 @@ fn run_git(
   use port <- result.try(
     ffi.open_port("git", args, [], cwd)
     |> result.map_error(fn(reason) {
-      GitCommandFailed(command: label <> ": " <> reason)
+      GitPortFailed(command: label, reason: reason)
     }),
   )
 

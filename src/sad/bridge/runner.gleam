@@ -293,7 +293,10 @@ fn start_process(
     Error(port_process.WrapperNotFound(name)) ->
       Error(interaction_error(trace_id, "Wrapper not found: " <> name))
     Error(port_process.SpawnFailed(reason)) ->
-      Error(interaction_error(trace_id, "Failed to start runner: " <> reason))
+      Error(interaction_error(
+        trace_id,
+        "Failed to start runner: " <> ffi.ffi_error_to_string(reason),
+      ))
   }
 }
 

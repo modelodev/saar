@@ -30,6 +30,19 @@ pub type PortMessage {
   PortExit(Int)
 }
 
+/// Errors raised by the FFI port boundary.
+pub type FfiError {
+  /// Opening a port failed with the given reason string.
+  OpenPortFailed(reason: String)
+}
+
+/// Renders an `FfiError` as a human-readable string.
+pub fn ffi_error_to_string(err: FfiError) -> String {
+  case err {
+    OpenPortFailed(reason) -> reason
+  }
+}
+
 /// Returns the current monotonic time in milliseconds.
 ///
 /// This is implemented in Erlang (`sad_ffi:now_ms/0`).
@@ -65,8 +78,11 @@ pub fn open_port(
   args: List(String),
   env: List(#(String, String)),
   cd: String,
-) -> Result(Port, String) {
-  open_port_ffi(command, args, env, cd)
+) -> Result(Port, FfiError) {
+  case open_port_ffi(command, args, env, cd) {
+    Ok(port) -> Ok(port)
+    Error(reason) -> Error(OpenPortFailed(reason))
+  }
 }
 
 @external(erlang, "sad_ffi", "open_port")
