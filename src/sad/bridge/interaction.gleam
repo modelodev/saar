@@ -26,6 +26,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import sad/artifacts
+import sad/bridge/artifact_registration
 import sad/bridge/http_client
 import sad/bridge/interpolator
 import sad/bridge/port_process
@@ -33,7 +34,6 @@ import sad/bridge/runner
 import sad/bridge/runner_contract
 import sad/bridge/serialization
 import sad/core/artifact_registry_protocol
-import sad/core/boundary_call
 import sad/streams/sink
 import sad/streams/stream_pump
 import sad/types/config as types_config
@@ -646,13 +646,15 @@ fn runner_response_to_result(
 
       use collected_artifacts <- result.try(collected)
 
-      use public_artifacts <- result.try(register_artifacts(
-        config,
-        artifact_registry,
-        instance_id,
-        collected_artifacts,
-        trace_id,
-      ))
+      use public_artifacts <- result.try(
+        artifact_registration.register_collected_artifacts(
+          config,
+          artifact_registry,
+          instance_id,
+          collected_artifacts,
+          trace_id,
+        ),
+      )
 
       Ok(types_output.InteractionResult(
         data: response_data,
@@ -661,60 +663,6 @@ fn runner_response_to_result(
       ))
     }
   }
-}
-
-fn register_artifacts(
-  config: types_config.SadConfig,
-  artifact_registry: process.Subject(
-    artifact_registry_protocol.ArtifactRegistryMsg,
-  ),
-  instance_id: types_core.InstanceId,
-  collected: List(artifacts.CollectedArtifact),
-  trace_id: types_core.TraceId,
-) -> Result(List(types_output.PublicArtifact), types_output.InteractionError) {
-  let types_config.SadConfig(timeouts: timeouts, storage: storage, ..) = config
-  let types_config.SadTimeouts(call_timeout_ms: call_timeout_ms, ..) = timeouts
-  let types_config.StorageConfig(artifacts: artifacts_cfg, ..) = storage
-  let types_config.ArtifactStoreConfig(base_path: base_path) = artifacts_cfg
-
-  collected
-  |> list.fold(Ok([]), fn(acc, item) {
-    use items <- result.try(acc)
-
-    let artifacts.CollectedArtifact(name: name, path: path, mime: mime) = item
-
-    let id_out =
-      boundary_call.call(artifact_registry, call_timeout_ms, fn(reply_to) {
-        artifact_registry_protocol.RegisterArtifact(
-          path,
-          mime,
-          instance_id,
-          reply_to,
-        )
-      })
-      |> result.map_error(fn(_err) {
-        types_output.sad_error(
-          trace_id,
-          types_enums.InfraError,
-          "artifact_registry_unavailable",
-        )
-      })
-
-    use artifact_id <- result.try(id_out)
-
-    let url = base_path <> types_core.artifact_id_to_string(artifact_id)
-
-    Ok([
-      types_output.PublicArtifact(
-        id: artifact_id,
-        name: name,
-        url: Some(url),
-        mime: mime,
-      ),
-      ..items
-    ])
-  })
-  |> result.map(list.reverse)
 }
 
 fn execute_http_sync(
