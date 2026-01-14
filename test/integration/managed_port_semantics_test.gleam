@@ -136,6 +136,81 @@ pub fn port_injected_into_env_test() {
   test_port |> should.equal(int.to_string(port))
 }
 
+pub fn base_url_interpolation_uses_runner_host_port_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let port = pick_free_port()
+  let cfg = config_with_port_range(port)
+
+  let manager = start_root(cfg)
+  let profile = echo_server_profile_managed_port()
+
+  let assert Ok(id1) = types_core.instance_id("inst-base-url-1")
+
+  let a1 = start_instance(manager, profile, id1, cfg)
+  wait_for_phase(a1, types_agent.ReadyContinuous, 200)
+
+  // If base_url interpolation is correct, the server is reachable on the assigned port.
+  let url = "http://" <> host <> ":" <> int.to_string(port) <> "/health"
+
+  let resp =
+    http_client.request_sync_string(http.Get, url, dict.new(), None, 1000, 1024)
+    |> test_assertions.assert_ok
+
+  resp.status |> should.equal(200)
+}
+
+pub fn managed_port_in_use_fails_fast_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let port = pick_free_port()
+  let cfg = config_with_port_range(port)
+
+  // Occupy the port to force `types_agent.PortInUse`.
+  let assert Ok(#(listener, _)) = tcp_listener.listen(host, port)
+
+  let manager = start_root(cfg)
+  let profile = echo_server_profile_managed_port()
+
+  let assert Ok(id1) = types_core.instance_id("inst-fast-inuse-1")
+
+  let a1 = start_instance(manager, profile, id1, cfg)
+  // Expect a fast transition: no prolonged retries.
+  wait_for_failure_reason(a1, types_agent.PortInUse, 30)
+
+  tcp_listener.close(listener)
+  Nil
+}
+
+pub fn managed_port_race_fails_fast_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let port = pick_free_port()
+  let cfg = config_with_port_range(port)
+
+  let manager = start_root(cfg)
+  let profile = echo_server_profile_managed_port()
+
+  let assert Ok(id1) = types_core.instance_id("inst-race-1")
+
+  let a1 = start_instance(manager, profile, id1, cfg)
+
+  // Try to occupy the port shortly after start to simulate a race.
+  let listener = occupy_port_with_retries(port, 200)
+
+  // Depending on when the port becomes occupied, either `PortInUse` or `PortBindFailed`
+  // is acceptable as long as it fails fast.
+  wait_for_failure_reason_any(
+    a1,
+    types_agent.PortInUse,
+    types_agent.PortBindFailed,
+    200,
+  )
+
+  tcp_listener.close(listener)
+  Nil
+}
+
 fn start_root(
   cfg: types_config.SadConfig,
 ) -> process.Subject(messages.AgentManagerMsg) {
@@ -222,6 +297,62 @@ fn wait_for_failure_reason(
         }
       }
     }
+  }
+}
+
+fn wait_for_failure_reason_any(
+  agent_ref: agent.AgentRef,
+  expected_a: types_agent.FailureReason,
+  expected_b: types_agent.FailureReason,
+  attempts: Int,
+) -> Nil {
+  case attempts {
+    0 -> panic as "Timed out waiting for failure reason"
+
+    _ -> {
+      let status = agent.status(agent_ref, 1000) |> test_assertions.assert_ok
+
+      case status.failure_reason {
+        Some(reason) ->
+          case reason == expected_a || reason == expected_b {
+            True -> Nil
+            False -> {
+              process.sleep(20)
+              wait_for_failure_reason_any(
+                agent_ref,
+                expected_a,
+                expected_b,
+                attempts - 1,
+              )
+            }
+          }
+
+        None -> {
+          process.sleep(20)
+          wait_for_failure_reason_any(
+            agent_ref,
+            expected_a,
+            expected_b,
+            attempts - 1,
+          )
+        }
+      }
+    }
+  }
+}
+
+fn occupy_port_with_retries(port: Int, attempts: Int) {
+  case attempts {
+    0 -> panic as "Failed to occupy port for race"
+
+    _ ->
+      case tcp_listener.listen(host, port) {
+        Ok(#(listener, _)) -> listener
+        Error(_) -> {
+          process.sleep(1)
+          occupy_port_with_retries(port, attempts - 1)
+        }
+      }
   }
 }
 
