@@ -1,21 +1,16 @@
-//// Unit tests for `sad/artifacts.collect`.
 ////
-//// Mission: validate artifact filtering behavior (include/exclude globs), path
-//// validation boundaries, and output shape.
+//// Mission: validate artifact filtering behavior (include/exclude globs) and
+//// workspace path validation boundaries.
 ////
 //// Responsibilities:
 //// - Assert expected `Result` behavior for valid/invalid paths.
 //// - Assert glob semantics (`*`, `?`, `**`) at a black-box level.
-////
-//// Non-responsibilities:
-//// - Verifying UUID/id generation details.
 
-import gleam/option
 import gleeunit
 import gleeunit/should
 import sad/artifacts
-import sad/types/output as types_output
 import sad/types/runner as types_runner
+import sad/workspace
 
 /// Test entrypoint for gleeunit.
 pub fn main() {
@@ -52,10 +47,10 @@ pub fn collect_includes_and_normalizes_paths_test() {
   let config = types_runner.ArtifactConfig(include: ["**/*.log"], exclude: [])
 
   case artifacts.collect(items, config) {
-    Ok([types_output.PublicArtifact(id: _, name: name, url: url, mime: mime)]) -> {
+    Ok([artifacts.CollectedArtifact(name: name, path: path, mime: mime)]) -> {
       name |> should.equal("log")
-      url |> should.equal(option.None)
       mime |> should.equal("text/plain")
+      workspace.workspace_path_to_string(path) |> should.equal("logs/a.log")
     }
     _ -> should.fail()
   }
@@ -86,8 +81,8 @@ pub fn collect_exclude_and_order_test() {
 
   case artifacts.collect(items, config) {
     Ok([
-      types_output.PublicArtifact(id: _, name: n1, url: _, mime: _),
-      types_output.PublicArtifact(id: _, name: n2, url: _, mime: _),
+      artifacts.CollectedArtifact(name: n1, ..),
+      artifacts.CollectedArtifact(name: n2, ..),
     ]) -> {
       n1 |> should.equal("one")
       n2 |> should.equal("three")

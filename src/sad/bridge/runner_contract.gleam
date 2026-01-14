@@ -16,6 +16,7 @@
 //// - Consumed by `sad/bridge/runner` when reading stdout.
 //// - Uses `sad/types/runner` and `sad/types/enums`.
 
+import gleam/dict
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/json
@@ -224,6 +225,47 @@ fn json_option_decoder() -> decode.Decoder(option.Option(json.Json)) {
   |> decode.map(fn(value) { option.map(value, json_from_dynamic) })
 }
 
+fn json_from_dynamic(value: Dynamic) -> json.Json {
+  // `gleam/json` on Erlang represents Json values as iodata/binaries containing
+  // already-encoded JSON. Values coming from `decode.dynamic` are *decoded* Erlang
+  // terms (maps/lists/etc.), so we must re-encode them into the Json representation.
+  case decode.run(value, decode.bool) {
+    Ok(b) -> json.bool(b)
+    Error(_) ->
+      case decode.run(value, decode.int) {
+        Ok(i) -> json.int(i)
+        Error(_) ->
+          case decode.run(value, decode.float) {
+            Ok(f) -> json.float(f)
+            Error(_) ->
+              case decode.run(value, decode.string) {
+                Ok(s) -> json.string(s)
+                Error(_) ->
+                  case decode.run(value, decode.list(of: decode.dynamic)) {
+                    Ok(items) -> json.array(items, json_from_dynamic)
+                    Error(_) ->
+                      case
+                        decode.run(
+                          value,
+                          decode.dict(decode.string, decode.dynamic),
+                        )
+                      {
+                        Ok(entries) ->
+                          entries
+                          |> dict.to_list
+                          |> list.map(fn(pair) {
+                            #(pair.0, json_from_dynamic(pair.1))
+                          })
+                          |> json.object
+                        Error(_) -> json.null()
+                      }
+                  }
+              }
+          }
+      }
+  }
+}
+
 fn parse_runner_error(
   raw: option.Option(RawRunnerError),
 ) -> Result(option.Option(types_runner.RunnerError), ContractError) {
@@ -242,9 +284,6 @@ fn parse_error_kind(
   types_enums.error_kind_from_string(kind)
   |> result.map_error(fn(_) { UnknownErrorKind(kind) })
 }
-
-@external(erlang, "gleam_stdlib", "identity")
-fn json_from_dynamic(data: Dynamic) -> json.Json
 
 fn parse_json(
   line: String,

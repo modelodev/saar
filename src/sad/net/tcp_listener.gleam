@@ -103,8 +103,8 @@ pub fn close(listener: Listener) -> Nil {
 
 fn parse_interface(host: String) -> Result(options.Interface, ListenError) {
   case host {
-    "localhost" -> Ok(options.Loopback)
-    "0.0.0.0" -> Ok(options.Any)
+    "localhost" -> Ok(options.Address(options.IpV4(127, 0, 0, 1)))
+    "0.0.0.0" -> Ok(options.Address(options.IpV4(0, 0, 0, 0)))
     _ ->
       parse_ipv4(host)
       |> result.map(options.Address)

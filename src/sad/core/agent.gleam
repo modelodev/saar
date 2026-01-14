@@ -23,6 +23,7 @@ import gleam/otp/actor
 import gleam/string
 import sad/bridge/interaction
 import sad/bridge/port_owner
+import sad/core/artifact_registry_protocol
 import sad/ffi
 import sad/otp/safe_call
 import sad/streams/sink
@@ -311,6 +312,19 @@ pub type StopReason {
   IdleTimeout
 }
 
+/// Internal state snapshot required to restart an agent.
+///
+/// This type is internal to SAD and may contain sensitive data (resolved params).
+pub type StartSnapshot {
+  StartSnapshot(
+    profile: types_profile.Profile,
+    instance_id: types_core.InstanceId,
+    params: ResolvedParams,
+    workspace: String,
+    config: types_config.SadConfig,
+  )
+}
+
 /// Internal message protocol of the AgentActor.
 ///
 /// This protocol is intentionally not constructible outside this module.
@@ -325,6 +339,7 @@ pub opaque type AgentMsg {
   )
   GetStatus(process.Subject(types_agent.AgentStatusView))
   GetInfo(process.Subject(types_agent.AgentInfoView))
+  GetStartSnapshot(process.Subject(StartSnapshot))
   AttachLogs(process.Subject(types_log.LogEvent))
   StartInstance
   StopInstance(StopReason)
@@ -394,6 +409,9 @@ type AgentRuntimeState {
     log_buffer: LogBuffer,
     log_subscriber: option.Option(process.Subject(types_log.LogEvent)),
     config: types_config.SadConfig,
+    artifact_registry: process.Subject(
+      artifact_registry_protocol.ArtifactRegistryMsg,
+    ),
     deps: AgentDeps,
     selector: process.Selector(AgentMsg),
     assigned_port: option.Option(Int),
@@ -411,6 +429,9 @@ pub fn start_link(
   params: ResolvedParams,
   workspace: String,
   config: types_config.SadConfig,
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
   deps: AgentDeps,
   init_timeout_ms: Int,
 ) -> actor.StartResult(AgentRef) {
@@ -433,6 +454,7 @@ pub fn start_link(
         log_buffer: empty_log_buffer(),
         log_subscriber: option.None,
         config: config,
+        artifact_registry: artifact_registry,
         deps: deps,
         selector: selector,
         assigned_port: option.None,
@@ -462,6 +484,11 @@ fn handle_message(
 
     GetInfo(reply_to) -> {
       process.send(reply_to, to_info_view(state))
+      actor.continue(state)
+    }
+
+    GetStartSnapshot(reply_to) -> {
+      process.send(reply_to, to_start_snapshot(state))
       actor.continue(state)
     }
 
@@ -522,6 +549,18 @@ fn to_info_view(state: AgentRuntimeState) -> types_agent.AgentInfoView {
     runner: state.profile.runner,
     interface: state.profile.interface,
     status: to_status_view(state),
+  )
+}
+
+fn to_start_snapshot(state: AgentRuntimeState) -> StartSnapshot {
+  let params = get_params(state.state) |> option.unwrap(dict.new())
+
+  StartSnapshot(
+    profile: state.profile,
+    instance_id: state.instance_id,
+    params: params,
+    workspace: state.workspace,
+    config: state.config,
   )
 }
 
@@ -652,6 +691,7 @@ fn start_interaction(
           params,
           state.workspace,
           state.config,
+          state.artifact_registry,
           state.assigned_port,
           streaming,
           stream_sink,
@@ -1085,6 +1125,18 @@ pub fn internal_interaction_done(
   result: Result(types_output.InteractionResult, types_output.InteractionError),
 ) -> Nil {
   process.send(subject(agent), InteractionDone(result))
+}
+
+/// Internal-only: returns a snapshot required to restart the instance.
+///
+/// This is intended for core modules (not the gateway).
+pub fn internal_start_snapshot(
+  agent: AgentRef,
+  timeout_ms: Int,
+) -> Result(StartSnapshot, safe_call.CallError) {
+  safe_call.call_within(subject(agent), timeout_ms, fn(reply_to) {
+    GetStartSnapshot(reply_to)
+  })
 }
 
 /// Internal-only: signals that the continuous server died.

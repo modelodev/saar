@@ -12,13 +12,13 @@
 //// - Uses `sad/net/tcp_listener` for bind attempts.
 //// - Maps listen failures to `sad/port_pool.PortCheckError`.
 
-import sad/net/tcp_listener
+import sad/ffi
 import sad/port_pool
 
 /// Checks whether `host:port` can be bound.
 ///
-/// This function is a small helper for `sad/port_pool`; it tries to listen on
-/// the given address and immediately closes the listener on success.
+/// This function is a small helper for `sad/port_pool`; it tries to bind a TCP
+/// listener and immediately closes it on success.
 ///
 /// Supported hosts: `localhost`, `0.0.0.0`, and IPv4 literals.
 ///
@@ -38,17 +38,12 @@ pub fn check_available(
   host: String,
   port: Int,
 ) -> Result(Nil, port_pool.PortCheckError) {
-  case tcp_listener.listen(host, port) {
-    Ok(#(listener, _)) -> {
-      tcp_listener.close(listener)
-      Ok(Nil)
-    }
-    Error(tcp_listener.ListenInUse) -> Error(port_pool.CheckPortInUse)
-    Error(tcp_listener.ListenInvalidHost(host: host)) ->
-      Error(port_pool.CheckInvalidHost(host: host))
-    Error(tcp_listener.ListenPermissionDenied) ->
-      Error(port_pool.CheckPermissionDenied)
-    Error(tcp_listener.ListenFailed(reason)) ->
-      Error(port_pool.CheckBindFailed(reason))
+  case ffi.check_port_available(host, port) {
+    Ok(_) -> Ok(Nil)
+
+    Error("in_use") -> Error(port_pool.CheckPortInUse)
+    Error("invalid_host") -> Error(port_pool.CheckInvalidHost(host: host))
+    Error("permission_denied") -> Error(port_pool.CheckPermissionDenied)
+    Error(reason) -> Error(port_pool.CheckBindFailed(reason))
   }
 }

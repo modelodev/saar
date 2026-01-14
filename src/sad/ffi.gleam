@@ -124,3 +124,13 @@ pub fn port_receive(port: Port, timeout_ms: Int) -> Result(PortMessage, Nil) {
 
 @external(erlang, "sad_ffi", "port_receive")
 fn port_receive_ffi(port: Port, timeout_ms: Int) -> Result(PortMessage, Nil)
+
+/// Checks whether `host:port` can be bound (best effort).
+///
+/// Returns `Ok(Nil)` if binding is possible, otherwise `Error(reason)`.
+pub fn check_port_available(host: String, port: Int) -> Result(Nil, String) {
+  check_port_available_ffi(host, port)
+}
+
+@external(erlang, "sad_ffi", "check_port_available")
+fn check_port_available_ffi(host: String, port: Int) -> Result(Nil, String)

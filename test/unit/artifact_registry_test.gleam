@@ -5,8 +5,8 @@ import gleam/otp/actor
 import gleeunit
 import gleeunit/should
 import sad/core/artifact_registry
+import sad/core/artifact_registry_protocol
 import sad/core/boundary_call
-import sad/core/messages
 import sad/types/core as types_core
 import sad/workspace
 import youid/uuid
@@ -22,7 +22,12 @@ pub fn register_artifact_returns_uuid() {
 
   let assert Ok(artifact_id) =
     boundary_call.call(registry, 1000, fn(reply_to) {
-      messages.RegisterArtifact(path, "text/plain", instance_id, reply_to)
+      artifact_registry_protocol.RegisterArtifact(
+        path,
+        "text/plain",
+        instance_id,
+        reply_to,
+      )
     })
 
   let id_s = types_core.artifact_id_to_string(artifact_id)
@@ -39,15 +44,20 @@ pub fn register_artifact_stores_workspace_path() {
 
   let assert Ok(artifact_id) =
     boundary_call.call(registry, 1000, fn(reply_to) {
-      messages.RegisterArtifact(path, "text/plain", instance_id, reply_to)
+      artifact_registry_protocol.RegisterArtifact(
+        path,
+        "text/plain",
+        instance_id,
+        reply_to,
+      )
     })
 
   let assert Ok(option.Some(entry)) =
     boundary_call.call(registry, 1000, fn(reply_to) {
-      messages.LookupArtifact(artifact_id, reply_to)
+      artifact_registry_protocol.LookupArtifact(artifact_id, reply_to)
     })
 
-  let messages.ArtifactEntry(
+  let artifact_registry_protocol.ArtifactEntry(
     path: stored_path,
     mime: stored_mime,
     instance_id: stored_instance_id,
@@ -69,7 +79,7 @@ pub fn lookup_nonexistent_artifact() {
   let artifact_id = types_core.artifact_id(uuid.v7_string())
 
   boundary_call.call(registry, 1000, fn(reply_to) {
-    messages.LookupArtifact(artifact_id, reply_to)
+    artifact_registry_protocol.LookupArtifact(artifact_id, reply_to)
   })
   |> should.equal(Ok(option.None))
 }
@@ -81,26 +91,36 @@ pub fn purge_by_instance_removes_all() {
 
   let assert Ok(a1) =
     boundary_call.call(registry, 1000, fn(reply_to) {
-      messages.RegisterArtifact(path, "text/plain", instance_id, reply_to)
+      artifact_registry_protocol.RegisterArtifact(
+        path,
+        "text/plain",
+        instance_id,
+        reply_to,
+      )
     })
 
   let assert Ok(a2) =
     boundary_call.call(registry, 1000, fn(reply_to) {
-      messages.RegisterArtifact(path, "text/plain", instance_id, reply_to)
+      artifact_registry_protocol.RegisterArtifact(
+        path,
+        "text/plain",
+        instance_id,
+        reply_to,
+      )
     })
 
   boundary_call.call(registry, 1000, fn(reply_to) {
-    messages.PurgeByInstance(instance_id, reply_to)
+    artifact_registry_protocol.PurgeByInstance(instance_id, reply_to)
   })
   |> should.equal(Ok(2))
 
   boundary_call.call(registry, 1000, fn(reply_to) {
-    messages.LookupArtifact(a1, reply_to)
+    artifact_registry_protocol.LookupArtifact(a1, reply_to)
   })
   |> should.equal(Ok(option.None))
 
   boundary_call.call(registry, 1000, fn(reply_to) {
-    messages.LookupArtifact(a2, reply_to)
+    artifact_registry_protocol.LookupArtifact(a2, reply_to)
   })
   |> should.equal(Ok(option.None))
 }
@@ -113,22 +133,32 @@ pub fn purge_by_instance_preserves_others() {
 
   let assert Ok(_a1) =
     boundary_call.call(registry, 1000, fn(reply_to) {
-      messages.RegisterArtifact(path, "text/plain", i1, reply_to)
+      artifact_registry_protocol.RegisterArtifact(
+        path,
+        "text/plain",
+        i1,
+        reply_to,
+      )
     })
 
   let assert Ok(a2) =
     boundary_call.call(registry, 1000, fn(reply_to) {
-      messages.RegisterArtifact(path, "text/plain", i2, reply_to)
+      artifact_registry_protocol.RegisterArtifact(
+        path,
+        "text/plain",
+        i2,
+        reply_to,
+      )
     })
 
   boundary_call.call(registry, 1000, fn(reply_to) {
-    messages.PurgeByInstance(i1, reply_to)
+    artifact_registry_protocol.PurgeByInstance(i1, reply_to)
   })
   |> should.equal(Ok(1))
 
   let assert Ok(option.Some(_)) =
     boundary_call.call(registry, 1000, fn(reply_to) {
-      messages.LookupArtifact(a2, reply_to)
+      artifact_registry_protocol.LookupArtifact(a2, reply_to)
     })
 
   Nil
@@ -148,7 +178,7 @@ pub fn concurrent_register_unique_uuids() {
         process.spawn(fn() {
           let assert Ok(id) =
             boundary_call.call(registry, 1000, fn(reply_to) {
-              messages.RegisterArtifact(
+              artifact_registry_protocol.RegisterArtifact(
                 path,
                 "text/plain",
                 instance_id,
@@ -182,7 +212,9 @@ fn collect_strings(
   }
 }
 
-fn start_registry() -> process.Subject(messages.ArtifactRegistryMsg) {
+fn start_registry() -> process.Subject(
+  artifact_registry_protocol.ArtifactRegistryMsg,
+) {
   let name = process.new_name("test_artifact_registry")
   let assert Ok(actor.Started(data: subject, ..)) =
     artifact_registry.start(name)

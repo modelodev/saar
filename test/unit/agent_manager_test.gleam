@@ -40,6 +40,7 @@ pub fn start_agent_same_key_one_wins_test() {
 
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
   let assert Ok(instance_id) = types_core.instance_id("inst-one-wins")
+  let artifact_registry = process.new_subject()
 
   let args =
     messages.StartArgs(
@@ -48,6 +49,7 @@ pub fn start_agent_same_key_one_wins_test() {
       params: dict.new(),
       workspace: agent_helpers.workspace_root(),
       config: cfg,
+      artifact_registry: artifact_registry,
     )
 
   let out1 = process.new_subject()
@@ -213,6 +215,8 @@ pub fn start_agent_registration_failed_rolls_back_test() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
   let assert Ok(instance_id) = types_core.instance_id("inst-already-exists")
 
+  let artifact_registry = process.new_subject()
+
   // Pre-register a dummy agent to force `AlreadyExists`.
   let assert Ok(actor.Started(data: agent_ref, ..)) =
     agent.start_link(
@@ -221,6 +225,7 @@ pub fn start_agent_registration_failed_rolls_back_test() {
       dict.new(),
       agent_helpers.workspace_root(),
       cfg,
+      artifact_registry,
       agent.default_deps(),
       1000,
     )
@@ -248,6 +253,7 @@ pub fn start_agent_registration_failed_rolls_back_test() {
       params: dict.new(),
       workspace: agent_helpers.workspace_root(),
       config: cfg,
+      artifact_registry: artifact_registry,
     )
 
   boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {

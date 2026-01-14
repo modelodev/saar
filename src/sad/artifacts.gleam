@@ -1,40 +1,41 @@
 //// Artifact collection and glob filtering.
 ////
-//// Mission: take runner-provided artifact references and produce public-facing
-//// artifact metadata after validating paths and applying include/exclude globs.
+//// Mission: take runner-provided artifact references and produce a list of
+//// validated artifacts (paths + metadata) that can later be registered.
 ////
 //// Responsibilities:
 //// - Validate artifact paths against workspace rules.
 //// - Apply glob filtering (`*`, `?`, `**`) over path segments.
-//// - Produce `types_output.PublicArtifact` values with generated IDs.
 ////
 //// Non-responsibilities:
+//// - Generating artifact ids.
 //// - Reading artifact contents or uploading files.
-//// - Resolving URLs; `url` stays `None`.
+//// - Resolving URLs.
 ////
 //// Relationships:
 //// - Consumes `types_runner.ArtifactRef` and `types_runner.ArtifactConfig`.
-//// - Produces `types_output.PublicArtifact`.
+//// - Produces `CollectedArtifact` with a `workspace.WorkspacePath`.
 //// - Delegates path safety to `sad/workspace`.
 
 import gleam/list
-import gleam/option
 import gleam/result
 import gleam/string
-import sad/types/core
-import sad/types/output as types_output
 import sad/types/runner as types_runner
 import sad/workspace
-import youid/uuid
 
-/// Errors that can occur while collecting public artifacts.
+/// Errors that can occur while collecting artifacts.
 ///
 /// `InvalidPath` indicates a workspace path validation failure.
 pub type ArtifactError {
   InvalidPath(String)
 }
 
-/// Collects public artifacts from runner references.
+/// A runner artifact that passed validation and glob filtering.
+pub type CollectedArtifact {
+  CollectedArtifact(name: String, path: workspace.WorkspacePath, mime: String)
+}
+
+/// Collects validated artifacts from runner references.
 ///
 /// The function validates each artifact `path` using `sad/workspace` and then
 /// filters it using `config.include` and `config.exclude` globs.
@@ -42,36 +43,31 @@ pub type ArtifactError {
 /// - If `config.include` is empty, the result is `Ok([])`.
 /// - A path is included when it matches any `include` pattern and matches no
 ///   `exclude` pattern.
-///
-/// Example:
-/// ```gleam
-/// collect(artifacts, config)
-/// ```
 pub fn collect(
   artifacts: List(types_runner.ArtifactRef),
   config: types_runner.ArtifactConfig,
-) -> Result(List(types_output.PublicArtifact), ArtifactError) {
+) -> Result(List(CollectedArtifact), ArtifactError) {
   case config.include {
     [] -> Ok([])
     _ ->
       artifacts
       |> list.fold(Ok([]), fn(acc, artifact) {
         use collected <- result.try(acc)
-        use normalized <- result.try(validate_path(artifact.path))
+        use validated <- result.try(validate_path(artifact.path))
+
+        let normalized = workspace.workspace_path_to_string(validated)
 
         case matches_globs(normalized, config.include, config.exclude) {
-          True -> {
-            let id = core.artifact_id(uuid.v7_string())
+          True ->
             Ok([
-              types_output.PublicArtifact(
-                id: id,
+              CollectedArtifact(
                 name: artifact.name,
-                url: option.None,
+                path: validated,
                 mime: artifact.mime,
               ),
               ..collected
             ])
-          }
+
           False -> Ok(collected)
         }
       })
@@ -79,9 +75,8 @@ pub fn collect(
   }
 }
 
-fn validate_path(path: String) -> Result(String, ArtifactError) {
+fn validate_path(path: String) -> Result(workspace.WorkspacePath, ArtifactError) {
   workspace.workspace_path_validate(path)
-  |> result.map(fn(valid) { workspace.workspace_path_to_string(valid) })
   |> result.map_error(fn(err) {
     InvalidPath(workspace.path_error_to_string(err))
   })

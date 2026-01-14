@@ -162,9 +162,9 @@ pub type ArtifactConfig {
 
 /// Returns the default artifact configuration.
 ///
-/// By default nothing is included.
+/// By default all artifacts are included.
 pub fn default_artifact_config() -> ArtifactConfig {
-  ArtifactConfig([], [])
+  ArtifactConfig(["**"], [])
 }
 
 /// Runner definition used to execute a profile.

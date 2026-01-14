@@ -229,7 +229,7 @@ fn framer_error_to_read_error(err: jsonl_framer.FramerError) -> PortReadError {
 
 fn resolve_wrapper_path() -> Result(String, PortError) {
   case envoy.get("SAD_WRAPPER_PATH") {
-    Ok(path) -> Ok(path)
+    Ok(path) -> Ok(resolve_wrapper_env_path(path))
     Error(_) -> {
       let candidates = wrapper_candidates()
       case first_existing(candidates) {
@@ -237,6 +237,17 @@ fn resolve_wrapper_path() -> Result(String, PortError) {
         None -> Error(WrapperNotFound("sad_wrapper"))
       }
     }
+  }
+}
+
+fn resolve_wrapper_env_path(path: String) -> String {
+  case filepath.is_absolute(path) {
+    True -> path
+    False ->
+      case simplifile.current_directory() {
+        Ok(cwd) -> filepath.join(cwd, path)
+        Error(_) -> path
+      }
   }
 }
 

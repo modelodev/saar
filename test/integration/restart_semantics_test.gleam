@@ -219,6 +219,8 @@ fn start_instance(
   instance_id: types_core.InstanceId,
   cfg: types_config.SadConfig,
 ) -> agent.AgentRef {
+  let artifact_registry = process.new_subject()
+
   let args =
     messages.StartArgs(
       profile: profile,
@@ -226,6 +228,7 @@ fn start_instance(
       params: dict.new(),
       workspace: agent_helpers.workspace_root(),
       config: cfg,
+      artifact_registry: artifact_registry,
     )
 
   boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {

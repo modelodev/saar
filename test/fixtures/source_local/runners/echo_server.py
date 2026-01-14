@@ -34,6 +34,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({k: os.environ.get(k) for k in keys})
             return
 
+        if path == "/headers":
+            self._send_json({
+                "headers": {k.lower(): v for k, v in self.headers.items()},
+            })
+            return
+
         if path in ("/big", "/file", "/bin"):
             size = int(query.get("size", ["0"])[0])
             if path == "/big":

@@ -203,6 +203,7 @@ fn start_args(
     params: dict.new(),
     workspace: "./workspaces/test",
     config: cfg,
+    artifact_registry: process.new_subject(),
   )
 }
 

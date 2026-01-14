@@ -18,6 +18,7 @@
 import gleam/bytes_tree
 import gleam/http/response
 import gleam/json
+import gleam/option
 import mist
 import sad/otp/safe_call
 import sad/types/core as types_core
@@ -40,6 +41,45 @@ pub fn from_error_kind(
     instance: instance,
     kind: types_enums.error_kind_to_string(kind),
     trace_id: types_core.trace_id_to_string(trace_id),
+    code: option.None,
+  )
+}
+
+/// Returns a 400 Problem Details response with a stable `extensions.code`.
+pub fn bad_request_with_code(
+  trace_id: types_core.TraceId,
+  instance: String,
+  detail: String,
+  code: String,
+) -> response.Response(mist.ResponseData) {
+  build(
+    status: 400,
+    title: "Bad Request",
+    type_url: "https://sad/errors/invalid-request",
+    detail: detail,
+    instance: instance,
+    kind: types_enums.error_kind_to_string(types_enums.BadRequest),
+    trace_id: types_core.trace_id_to_string(trace_id),
+    code: option.Some(code),
+  )
+}
+
+/// Returns an infra error response using a custom HTTP status code.
+pub fn infra_error_with_status(
+  status: Int,
+  trace_id: types_core.TraceId,
+  instance: String,
+  detail: String,
+) -> response.Response(mist.ResponseData) {
+  build(
+    status: status,
+    title: http_title(status),
+    type_url: "https://sad/errors/infra-error",
+    detail: detail,
+    instance: instance,
+    kind: types_enums.error_kind_to_string(types_enums.InfraError),
+    trace_id: types_core.trace_id_to_string(trace_id),
+    code: option.None,
   )
 }
 
@@ -62,6 +102,7 @@ pub fn from_call_error(
     instance: instance,
     kind: types_enums.error_kind_to_string(types_enums.InfraError),
     trace_id: types_core.trace_id_to_string(trace_id),
+    code: option.None,
   )
 }
 
@@ -78,6 +119,7 @@ pub fn request_body_too_large(
     instance: instance,
     kind: types_enums.error_kind_to_string(types_enums.BadRequest),
     trace_id: types_core.trace_id_to_string(trace_id),
+    code: option.None,
   )
 }
 
@@ -95,6 +137,7 @@ pub fn unauthorized(
     instance: instance,
     kind: types_enums.error_kind_to_string(types_enums.BadRequest),
     trace_id: types_core.trace_id_to_string(trace_id),
+    code: option.None,
   )
 }
 
@@ -111,6 +154,7 @@ pub fn not_found(
     instance: instance,
     kind: types_enums.error_kind_to_string(types_enums.BadRequest),
     trace_id: types_core.trace_id_to_string(trace_id),
+    code: option.None,
   )
 }
 
@@ -150,7 +194,18 @@ fn build(
   instance instance: String,
   kind kind: String,
   trace_id trace_id: String,
+  code code: option.Option(String),
 ) -> response.Response(mist.ResponseData) {
+  let extensions = [
+    #("kind", json.string(kind)),
+    #("trace_id", json.string(trace_id)),
+  ]
+
+  let extensions = case code {
+    option.Some(value) -> [#("code", json.string(value)), ..extensions]
+    option.None -> extensions
+  }
+
   let body =
     json.object([
       #("type", json.string(type_url)),
@@ -158,13 +213,7 @@ fn build(
       #("title", json.string(title)),
       #("detail", json.string(detail)),
       #("instance", json.string(instance)),
-      #(
-        "extensions",
-        json.object([
-          #("kind", json.string(kind)),
-          #("trace_id", json.string(trace_id)),
-        ]),
-      ),
+      #("extensions", json.object(extensions)),
     ])
     |> json.to_string
     |> bytes_tree.from_string

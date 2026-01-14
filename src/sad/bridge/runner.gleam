@@ -1,4 +1,5 @@
 import gleam/dict
+import gleam/erlang/process
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
@@ -9,6 +10,8 @@ import sad/bridge/managed_port_env
 import sad/bridge/port_process
 import sad/bridge/runner_contract
 import sad/bridge/serialization
+import sad/core/artifact_registry_protocol
+import sad/core/boundary_call
 import sad/ffi
 import sad/types/config as types_config
 import sad/types/core as types_core
@@ -39,6 +42,9 @@ pub fn execute_transient(
   cwd: String,
   input: types_input.SadInput,
   config: types_config.SadConfig,
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
   streaming: Bool,
   timeout_ms: Int,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
@@ -77,12 +83,17 @@ pub fn execute_transient(
     }),
   )
 
+  use instance_id <- result.try(instance_id_from_input(input))
+
   case first_result(events, input.context.trace_id) {
     Ok(response) ->
       runner_response_to_interaction_result(
         response,
         input.runner_def.artifact_config,
         input.context.trace_id,
+        config,
+        artifact_registry,
+        instance_id,
       )
     Error(error) -> Error(error)
   }
@@ -302,6 +313,7 @@ fn run_and_collect_events(
   stop_on_timeout: Bool,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let env = append_wrapper_env(env, wrapper, shutdown_timeout_ms)
+
   use process <- result.try(start_process(
     runner_path,
     runner_args,
@@ -636,10 +648,78 @@ fn provision_result_from_events(
   }
 }
 
+fn instance_id_from_input(
+  input: types_input.SadInput,
+) -> Result(types_core.InstanceId, types_output.InteractionError) {
+  let types_input.SadInput(meta: meta, context: context, ..) = input
+  let types_input.SadInputMeta(instance_id: instance_id, ..) = meta
+
+  case instance_id {
+    option.Some(id) -> Ok(id)
+    option.None ->
+      Error(interaction_error(context.trace_id, "missing_instance_id"))
+  }
+}
+
+fn register_artifacts(
+  config: types_config.SadConfig,
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
+  instance_id: types_core.InstanceId,
+  collected: List(artifacts.CollectedArtifact),
+  trace_id: types_core.TraceId,
+) -> Result(List(types_output.PublicArtifact), types_output.InteractionError) {
+  let types_config.SadConfig(timeouts: timeouts, storage: storage, ..) = config
+  let types_config.SadTimeouts(call_timeout_ms: call_timeout_ms, ..) = timeouts
+  let types_config.StorageConfig(artifacts: artifacts_cfg, ..) = storage
+  let types_config.ArtifactStoreConfig(base_path: base_path) = artifacts_cfg
+
+  collected
+  |> list.fold(Ok([]), fn(acc, item) {
+    use items <- result.try(acc)
+
+    let artifacts.CollectedArtifact(name: name, path: path, mime: mime) = item
+
+    let id_out =
+      boundary_call.call(artifact_registry, call_timeout_ms, fn(reply_to) {
+        artifact_registry_protocol.RegisterArtifact(
+          path,
+          mime,
+          instance_id,
+          reply_to,
+        )
+      })
+      |> result.map_error(fn(_err) {
+        interaction_error(trace_id, "artifact_registry_unavailable")
+      })
+
+    use artifact_id <- result.try(id_out)
+
+    let url = base_path <> types_core.artifact_id_to_string(artifact_id)
+
+    Ok([
+      types_output.PublicArtifact(
+        id: artifact_id,
+        name: name,
+        url: option.Some(url),
+        mime: mime,
+      ),
+      ..items
+    ])
+  })
+  |> result.map(list.reverse)
+}
+
 fn runner_response_to_interaction_result(
   response: types_runner.RunnerResponse,
   artifact_config: types_runner.ArtifactConfig,
   trace_id: types_core.TraceId,
+  config: types_config.SadConfig,
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
+  instance_id: types_core.InstanceId,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   case response {
     types_runner.RunnerFailure(error: err, ..) ->
@@ -647,7 +727,8 @@ fn runner_response_to_interaction_result(
 
     types_runner.RunnerSuccess(data: data, artifacts: runner_artifacts) -> {
       let data = response_data_from_runner(data)
-      let artifacts =
+
+      let collected =
         artifacts.collect(runner_artifacts, artifact_config)
         |> result.map_error(fn(err) {
           interaction_error(
@@ -656,7 +737,14 @@ fn runner_response_to_interaction_result(
           )
         })
 
-      use public_artifacts <- result.try(artifacts)
+      use collected_artifacts <- result.try(collected)
+      use public_artifacts <- result.try(register_artifacts(
+        config,
+        artifact_registry,
+        instance_id,
+        collected_artifacts,
+        trace_id,
+      ))
 
       Ok(types_output.InteractionResult(
         data: data,

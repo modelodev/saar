@@ -77,8 +77,8 @@ pub fn handle(
     ["sys", "agents", instance_id, "logs", "stream"] ->
       handle_agent_logs_stream(req, cfg, deps, trace_id, instance_id)
 
-    // `GET /sys/agents/:instance_id` does not exist.
-    ["sys", "agents", _] -> problem.not_found(trace_id, req.path)
+    ["sys", "agents", instance_id] ->
+      handle_agent_item(req, cfg, deps, trace_id, instance_id)
 
     ["sys", "reload-profiles"] ->
       handle_reload_profiles(req, cfg, deps, trace_id)
@@ -301,18 +301,12 @@ fn handle_agent_status(
 
       case
         boundary_call.call(registry, registry_timeout_ms(cfg), fn(reply_to) {
-          messages.LookupByInstanceId(instance_id, reply_to)
+          messages.LookupStatusByInstanceId(instance_id, reply_to)
         })
       {
         Error(call_err) -> problem.from_call_error(call_err, trace_id, req.path)
         Ok(None) -> problem.not_found(trace_id, req.path)
-
-        Ok(Some(agent_ref)) ->
-          case agent.status(agent_ref, status_timeout_ms(cfg)) {
-            Error(call_err) ->
-              problem.from_call_error(call_err, trace_id, req.path)
-            Ok(status) -> json_response(200, encode_status(status))
-          }
+        Ok(Some(status)) -> json_response(200, encode_status(status))
       }
     }
   }
@@ -373,26 +367,76 @@ fn handle_agent_start(
         Error(resp) -> resp
 
         Ok(instance_id) -> {
-          let Deps(registry: registry, ..) = deps
+          let Deps(agent_manager: manager, ..) = deps
 
           case
-            boundary_call.call(registry, registry_timeout_ms(cfg), fn(reply_to) {
-              messages.LookupByInstanceId(instance_id, reply_to)
-            })
+            boundary_call.call_unwrap_result(
+              manager,
+              call_timeout_ms(cfg),
+              fn(reply_to) {
+                messages.StartExistingAgent(instance_id, reply_to)
+              },
+            )
           {
-            Error(call_err) ->
-              problem.from_call_error(call_err, trace_id, req.path)
-            Ok(None) -> problem.not_found(trace_id, req.path)
+            Ok(_) -> accepted_json(instance_id)
 
-            Ok(Some(agent_ref)) -> {
-              agent.start_instance(agent_ref)
-              accepted_json(instance_id)
-            }
+            Error(boundary_call.CallFailed(call_err)) ->
+              problem.from_call_error(call_err, trace_id, req.path)
+
+            Error(boundary_call.ActorError(_)) ->
+              problem.from_error_kind(
+                types_enums.InfraError,
+                trace_id,
+                req.path,
+                "start failed",
+              )
           }
         }
       }
 
     _ -> empty_response(405)
+  }
+}
+
+fn handle_agent_item(
+  req: request.Request(mist.Connection),
+  cfg: types_config.SadConfig,
+  deps: Deps,
+  trace_id: types_core.TraceId,
+  instance_raw: String,
+) -> response.Response(mist.ResponseData) {
+  case req.method {
+    http.Delete ->
+      case parse_instance_id_or_400(instance_raw, trace_id, req.path) {
+        Error(resp) -> resp
+
+        Ok(instance_id) -> {
+          let Deps(agent_manager: manager, ..) = deps
+
+          case
+            boundary_call.call_unwrap_result(
+              manager,
+              call_timeout_ms(cfg),
+              fn(reply_to) { messages.DeleteAgent(instance_id, reply_to) },
+            )
+          {
+            Ok(_) -> accepted_json(instance_id)
+
+            Error(boundary_call.CallFailed(call_err)) ->
+              problem.from_call_error(call_err, trace_id, req.path)
+
+            Error(boundary_call.ActorError(_)) ->
+              problem.from_error_kind(
+                types_enums.InfraError,
+                trace_id,
+                req.path,
+                "delete failed",
+              )
+          }
+        }
+      }
+
+    _ -> problem.not_found(trace_id, req.path)
   }
 }
 

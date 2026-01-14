@@ -1,4 +1,5 @@
 import gleam/dict
+import gleam/erlang/process
 import gleam/option
 import gleam/otp/actor
 import sad/core/agent
@@ -65,6 +66,8 @@ pub fn start_agent(
   config: types_config.SadConfig,
   deps: agent.AgentDeps,
 ) -> agent.AgentRef {
+  let artifact_registry = process.new_subject()
+
   let assert Ok(actor.Started(data: agent_ref, ..)) =
     agent.start_link(
       profile,
@@ -72,6 +75,7 @@ pub fn start_agent(
       dict.new(),
       workspace_root(),
       config,
+      artifact_registry,
       deps,
       1000,
     )

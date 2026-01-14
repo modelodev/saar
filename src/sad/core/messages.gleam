@@ -20,6 +20,7 @@ import gleam/option.{type Option}
 import gleam/result
 import gleam/string
 import sad/core/agent.{type AgentRef}
+import sad/core/artifact_registry_protocol
 import sad/port_pool.{type PortPoolError}
 import sad/types/agent as types_agent
 import sad/types/config.{type SadConfig}
@@ -90,6 +91,10 @@ pub type RegistryMsg {
   UnregisterByInstanceId(types_core.InstanceId)
   Lookup(InstanceKey, Subject(Option(AgentRef)))
   LookupByInstanceId(types_core.InstanceId, Subject(Option(AgentRef)))
+  LookupStatusByInstanceId(
+    types_core.InstanceId,
+    Subject(Option(types_agent.AgentStatusView)),
+  )
   ListByProfile(types_core.ProfileId, Subject(List(types_core.InstanceId)))
   ListAll(Subject(List(types_agent.InstanceSummary)))
   UpdateStatus(types_core.InstanceId, types_agent.AgentStatusView)
@@ -104,6 +109,7 @@ pub type StartArgs {
     params: ResolvedParams,
     workspace: String,
     config: SadConfig,
+    artifact_registry: Subject(artifact_registry_protocol.ArtifactRegistryMsg),
   )
 }
 
@@ -123,6 +129,7 @@ pub type AgentManagerMsg {
   )
   StartAgent(StartArgs, Subject(Result(AgentRef, StartError)))
   StopAgent(types_core.InstanceId, Subject(Result(Nil, StopError)))
+  StartExistingAgent(types_core.InstanceId, Subject(Result(Nil, Nil)))
   DeleteAgent(types_core.InstanceId, Subject(Result(Nil, DeleteError)))
   DeleteWorkerDone(types_core.InstanceId, Result(Nil, DeleteError))
   DeleteWorkerDown(Down)

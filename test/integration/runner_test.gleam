@@ -4,6 +4,7 @@ import gleam/http
 import gleam/int
 import gleam/list
 import gleam/option
+import gleam/otp/actor
 import gleam/result
 import gleam/string
 import gleeunit
@@ -12,6 +13,7 @@ import port_helpers
 import runner_fixtures
 import sad/bridge/http_client
 import sad/bridge/runner
+import sad/core/artifact_registry
 import sad/net/tcp_listener
 import sad/types/config as types_config
 import sad/types/core as types_core
@@ -37,6 +39,8 @@ pub fn transient_echo_happy_test() {
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
   let config = default_config()
+  let assert Ok(actor.Started(data: registry, ..)) =
+    artifact_registry.start_unnamed()
 
   let result =
     runner.execute_transient(
@@ -46,6 +50,7 @@ pub fn transient_echo_happy_test() {
       ".",
       input,
       config,
+      registry,
       False,
       config.timeouts.call_timeout_ms,
     )
@@ -74,6 +79,8 @@ pub fn transient_invalid_json_fails_test() {
     )
   let config = default_config()
   let script = "print('not-json')"
+  let assert Ok(actor.Started(data: registry, ..)) =
+    artifact_registry.start_unnamed()
 
   let result =
     runner.execute_transient(
@@ -83,6 +90,7 @@ pub fn transient_invalid_json_fails_test() {
       ".",
       input,
       config,
+      registry,
       False,
       config.timeouts.call_timeout_ms,
     )
@@ -127,6 +135,8 @@ pub fn streaming_chunks_ok_test() {
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
   let config = default_config()
+  let assert Ok(actor.Started(data: registry, ..)) =
+    artifact_registry.start_unnamed()
 
   let result =
     runner.execute_transient(
@@ -136,6 +146,7 @@ pub fn streaming_chunks_ok_test() {
       ".",
       input,
       config,
+      registry,
       True,
       config.timeouts.call_timeout_ms,
     )
@@ -150,6 +161,7 @@ pub fn streaming_chunks_ok_test() {
       ".",
       input,
       config,
+      registry,
       False,
       config.timeouts.call_timeout_ms,
     )
@@ -167,6 +179,8 @@ pub fn runner_crash_returns_infra_error_test() {
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
   let config = default_config()
+  let assert Ok(actor.Started(data: registry, ..)) =
+    artifact_registry.start_unnamed()
 
   let result =
     runner.execute_transient(
@@ -176,6 +190,7 @@ pub fn runner_crash_returns_infra_error_test() {
       ".",
       input,
       config,
+      registry,
       False,
       config.timeouts.call_timeout_ms,
     )
@@ -205,6 +220,8 @@ pub fn transient_timeout_stops_runner_test() {
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
   let env = port_helpers.base_env(500, [#("SAD_TIMEOUT_MARKER", marker)])
+  let assert Ok(actor.Started(data: registry, ..)) =
+    artifact_registry.start_unnamed()
 
   let result =
     runner.execute_transient(
@@ -214,6 +231,7 @@ pub fn transient_timeout_stops_runner_test() {
       ".",
       input,
       config,
+      registry,
       False,
       50,
     )
@@ -229,6 +247,8 @@ pub fn artifact_collection_respects_globs_test() {
   let workspace = "./build/test-workspaces/artifacts"
   let _ = ensure_workspace(workspace)
   let config = default_config()
+  let assert Ok(actor.Started(data: registry, ..)) =
+    artifact_registry.start_unnamed()
 
   let include_only =
     types_runner.ArtifactConfig(include: ["outputs/**"], exclude: [])
@@ -248,6 +268,7 @@ pub fn artifact_collection_respects_globs_test() {
       ".",
       input,
       config,
+      registry,
       False,
       config.timeouts.call_timeout_ms,
     )
@@ -272,6 +293,7 @@ pub fn artifact_collection_respects_globs_test() {
       ".",
       input,
       config,
+      registry,
       False,
       config.timeouts.call_timeout_ms,
     )
@@ -286,6 +308,8 @@ pub fn artifact_id_is_uuid_v7_test() {
   let workspace = "./build/test-workspaces/artifacts-uuid"
   let _ = ensure_workspace(workspace)
   let sad_config = default_config()
+  let assert Ok(actor.Started(data: registry, ..)) =
+    artifact_registry.start_unnamed()
 
   let artifact_config =
     types_runner.ArtifactConfig(include: ["outputs/**"], exclude: [])
@@ -305,6 +329,7 @@ pub fn artifact_id_is_uuid_v7_test() {
       ".",
       input,
       sad_config,
+      registry,
       False,
       sad_config.timeouts.call_timeout_ms,
     )
@@ -315,7 +340,8 @@ pub fn artifact_id_is_uuid_v7_test() {
   case artifacts {
     [only] -> {
       let types_output.PublicArtifact(id: id, url: url, ..) = only
-      url |> should.equal(option.None)
+      let expected_url = "/artifacts/" <> types_core.artifact_id_to_string(id)
+      url |> should.equal(option.Some(expected_url))
       let assert Ok(parsed) =
         uuid.from_string(types_core.artifact_id_to_string(id))
       uuid.version(parsed) |> should.equal(uuid.V7)

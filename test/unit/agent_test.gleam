@@ -32,6 +32,7 @@ pub fn status_view_uses_phase_and_mode() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -70,6 +71,7 @@ pub fn run_mode_matches_actor_mode() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       deps,
       1000,
     )
@@ -122,6 +124,7 @@ pub fn interact_while_busy_rejected() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       deps,
       1000,
     )
@@ -239,6 +242,7 @@ pub fn logs_attach_sends_history() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -286,6 +290,7 @@ pub fn logs_attach_preserves_metadata() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -332,6 +337,7 @@ pub fn attach_logs_takeover() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -371,6 +377,7 @@ pub fn attach_logs_receives_events() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -412,6 +419,7 @@ pub fn interact_delegates_to_actor() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       deps,
       1000,
     )
@@ -466,6 +474,7 @@ pub fn interact_respects_timeout() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -513,6 +522,7 @@ pub fn killing_worker_does_not_crash_actor() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       deps,
       1000,
     )
@@ -556,6 +566,7 @@ pub fn timeout_does_not_crash_actor() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -589,6 +600,7 @@ pub fn hard_timeout_not_extended_by_output() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -635,6 +647,7 @@ pub fn stop_instance_idempotent() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -661,6 +674,7 @@ pub fn stop_instance_user_requested() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -686,6 +700,7 @@ pub fn stop_instance_idle_timeout() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -712,6 +727,7 @@ pub fn stop_expected_uses_actor_stop() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -734,6 +750,7 @@ pub fn terminate_node_shutting_down() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )
@@ -774,6 +791,7 @@ pub fn no_cancel_endpoint() {
       dict.new(),
       "./workspaces/test",
       config,
+      process.new_subject(),
       deps,
       1000,
     )

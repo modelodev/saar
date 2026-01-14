@@ -7,7 +7,8 @@
   "parameters": {},
   "runner": {
     "type": "slow_poke",
-    "tool_config": {"script": "slow_poke.py"}
+    "tool_config": {"script": "slow_poke.py"},
+    "runtime": {"mode": "managed_port"}
   },
   "interface": {
     "protocol": "http",

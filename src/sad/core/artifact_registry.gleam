@@ -11,21 +11,35 @@
 //// - TTL/GC policies (v0 keeps artifacts until explicit purge).
 ////
 //// Relationships:
-//// - Message protocol lives in `sad/core/messages.ArtifactRegistryMsg`.
-//// - Boundary callers should use `sad/core/boundary_call` with `sad/core/messages.ArtifactRegistryMsg`.
+//// - Message protocol lives in `sad/core/artifact_registry_protocol.ArtifactRegistryMsg`.
+//// - Boundary callers should use `sad/core/boundary_call` with `sad/core/artifact_registry_protocol.ArtifactRegistryMsg`.
 
 import gleam/dict
 import gleam/erlang/process
 import gleam/list
 import gleam/option
 import gleam/otp/actor
-import sad/core/messages
+import sad/core/artifact_registry_protocol
 import sad/types/core as types_core
 import youid/uuid
 
+/// Starts an unnamed ArtifactRegistry actor.
+///
+/// This is intended for tests and other local compositions that do not require a
+/// globally registered name.
+pub fn start_unnamed() -> actor.StartResult(
+  process.Subject(artifact_registry_protocol.ArtifactRegistryMsg),
+) {
+  actor.new(dict.new())
+  |> actor.on_message(handle_message)
+  |> actor.start
+}
+
 pub fn start(
-  name: process.Name(messages.ArtifactRegistryMsg),
-) -> actor.StartResult(process.Subject(messages.ArtifactRegistryMsg)) {
+  name: process.Name(artifact_registry_protocol.ArtifactRegistryMsg),
+) -> actor.StartResult(
+  process.Subject(artifact_registry_protocol.ArtifactRegistryMsg),
+) {
   actor.new(dict.new())
   |> actor.named(name)
   |> actor.on_message(handle_message)
@@ -33,30 +47,39 @@ pub fn start(
 }
 
 type State =
-  dict.Dict(types_core.ArtifactId, messages.ArtifactEntry)
+  dict.Dict(types_core.ArtifactId, artifact_registry_protocol.ArtifactEntry)
 
 fn handle_message(
   state: State,
-  msg: messages.ArtifactRegistryMsg,
-) -> actor.Next(State, messages.ArtifactRegistryMsg) {
+  msg: artifact_registry_protocol.ArtifactRegistryMsg,
+) -> actor.Next(State, artifact_registry_protocol.ArtifactRegistryMsg) {
   case msg {
-    messages.RegisterArtifact(path, mime, instance_id, reply_to) -> {
+    artifact_registry_protocol.RegisterArtifact(
+      path,
+      mime,
+      instance_id,
+      reply_to,
+    ) -> {
       let id = types_core.artifact_id(uuid.v7_string())
       process.send(reply_to, id)
 
       actor.continue(dict.insert(
         state,
         id,
-        messages.ArtifactEntry(path: path, mime: mime, instance_id: instance_id),
+        artifact_registry_protocol.ArtifactEntry(
+          path: path,
+          mime: mime,
+          instance_id: instance_id,
+        ),
       ))
     }
 
-    messages.LookupArtifact(artifact_id, reply_to) -> {
+    artifact_registry_protocol.LookupArtifact(artifact_id, reply_to) -> {
       process.send(reply_to, dict.get(state, artifact_id) |> option.from_result)
       actor.continue(state)
     }
 
-    messages.PurgeByInstance(instance_id, reply_to) -> {
+    artifact_registry_protocol.PurgeByInstance(instance_id, reply_to) -> {
       let #(next, removed) = purge(state, instance_id)
       process.send(reply_to, removed)
       actor.continue(next)
@@ -70,7 +93,10 @@ fn purge(state: State, instance_id: types_core.InstanceId) -> #(State, Int) {
   |> list.fold(#(dict.new(), 0), fn(acc, item) {
     let #(next, removed) = acc
     let #(artifact_id, entry) = item
-    let messages.ArtifactEntry(instance_id: entry_instance_id, ..) = entry
+    let artifact_registry_protocol.ArtifactEntry(
+      instance_id: entry_instance_id,
+      ..,
+    ) = entry
 
     case entry_instance_id == instance_id {
       True -> #(next, removed + 1)

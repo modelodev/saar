@@ -85,6 +85,18 @@ pub fn workspace_path_to_absolute(root: String, path: WorkspacePath) -> String {
   filepath.join(root, workspace_path_to_string(path))
 }
 
+/// Builds an absolute path that is safe to read within a workspace.
+///
+/// The returned path is guaranteed not to contain symlink segments that would
+/// escape the `root` directory.
+pub fn workspace_path_to_symlink_safe_absolute(
+  root: String,
+  path: WorkspacePath,
+) -> Result(String, PathError) {
+  use _ <- result.try(assert_no_symlink(root, path))
+  Ok(workspace_path_to_absolute(root, path))
+}
+
 pub fn workspace_path_join(
   root: String,
   raw: String,
@@ -97,8 +109,10 @@ pub fn read_artifact_symlink_safe(
   root: String,
   path: WorkspacePath,
 ) -> Result(String, PathError) {
-  use _ <- result.try(assert_no_symlink(root, path))
-  let full_path = workspace_path_to_absolute(root, path)
+  use full_path <- result.try(workspace_path_to_symlink_safe_absolute(
+    root,
+    path,
+  ))
 
   case simplifile.read(full_path) {
     Ok(contents) -> Ok(contents)

@@ -92,6 +92,11 @@ fn handle_message(
       actor.continue(state)
     }
 
+    messages.LookupStatusByInstanceId(instance_id, reply_to) -> {
+      process.send(reply_to, lookup_status_by_instance_id(state, instance_id))
+      actor.continue(state)
+    }
+
     messages.ListByProfile(profile_id, reply_to) -> {
       process.send(reply_to, list_by_profile(state, profile_id))
       actor.continue(state)
@@ -226,7 +231,79 @@ fn handle_agent_down(
 
   case dict.get(state.by_pid, down_pid) {
     Error(_) -> actor.continue(state)
-    Ok(instance_id) -> remove_entry(state, instance_id)
+
+    Ok(instance_id) -> keep_entry_on_down(state, instance_id, down_pid, down)
+  }
+}
+
+fn keep_entry_on_down(
+  state: State,
+  instance_id: types_core.InstanceId,
+  down_pid: process.Pid,
+  down: process.Down,
+) -> actor.Next(State, messages.RegistryMsg) {
+  case dict.get(state.by_instance, instance_id) {
+    Error(_) -> {
+      let next_by_pid = dict.delete(state.by_pid, down_pid)
+      actor.continue(State(..state, by_pid: next_by_pid))
+    }
+
+    Ok(RegistryEntry(summary: summary, monitor: monitor, ..) as entry) -> {
+      process.demonitor_process(monitor)
+
+      let selector =
+        state.selector
+        |> process.deselect_specific_monitor(monitor)
+
+      let updated_status = status_after_down(summary.status, down)
+
+      let updated_summary =
+        types_agent.InstanceSummary(
+          ..summary,
+          status: updated_status,
+          status_updated_at: ffi.now_ms(),
+        )
+
+      let next_entry = RegistryEntry(..entry, summary: updated_summary)
+
+      let next_state =
+        State(
+          by_instance: dict.insert(state.by_instance, instance_id, next_entry),
+          by_pid: dict.delete(state.by_pid, down_pid),
+          selector: selector,
+        )
+
+      actor.continue(next_state)
+      |> actor.with_selector(selector)
+    }
+  }
+}
+
+fn status_after_down(
+  status: types_agent.AgentStatusView,
+  down: process.Down,
+) -> types_agent.AgentStatusView {
+  let stopped_status =
+    types_agent.AgentStatusView(
+      ..status,
+      phase: types_agent.Stopped,
+      mode: types_agent.RunIdle,
+      assigned_port: None,
+      failure_reason: None,
+    )
+
+  let failed_status =
+    types_agent.AgentStatusView(
+      ..status,
+      phase: types_agent.Failed,
+      mode: types_agent.RunIdle,
+      assigned_port: None,
+      failure_reason: Some("agent_down"),
+    )
+
+  case down {
+    process.ProcessDown(_ref, _pid, process.Killed) -> stopped_status
+    _ -> failed_status
   }
 }
 
@@ -281,6 +358,20 @@ fn lookup_by_instance_id(
   case dict.get(state.by_instance, instance_id) {
     Error(_) -> None
     Ok(RegistryEntry(agent: agent_ref, ..)) -> Some(agent_ref)
+  }
+}
+
+fn lookup_status_by_instance_id(
+  state: State,
+  instance_id: types_core.InstanceId,
+) -> Option(types_agent.AgentStatusView) {
+  case dict.get(state.by_instance, instance_id) {
+    Error(_) -> None
+
+    Ok(RegistryEntry(summary: summary, ..)) -> {
+      let types_agent.InstanceSummary(status: status, ..) = summary
+      Some(status)
+    }
   }
 }
 

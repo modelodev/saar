@@ -32,6 +32,8 @@ import sad/bridge/port_process
 import sad/bridge/runner
 import sad/bridge/runner_contract
 import sad/bridge/serialization
+import sad/core/artifact_registry_protocol
+import sad/core/boundary_call
 import sad/streams/sink
 import sad/streams/stream_pump
 import sad/types/config as types_config
@@ -58,6 +60,9 @@ pub fn run(
   params: resolved_params.ResolvedParams,
   workspace: String,
   config: types_config.SadConfig,
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
   assigned_port: Option(Int),
   streaming: Bool,
   stream_sink: Option(sink.StreamSink),
@@ -90,8 +95,16 @@ pub fn run(
         Ok(cap) ->
           case streaming && cap.streaming {
             True ->
-              execute_runner_streaming(input, workspace, config, stream_sink)
-            False -> execute_runner_sync(input, workspace, config)
+              execute_runner_streaming(
+                input,
+                instance_id,
+                workspace,
+                config,
+                artifact_registry,
+                stream_sink,
+              )
+            False ->
+              execute_runner_sync(input, workspace, config, artifact_registry)
           }
       }
 
@@ -131,6 +144,9 @@ fn execute_runner_sync(
   input: types_input.SadInput,
   workspace: String,
   config: types_config.SadConfig,
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   let #(runner_path, runner_args) = runner_command(input.runner_def, config)
 
@@ -153,6 +169,7 @@ fn execute_runner_sync(
   ))
 
   let env = list.append(runner_env(), dict.to_list(env_map))
+  let env = list.append(env, [#("SAD_WORKSPACE", workspace)])
 
   runner.execute_transient(
     runner_path,
@@ -161,6 +178,7 @@ fn execute_runner_sync(
     workspace,
     input,
     config,
+    artifact_registry,
     False,
     0,
   )
@@ -172,8 +190,12 @@ type StreamFlags {
 
 fn execute_runner_streaming(
   input: types_input.SadInput,
+  instance_id: types_core.InstanceId,
   workspace: String,
   config: types_config.SadConfig,
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
   stream_sink: Option(sink.StreamSink),
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   use sink <- result.try(case stream_sink {
@@ -224,6 +246,7 @@ fn execute_runner_streaming(
   ))
 
   let env = list.append(runner_env(), dict.to_list(env_map))
+  let env = list.append(env, [#("SAD_WORKSPACE", workspace)])
   let env = append_wrapper_env(env, config)
 
   let types_config.RunnerExecSettings(
@@ -260,7 +283,17 @@ fn execute_runner_streaming(
 
   let flags = StreamFlags(agui_message_started: False, a2ui_started: False)
 
-  read_runner_stream(proc, read_timeout_ms, input, sink, pump, flags)
+  read_runner_stream(
+    proc,
+    read_timeout_ms,
+    input,
+    sink,
+    pump,
+    flags,
+    config,
+    artifact_registry,
+    instance_id,
+  )
 }
 
 fn read_runner_stream(
@@ -270,12 +303,27 @@ fn read_runner_stream(
   sink: sink.StreamSink,
   pump: stream_pump.StreamPump,
   flags: StreamFlags,
+  config: types_config.SadConfig,
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
+  instance_id: types_core.InstanceId,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   let #(proc, out) = port_process.read_line(proc, read_timeout_ms)
 
   case out {
     Error(port_process.Timeout) ->
-      read_runner_stream(proc, read_timeout_ms, input, sink, pump, flags)
+      read_runner_stream(
+        proc,
+        read_timeout_ms,
+        input,
+        sink,
+        pump,
+        flags,
+        config,
+        artifact_registry,
+        instance_id,
+      )
 
     Error(port_process.NoeolFragment(fragment)) ->
       Error(types_output.sad_error(
@@ -310,12 +358,32 @@ fn read_runner_stream(
       |> result.try(fn(event) {
         case event {
           types_runner.RunnerEventLog(_, _) ->
-            read_runner_stream(proc, read_timeout_ms, input, sink, pump, flags)
+            read_runner_stream(
+              proc,
+              read_timeout_ms,
+              input,
+              sink,
+              pump,
+              flags,
+              config,
+              artifact_registry,
+              instance_id,
+            )
 
           types_runner.RunnerEventChunk(delta) -> {
             let flags =
               emit_chunk(pump, sink, input.context.trace_id, delta, flags)
-            read_runner_stream(proc, read_timeout_ms, input, sink, pump, flags)
+            read_runner_stream(
+              proc,
+              read_timeout_ms,
+              input,
+              sink,
+              pump,
+              flags,
+              config,
+              artifact_registry,
+              instance_id,
+            )
           }
 
           types_runner.RunnerEventResult(response) -> {
@@ -324,6 +392,9 @@ fn read_runner_stream(
                 response,
                 input.runner_def.artifact_config,
                 input.context.trace_id,
+                config,
+                artifact_registry,
+                instance_id,
               )
 
             emit_terminal(pump, sink, input.context.trace_id, final, flags)
@@ -543,6 +614,11 @@ fn runner_response_to_result(
   response: types_runner.RunnerResponse,
   artifact_cfg: types_runner.ArtifactConfig,
   trace_id: types_core.TraceId,
+  config: types_config.SadConfig,
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
+  instance_id: types_core.InstanceId,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   case response {
     types_runner.RunnerFailure(error: err, ..) ->
@@ -558,7 +634,7 @@ fn runner_response_to_result(
           )
       }
 
-      let artifacts =
+      let collected =
         artifacts.collect(runner_artifacts, artifact_cfg)
         |> result.map_error(fn(err) {
           types_output.sad_error(
@@ -568,7 +644,15 @@ fn runner_response_to_result(
           )
         })
 
-      use public_artifacts <- result.try(artifacts)
+      use collected_artifacts <- result.try(collected)
+
+      use public_artifacts <- result.try(register_artifacts(
+        config,
+        artifact_registry,
+        instance_id,
+        collected_artifacts,
+        trace_id,
+      ))
 
       Ok(types_output.InteractionResult(
         data: response_data,
@@ -577,6 +661,60 @@ fn runner_response_to_result(
       ))
     }
   }
+}
+
+fn register_artifacts(
+  config: types_config.SadConfig,
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
+  instance_id: types_core.InstanceId,
+  collected: List(artifacts.CollectedArtifact),
+  trace_id: types_core.TraceId,
+) -> Result(List(types_output.PublicArtifact), types_output.InteractionError) {
+  let types_config.SadConfig(timeouts: timeouts, storage: storage, ..) = config
+  let types_config.SadTimeouts(call_timeout_ms: call_timeout_ms, ..) = timeouts
+  let types_config.StorageConfig(artifacts: artifacts_cfg, ..) = storage
+  let types_config.ArtifactStoreConfig(base_path: base_path) = artifacts_cfg
+
+  collected
+  |> list.fold(Ok([]), fn(acc, item) {
+    use items <- result.try(acc)
+
+    let artifacts.CollectedArtifact(name: name, path: path, mime: mime) = item
+
+    let id_out =
+      boundary_call.call(artifact_registry, call_timeout_ms, fn(reply_to) {
+        artifact_registry_protocol.RegisterArtifact(
+          path,
+          mime,
+          instance_id,
+          reply_to,
+        )
+      })
+      |> result.map_error(fn(_err) {
+        types_output.sad_error(
+          trace_id,
+          types_enums.InfraError,
+          "artifact_registry_unavailable",
+        )
+      })
+
+    use artifact_id <- result.try(id_out)
+
+    let url = base_path <> types_core.artifact_id_to_string(artifact_id)
+
+    Ok([
+      types_output.PublicArtifact(
+        id: artifact_id,
+        name: name,
+        url: Some(url),
+        mime: mime,
+      ),
+      ..items
+    ])
+  })
+  |> result.map(list.reverse)
 }
 
 fn execute_http_sync(

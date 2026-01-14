@@ -22,12 +22,15 @@ import gleam/otp/actor
 import gleam/result
 import gleam/string
 import mist
+import sad/core/artifact_registry_protocol
 import sad/core/messages
 import sad/gateway/agents_api
+import sad/gateway/artifacts_api
 import sad/gateway/auth
 import sad/gateway/health
 import sad/gateway/problem
 import sad/gateway/sys_api
+import sad/gateway/ui_proxy_api
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
@@ -36,6 +39,9 @@ import youid/uuid
 pub fn start(
   config: types_config.SadConfig,
   registry: process.Subject(messages.RegistryMsg),
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
   profiles: process.Subject(messages.ProfilesMsg),
   agent_manager: process.Subject(messages.AgentManagerMsg),
 ) -> actor.StartResult(Nil) {
@@ -49,9 +55,19 @@ pub fn start(
     )
 
   let agents_deps = agents_api.Deps(registry: registry)
+  let artifacts_deps = artifacts_api.Deps(artifact_registry: artifact_registry)
+  let ui_deps = ui_proxy_api.Deps(registry: registry, profiles: profiles)
 
   let handler = fn(req) {
-    handle_request(req, config, sys_deps, agents_deps, profiles)
+    handle_request(
+      req,
+      config,
+      sys_deps,
+      agents_deps,
+      artifacts_deps,
+      ui_deps,
+      profiles,
+    )
   }
 
   mist.new(handler)
@@ -66,6 +82,8 @@ fn handle_request(
   cfg: types_config.SadConfig,
   sys_deps: sys_api.Deps,
   agents_deps: agents_api.Deps,
+  artifacts_deps: artifacts_api.Deps,
+  ui_deps: ui_proxy_api.Deps,
   profiles: process.Subject(messages.ProfilesMsg),
 ) -> response.Response(mist.ResponseData) {
   let trace_id = request_trace_id()
@@ -92,8 +110,29 @@ fn handle_request(
             True -> sys_api.handle(req, cfg, sys_deps, trace_id)
             False ->
               case string.starts_with(req.path, "/agents") {
-                True -> agents_api.handle(req, cfg, agents_deps, trace_id)
-                False -> problem.not_found(trace_id, req.path)
+                True ->
+                  case request.path_segments(req) {
+                    ["agents", _, "ui", ..] ->
+                      ui_proxy_api.handle(req, cfg, ui_deps, trace_id)
+
+                    _ ->
+                      case string.contains(req.path, "/ui/") {
+                        True -> ui_proxy_api.handle(req, cfg, ui_deps, trace_id)
+                        False ->
+                          agents_api.handle(req, cfg, agents_deps, trace_id)
+                      }
+                  }
+
+                False ->
+                  case string.starts_with(req.path, "/artifacts") {
+                    True ->
+                      artifacts_api.handle(req, cfg, artifacts_deps, trace_id)
+                    False ->
+                      case string.starts_with(req.path, "/ui") {
+                        True -> ui_proxy_api.handle(req, cfg, ui_deps, trace_id)
+                        False -> problem.not_found(trace_id, req.path)
+                      }
+                  }
               }
           }
 

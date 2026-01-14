@@ -208,8 +208,6 @@ pub fn post_agents_interact_streaming_a2ui_header_switches_wire() {
 fn start_sad() -> String {
   port_helpers.ensure_wrapper_path()
 
-  let names = supervisor_names.new_names()
-
   let cfg0 =
     config_loader.load_from_path(
       "./test/fixtures/config/test_config.toml",
@@ -225,6 +223,8 @@ fn start_sad() -> String {
 
   let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
   tcp_listener.close(listener)
+
+  let names = supervisor_names.new_names_with_suffix(int.to_string(port))
 
   let cfg = types_config.SadConfig(..cfg0, server_port: port)
 

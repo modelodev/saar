@@ -36,6 +36,7 @@ pub fn start(
       params: params,
       workspace: workspace,
       config: config,
+      artifact_registry: artifact_registry,
     ) = args
 
     agent.start_link(
@@ -44,6 +45,7 @@ pub fn start(
       params,
       workspace,
       config,
+      artifact_registry,
       agent.default_deps(),
       agent_init_timeout_ms(config),
     )

@@ -47,6 +47,15 @@ pub type HttpResponse {
   HttpResponse(status: Int, headers: List(#(String, String)), body: String)
 }
 
+/// Binary HTTP response for proxying.
+pub type HttpResponseBits {
+  HttpResponseBits(
+    status: Int,
+    headers: List(#(String, String)),
+    body: BitArray,
+  )
+}
+
 /// Small ADT for HTTP client failures.
 pub type HttpError {
   ConnectionError(String)
@@ -143,6 +152,37 @@ pub fn request_sync_bytes(
       ))
     Error(_) -> Error(InvalidUtf8Body)
   }
+}
+
+/// Executes a synchronous HTTP request returning raw bytes.
+///
+/// `max_body_bytes` is enforced for the response body.
+pub fn request_sync_bits(
+  method: Method,
+  url: String,
+  headers: Dict(String, String),
+  body: Option(bytes_tree.BytesTree),
+  timeout_ms: Int,
+  max_body_bytes: Int,
+) -> Result(HttpResponseBits, HttpError) {
+  use req <- result.try(build_request_bytes(method, url, headers, body))
+  use client_ref <- result.try(start_async(req))
+
+  let deadline_ms = now_ms() + int.max(timeout_ms, 1)
+
+  use #(status, response_headers, body_bits) <- result.try(collect_response(
+    deadline_ms,
+    client_ref,
+    max_body_bytes,
+  ))
+
+  hackney.close(client_ref)
+
+  Ok(HttpResponseBits(
+    status: status,
+    headers: response_headers,
+    body: body_bits,
+  ))
 }
 
 /// Fetches response bytes (body only) from a URL.

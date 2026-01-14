@@ -1,4 +1,5 @@
 import gleam/dict
+import gleam/erlang/process
 import gleam/option
 import gleeunit
 import gleeunit/should
@@ -51,8 +52,17 @@ pub fn start_args_contains_snapshot_fields() {
   let params = dict.new()
   let workspace = "/tmp/workspace"
   let config = types_config.default_sad_config()
+  let artifact_registry = process.new_subject()
 
-  let args = messages.StartArgs(profile, instance_id, params, workspace, config)
+  let args =
+    messages.StartArgs(
+      profile: profile,
+      instance_id: instance_id,
+      params: params,
+      workspace: workspace,
+      config: config,
+      artifact_registry: artifact_registry,
+    )
 
   let messages.StartArgs(
     profile: snapshot,
@@ -60,6 +70,7 @@ pub fn start_args_contains_snapshot_fields() {
     params: got_params,
     workspace: got_workspace,
     config: got_config,
+    artifact_registry: _,
   ) = args
 
   snapshot.meta.id |> should.equal(profile_id)

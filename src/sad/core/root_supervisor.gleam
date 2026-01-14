@@ -26,6 +26,7 @@ import sad/core/agent
 import sad/core/agent_factory_supervisor
 import sad/core/agent_manager
 import sad/core/artifact_registry
+import sad/core/artifact_registry_protocol
 import sad/core/messages
 import sad/core/port_pool_actor
 import sad/core/profiles
@@ -41,7 +42,9 @@ pub opaque type SupervisorRef {
   SupervisorRef(
     supervisor: Supervisor,
     registry: process.Subject(messages.RegistryMsg),
-    artifact_registry: process.Subject(messages.ArtifactRegistryMsg),
+    artifact_registry: process.Subject(
+      artifact_registry_protocol.ArtifactRegistryMsg,
+    ),
     port_pool: process.Subject(messages.PortPoolMsg),
     profiles: process.Subject(messages.ProfilesMsg),
     agent_manager: process.Subject(messages.AgentManagerMsg),
@@ -106,6 +109,7 @@ pub fn start(
     |> supervisor.add(http_server_child_spec(
       config,
       registry_subject,
+      artifact_registry_subject,
       profiles_subject,
       agent_manager_subject,
     ))
@@ -134,9 +138,9 @@ fn registry_child_spec(
 }
 
 fn artifact_registry_child_spec(
-  name: process.Name(messages.ArtifactRegistryMsg),
+  name: process.Name(artifact_registry_protocol.ArtifactRegistryMsg),
 ) -> supervision.ChildSpecification(
-  process.Subject(messages.ArtifactRegistryMsg),
+  process.Subject(artifact_registry_protocol.ArtifactRegistryMsg),
 ) {
   supervision.worker(fn() { artifact_registry.start(name) })
 }
@@ -160,7 +164,9 @@ fn agent_manager_child_spec(
   name: process.Name(messages.AgentManagerMsg),
   config: types_config.SadConfig,
   registry: process.Subject(messages.RegistryMsg),
-  artifact_registry: process.Subject(messages.ArtifactRegistryMsg),
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
   port_pool: process.Subject(messages.PortPoolMsg),
   profiles_subject: process.Subject(messages.ProfilesMsg),
   agent_factory: factory_supervisor.Supervisor(
@@ -195,11 +201,20 @@ fn agent_factory_child_spec(
 fn http_server_child_spec(
   config: types_config.SadConfig,
   registry: process.Subject(messages.RegistryMsg),
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
   profiles: process.Subject(messages.ProfilesMsg),
   agent_manager: process.Subject(messages.AgentManagerMsg),
 ) -> supervision.ChildSpecification(Nil) {
   supervision.worker(fn() {
-    http_server.start(config, registry, profiles, agent_manager)
+    http_server.start(
+      config,
+      registry,
+      artifact_registry,
+      profiles,
+      agent_manager,
+    )
   })
 }
 
@@ -211,7 +226,7 @@ pub fn registry(ref: SupervisorRef) -> process.Subject(messages.RegistryMsg) {
 /// Returns the named artifact registry subject.
 pub fn artifact_registry(
   ref: SupervisorRef,
-) -> process.Subject(messages.ArtifactRegistryMsg) {
+) -> process.Subject(artifact_registry_protocol.ArtifactRegistryMsg) {
   ref.artifact_registry
 }
 

@@ -17,6 +17,7 @@
 //// - Produces `Dict(ProfileId, Profile)` used by `/sys/reload-profiles`.
 //// - Uses `sad/core/messages.ProfilesMsg.SetProfiles` to swap the full set.
 
+import filepath
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/erlang/port
@@ -313,9 +314,23 @@ fn resolve_runner_script(
   profile_id: String,
   runner_type: String,
 ) -> Result(String, ProfilesSourceError) {
-  let runners_dir = source_root <> "/runners"
-  let candidate_exec = runners_dir <> "/" <> runner_type
-  let candidate_py = runners_dir <> "/" <> runner_type <> ".py"
+  let root_out = case filepath.is_absolute(source_root) {
+    True -> Ok(source_root)
+    False ->
+      simplifile.current_directory()
+      |> result.map(fn(cwd) { filepath.join(cwd, source_root) })
+      |> result.map_error(fn(err) {
+        SourceIoError(
+          message: "failed to get cwd: " <> simplifile.describe_error(err),
+        )
+      })
+  }
+
+  use root <- result.try(root_out)
+
+  let runners_dir = filepath.join(root, "runners")
+  let candidate_exec = filepath.join(runners_dir, runner_type)
+  let candidate_py = filepath.join(runners_dir, runner_type <> ".py")
 
   // Prefer an executable file without extension.
   case is_executable_file(candidate_exec) {

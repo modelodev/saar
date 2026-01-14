@@ -7,7 +7,8 @@
   "parameters": {},
   "runner": {
     "type": "echo_server",
-    "tool_config": {"script": "echo_server.py"}
+    "tool_config": {"script": "echo_server.py"},
+    "runtime": {"mode": "managed_port"}
   },
   "interface": {
     "protocol": "http",

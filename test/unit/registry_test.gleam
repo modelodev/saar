@@ -272,6 +272,7 @@ fn start_test_agent_ref() -> #(agent.AgentRef, process.Pid) {
       dict.new(),
       agent_helpers.workspace_root(),
       agent_helpers.default_config(),
+      process.new_subject(),
       agent.default_deps(),
       1000,
     )

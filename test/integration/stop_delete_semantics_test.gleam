@@ -10,6 +10,7 @@ import gleeunit/should
 import port_helpers
 import sad/app_state
 import sad/core/agent
+import sad/core/artifact_registry_protocol
 import sad/core/boundary_call
 import sad/core/messages
 import sad/core/root_supervisor
@@ -38,7 +39,7 @@ pub fn stop_releases_managed_port_test() {
   let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
   let cfg = config_with_port_range(port)
 
-  let #(names, manager, _registry, _artifact_registry) = start_root(cfg)
+  let #(names, manager, _registry, artifact_registry) = start_root(cfg)
   tcp_listener.close(listener)
 
   let profile = echo_server_profile_managed_port()
@@ -46,7 +47,7 @@ pub fn stop_releases_managed_port_test() {
   let assert Ok(id1) = types_core.instance_id("inst-stop-1")
   let assert Ok(id2) = types_core.instance_id("inst-stop-2")
 
-  let a1 = start_instance(manager, profile, id1, cfg)
+  let a1 = start_instance(manager, artifact_registry, profile, id1, cfg)
   wait_for_phase(a1, types_agent.ReadyContinuous, 400)
 
   boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
@@ -54,7 +55,7 @@ pub fn stop_releases_managed_port_test() {
   })
   |> test_assertions.assert_ok
 
-  let a2 = start_instance(manager, profile, id2, cfg)
+  let a2 = start_instance(manager, artifact_registry, profile, id2, cfg)
   wait_for_phase(a2, types_agent.ReadyContinuous, 400)
 
   let _ = names
@@ -69,7 +70,8 @@ pub fn delete_purges_artifacts_and_workspace_test() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
   let assert Ok(instance_id) = types_core.instance_id("inst-del-1")
 
-  let _agent_ref = start_instance(manager, profile, instance_id, cfg)
+  let _agent_ref =
+    start_instance(manager, artifact_registry, profile, instance_id, cfg)
 
   let workspace_dir = workspace_for(cfg, instance_id)
   let file_path = filepath.join(workspace_dir, "artifact.txt")
@@ -81,7 +83,12 @@ pub fn delete_purges_artifacts_and_workspace_test() {
 
   let artifact_id =
     boundary_call.call(artifact_registry, 1000, fn(reply_to) {
-      messages.RegisterArtifact(path, "text/plain", instance_id, reply_to)
+      artifact_registry_protocol.RegisterArtifact(
+        path,
+        "text/plain",
+        instance_id,
+        reply_to,
+      )
     })
     |> test_assertions.assert_ok
 
@@ -91,7 +98,7 @@ pub fn delete_purges_artifacts_and_workspace_test() {
   |> test_assertions.assert_ok
 
   boundary_call.call(artifact_registry, 1000, fn(reply_to) {
-    messages.LookupArtifact(artifact_id, reply_to)
+    artifact_registry_protocol.LookupArtifact(artifact_id, reply_to)
   })
   |> should.equal(Ok(None))
 
@@ -120,13 +127,18 @@ pub fn delete_cleanup_failure_returns_500_test() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
   let assert Ok(instance_id) = types_core.instance_id("inst-del-fail-1")
 
-  let _ = start_instance(manager, profile, instance_id, cfg)
+  let _ = start_instance(manager, artifact_registry, profile, instance_id, cfg)
 
   let assert Ok(path) = workspace.workspace_path_validate("x.txt")
 
   let _artifact_id =
     boundary_call.call(artifact_registry, 1000, fn(reply_to) {
-      messages.RegisterArtifact(path, "text/plain", instance_id, reply_to)
+      artifact_registry_protocol.RegisterArtifact(
+        path,
+        "text/plain",
+        instance_id,
+        reply_to,
+      )
     })
     |> test_assertions.assert_ok
 
@@ -148,13 +160,18 @@ pub fn delete_cleanup_failure_still_purges_artifacts_test() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
   let assert Ok(instance_id) = types_core.instance_id("inst-del-fail-2")
 
-  let _ = start_instance(manager, profile, instance_id, cfg)
+  let _ = start_instance(manager, artifact_registry, profile, instance_id, cfg)
 
   let assert Ok(path) = workspace.workspace_path_validate("x.txt")
 
   let artifact_id =
     boundary_call.call(artifact_registry, 1000, fn(reply_to) {
-      messages.RegisterArtifact(path, "text/plain", instance_id, reply_to)
+      artifact_registry_protocol.RegisterArtifact(
+        path,
+        "text/plain",
+        instance_id,
+        reply_to,
+      )
     })
     |> test_assertions.assert_ok
 
@@ -164,7 +181,7 @@ pub fn delete_cleanup_failure_still_purges_artifacts_test() {
     })
 
   boundary_call.call(artifact_registry, 1000, fn(reply_to) {
-    messages.LookupArtifact(artifact_id, reply_to)
+    artifact_registry_protocol.LookupArtifact(artifact_id, reply_to)
   })
   |> should.equal(Ok(None))
 }
@@ -175,7 +192,7 @@ fn start_root(
   supervisor_names.RootNames,
   process.Subject(messages.AgentManagerMsg),
   process.Subject(messages.RegistryMsg),
-  process.Subject(messages.ArtifactRegistryMsg),
+  process.Subject(artifact_registry_protocol.ArtifactRegistryMsg),
 ) {
   let cfg = types_config.SadConfig(..cfg, server_port: 0)
 
@@ -203,6 +220,9 @@ fn start_root(
 
 fn start_instance(
   manager: process.Subject(messages.AgentManagerMsg),
+  artifact_registry: process.Subject(
+    artifact_registry_protocol.ArtifactRegistryMsg,
+  ),
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   cfg: types_config.SadConfig,
@@ -214,6 +234,7 @@ fn start_instance(
       params: dict.new(),
       workspace: "./workspaces/test",
       config: cfg,
+      artifact_registry: artifact_registry,
     )
 
   boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
