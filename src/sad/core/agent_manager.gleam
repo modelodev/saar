@@ -588,12 +588,10 @@ fn provision_continuous(
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
 ) -> Result(#(agent.AgentState, Option(Int)), types_agent.FailureReason) {
-  let types_runner.RuntimeConfig(mode: mode, ..) = profile.runner.runtime
-
-  case mode {
+  case profile.runner.runtime {
     types_runner.NoNetwork -> Error(types_agent.NoNetwork)
 
-    types_runner.ManagedPort ->
+    types_runner.ManagedPort(_, _) ->
       provision_continuous_managed_port(
         config,
         port_pool,

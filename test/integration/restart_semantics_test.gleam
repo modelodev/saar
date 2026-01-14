@@ -118,11 +118,7 @@ fn echo_server_profile_managed_port() -> types_profile.Profile {
   let types_profile.Profile(runner: runner0, ..) = profile0
 
   let runtime =
-    types_runner.RuntimeConfig(
-      mode: types_runner.ManagedPort,
-      port_env_var: option.None,
-      host_env_var: option.None,
-    )
+    types_runner.ManagedPort(host_env_var: option.None, port_env_var: option.None)
 
   let runner1 =
     types_runner.Runner(

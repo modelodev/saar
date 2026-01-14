@@ -167,17 +167,27 @@ fn tool_config_to_json(config: types_runner.ToolConfig) -> Json {
 }
 
 fn runtime_config_to_json(config: types_runner.RuntimeConfig) -> Json {
-  json.object([
-    #("mode", json.string(types_runner.network_mode_to_string(config.mode))),
-    #("port_env_var", case config.port_env_var {
-      option.Some(value) -> json.string(value)
-      option.None -> json.null()
-    }),
-    #("host_env_var", case config.host_env_var {
-      option.Some(value) -> json.string(value)
-      option.None -> json.null()
-    }),
-  ])
+  case config {
+    types_runner.ManagedPort(host_env_var, port_env_var) ->
+      json.object([
+        #("mode", json.string("managed_port")),
+        #("port_env_var", case port_env_var {
+          option.Some(value) -> json.string(value)
+          option.None -> json.null()
+        }),
+        #("host_env_var", case host_env_var {
+          option.Some(value) -> json.string(value)
+          option.None -> json.null()
+        }),
+      ])
+
+    types_runner.NoNetwork ->
+      json.object([
+        #("mode", json.string("no_network")),
+        #("port_env_var", json.null()),
+        #("host_env_var", json.null()),
+      ])
+  }
 }
 
 fn artifact_config_to_json(config: types_runner.ArtifactConfig) -> Json {

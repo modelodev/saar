@@ -582,7 +582,7 @@ fn runtime_config_decoder() -> decode.Decoder(types_runner.RuntimeConfig) {
   let decoder = {
     use mode <- decode.optional_field(
       "mode",
-      types_runner.NoNetwork,
+      types_runner.NoNetworkMode,
       network_mode_decoder(),
     )
     use port_env_var <- decode.optional_field(
@@ -595,11 +595,14 @@ fn runtime_config_decoder() -> decode.Decoder(types_runner.RuntimeConfig) {
       None,
       decode.optional(decode.string),
     )
-    decode.success(types_runner.RuntimeConfig(
-      mode: mode,
-      port_env_var: port_env_var,
-      host_env_var: host_env_var,
-    ))
+    decode.success(case mode {
+      types_runner.ManagedPortMode ->
+        types_runner.ManagedPort(
+          host_env_var: host_env_var,
+          port_env_var: port_env_var,
+        )
+      types_runner.NoNetworkMode -> types_runner.NoNetwork
+    })
   }
   decoder
 }
@@ -610,7 +613,7 @@ fn network_mode_decoder() -> decode.Decoder(types_runner.NetworkMode) {
     case types_runner.network_mode_from_string(value) {
       Ok(mode) -> decode.success(mode)
       Error(_) ->
-        decode.failure(types_runner.NoNetwork, expected: "NetworkMode")
+        decode.failure(types_runner.NoNetworkMode, expected: "NetworkMode")
     }
   }
   decoder

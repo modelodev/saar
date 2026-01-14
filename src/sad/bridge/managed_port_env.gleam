@@ -6,8 +6,8 @@
 //// Responsibilities:
 //// - Resolve the bind host from `SadConfig`.
 //// - Inject `SAD_HOST` and `SAD_PORT` when a port is assigned.
-//// - Inject configured `{host_env_var, port_env_var}` for compatibility.
-//// - Provide `ManagedPort` environment variables.
+//// - Inject configured `{host_env_var, port_env_var}` for managed-port runtimes.
+//// - Provide managed-port environment variables when the runtime requires it.
 ////
 //// Non-responsibilities:
 //// - Starting runner processes.
@@ -33,8 +33,9 @@ pub fn managed_port_host(config: types_config.SadConfig) -> String {
 
 /// Builds managed-port environment variables for a runner.
 ///
-/// This always injects `SAD_HOST` and `SAD_PORT` when a port is assigned.
-/// It also injects `runner.runtime.{host_env_var,port_env_var}` when configured.
+/// This injects `SAD_HOST` and `SAD_PORT` when a port is assigned and the
+/// runtime uses managed ports. It also injects `runner.runtime` env vars when
+/// configured.
 pub fn inject_managed_port_env(
   env: List(#(String, String)),
   _trace_id: types_core.TraceId,
@@ -45,35 +46,29 @@ pub fn inject_managed_port_env(
   case assigned_port {
     None -> Ok(env)
 
-    Some(port) -> {
-      let host = managed_port_host(config)
+    Some(port) -> case runtime {
+      types_runner.NoNetwork -> Ok(env)
 
-      let types_runner.RuntimeConfig(
-        mode: mode,
-        port_env_var: port_env_var,
-        host_env_var: host_env_var,
-      ) = runtime
+      types_runner.ManagedPort(host_env_var, port_env_var) -> {
+        let host = managed_port_host(config)
 
-      let base_env =
-        list.append(env, [
-          #("SAD_HOST", host),
-          #("SAD_PORT", int.to_string(port)),
-        ])
+        let base_env =
+          list.append(env, [
+            #("SAD_HOST", host),
+            #("SAD_PORT", int.to_string(port)),
+          ])
 
-      let base_env = case host_env_var {
-        None -> base_env
-        Some(name) -> list.append(base_env, [#(name, host)])
-      }
+        let base_env = case host_env_var {
+          None -> base_env
+          Some(name) -> list.append(base_env, [#(name, host)])
+        }
 
-      let base_env = case port_env_var {
-        None -> base_env
-        Some(name) -> list.append(base_env, [#(name, int.to_string(port))])
-      }
+        let base_env = case port_env_var {
+          None -> base_env
+          Some(name) -> list.append(base_env, [#(name, int.to_string(port))])
+        }
 
-      case mode {
-        types_runner.ManagedPort -> Ok(base_env)
-
-        types_runner.NoNetwork -> Ok(base_env)
+        Ok(base_env)
       }
     }
   }
