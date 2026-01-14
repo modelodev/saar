@@ -362,7 +362,7 @@ pub fn attach_logs_takeover() {
   process.receive(sub1, 20) |> should.equal(Error(Nil))
 }
 
-pub fn attach_logs_receives_events() {
+pub fn attach_logs_sends_message() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
   let assert Ok(instance_id) = types_core.instance_id("inst-live")
 
@@ -495,6 +495,17 @@ pub fn interact_respects_timeout() {
   let assert Ok(_) = agent.status(agent_ref, 1000)
 }
 
+pub fn status_uses_status_timeout() {
+  let cfg0 = types_config.default_sad_config()
+
+  let cfg =
+    cfg0
+    |> agent_helpers.with_call_timeout_ms(11)
+    |> with_status_timeout_ms(222)
+
+  agent.status_timeout_ms(cfg) |> should.equal(222)
+}
+
 pub fn killing_worker_does_not_crash_actor() {
   let started = process.new_subject()
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
@@ -549,6 +560,65 @@ pub fn killing_worker_does_not_crash_actor() {
   message |> should.equal("worker_down")
 
   let assert Ok(_) = agent.status(agent_ref, 1000)
+}
+
+pub fn worker_down_without_done_is_handled() {
+  let started = process.new_subject()
+  let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
+  let assert Ok(instance_id) = types_core.instance_id("inst-worker-down")
+
+  let config =
+    types_config.default_sad_config()
+    |> agent_helpers.with_call_timeout_ms(5000)
+
+  let deps =
+    agent.AgentDeps(
+      start_interaction: fn(_agent_ref, _req, _timeout_ms, _streaming, _sink) {
+        let pid = process.spawn(fn() { process.sleep(60_000) })
+        process.send(started, pid)
+        pid
+      },
+      cancel_interaction: fn(pid) { process.kill(pid) },
+      stop_server: fn(_resource) { Nil },
+    )
+
+  let assert Ok(actor.Started(data: agent_ref, ..)) =
+    agent.start_link(
+      profile,
+      instance_id,
+      dict.new(),
+      "./workspaces/test",
+      config,
+      process.new_subject(),
+      deps,
+      1000,
+    )
+
+  let req = test_request(profile.meta.id, instance_id, "cap")
+
+  let done = process.new_subject()
+  let _ =
+    process.spawn(fn() {
+      let out = agent.interact(agent_ref, req, option.None, 1000)
+      process.send(done, out)
+    })
+
+  let assert Ok(worker_pid) = process.receive(started, 1000)
+  process.kill(worker_pid)
+
+  let assert Ok(Error(types_output.InteractionError(
+    kind: kind,
+    message: message,
+    ..,
+  ))) = process.receive(done, 1000)
+
+  kind |> should.equal(types_enums.InfraError)
+  message |> should.equal("worker_down")
+
+  let assert Ok(types_agent.AgentStatusView(mode: mode, ..)) =
+    agent.status(agent_ref, 1000)
+
+  mode |> should.equal(types_agent.RunIdle)
 }
 
 pub fn timeout_does_not_crash_actor() {
@@ -817,6 +887,16 @@ pub fn no_cancel_endpoint() {
   }
 
   agent.stop_instance(agent_ref, agent.UserRequested)
+}
+
+fn with_status_timeout_ms(
+  cfg: types_config.SadConfig,
+  ms: Int,
+) -> types_config.SadConfig {
+  let types_config.SadConfig(timeouts: timeouts, ..) = cfg
+  let next_timeouts =
+    types_config.SadTimeouts(..timeouts, status_timeout_ms: ms)
+  types_config.SadConfig(..cfg, timeouts: next_timeouts)
 }
 
 fn test_request(
