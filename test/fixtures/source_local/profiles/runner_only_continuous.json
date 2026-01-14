@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "id": "runner_only_continuous",
+    "lifecycle": "continuous",
+    "description": "Runner-only interface, continuous lifecycle (test-only)"
+  },
+  "parameters": {},
+  "runner": {
+    "type": "echo_server",
+    "tool_config": {"script": "echo_server.py"},
+    "runtime": {"mode": "managed_port"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {
+      "echo": {"input_schema": "std:chat", "streaming": false}
+    }
+  }
+}

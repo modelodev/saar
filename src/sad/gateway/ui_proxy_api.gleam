@@ -47,6 +47,16 @@ pub type Deps {
   )
 }
 
+type ProxyTarget {
+  ProxyTarget(
+    upstream_base: String,
+    interface_headers: dict.Dict(String, String),
+    instance_id: types_core.InstanceId,
+    profile_id: types_core.ProfileId,
+    rest: List(String),
+  )
+}
+
 /// Routes a request under `/agents/:instance_id/ui/*`.
 ///
 /// `/ui/:instance_id/*` is accepted as a legacy alias for tests.
@@ -234,11 +244,13 @@ fn proxy_to_interface(
             req,
             cfg,
             trace_id,
-            upstream_base,
-            headers,
-            instance_id,
-            profile_id,
-            rest,
+            ProxyTarget(
+              upstream_base: upstream_base,
+              interface_headers: headers,
+              instance_id: instance_id,
+              profile_id: profile_id,
+              rest: rest,
+            ),
           )
       }
     }
@@ -249,12 +261,16 @@ fn proxy_http(
   req: request.Request(mist.Connection),
   cfg: types_config.SadConfig,
   trace_id: types_core.TraceId,
-  base_url: String,
-  interface_headers: dict.Dict(String, String),
-  instance_id: types_core.InstanceId,
-  profile_id: types_core.ProfileId,
-  rest: List(String),
+  target: ProxyTarget,
 ) -> response.Response(mist.ResponseData) {
+  let ProxyTarget(
+    upstream_base: base_url,
+    interface_headers: interface_headers,
+    instance_id: instance_id,
+    profile_id: profile_id,
+    rest: rest,
+  ) = target
+
   let url = build_upstream_url(base_url, rest, req.query)
 
   let max_body = max_request_body_bytes(cfg)

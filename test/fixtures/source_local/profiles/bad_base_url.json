@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "id": "bad_base_url",
+    "lifecycle": "continuous",
+    "description": "HTTP profile with invalid base_url interpolation"
+  },
+  "parameters": {},
+  "runner": {
+    "type": "echo_server",
+    "tool_config": {"script": "echo_server.py"},
+    "runtime": {"mode": "managed_port"}
+  },
+  "interface": {
+    "protocol": "http",
+    "base_url": "http://{{runner.host}}:{{runner.bad}}",
+    "health_check": {"path": "/health", "method": "GET", "expect_statuses": [200]},
+    "capabilities": {
+      "echo": {
+        "path": "/echo",
+        "method": "POST",
+        "streaming": false,
+        "response": {"text_pointer": "/answer", "artifacts_pointer": "/files"}
+      }
+    }
+  }
+}

@@ -257,6 +257,109 @@ pub fn ui_proxy_rejects_path_traversal_test() {
   resp2.status |> should.equal(400)
 }
 
+pub fn ui_proxy_invalid_instance_id_test() {
+  let base_url = start_sad()
+
+  let resp =
+    http_client.request_sync_string(
+      http.Get,
+      base_url <> "/agents/!bad!/ui/health",
+      auth_headers(),
+      option.None,
+      2000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp.status |> should.equal(400)
+  should.equal(string.contains(resp.body, "invalid instance id"), True)
+}
+
+pub fn ui_proxy_unknown_instance_returns_404_test() {
+  let base_url = start_sad()
+
+  let resp =
+    http_client.request_sync_string(
+      http.Get,
+      base_url <> "/agents/inst-missing/ui/health",
+      auth_headers(),
+      option.None,
+      2000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp.status |> should.equal(404)
+}
+
+pub fn ui_proxy_rejects_non_http_profile_test() {
+  let base_url = start_sad()
+
+  let instance_id = "inst-ui-non-http-1"
+  create_agent(base_url, "runner_only_continuous", instance_id)
+  wait_phase(base_url, instance_id, "ready_continuous", 300)
+
+  let resp =
+    http_client.request_sync_string(
+      http.Get,
+      base_url <> "/agents/" <> instance_id <> "/ui/health",
+      auth_headers(),
+      option.None,
+      2000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp.status |> should.equal(400)
+  should.equal(string.contains(resp.body, "profile is not http-capable"), True)
+}
+
+pub fn ui_proxy_invalid_base_url_returns_400_test() {
+  let base_url = start_sad()
+
+  let instance_id = "inst-ui-bad-base-url-1"
+  create_agent(base_url, "bad_base_url", instance_id)
+  wait_phase(base_url, instance_id, "ready_continuous", 300)
+
+  let resp =
+    http_client.request_sync_string(
+      http.Get,
+      base_url <> "/agents/" <> instance_id <> "/ui/health",
+      auth_headers(),
+      option.None,
+      2000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp.status |> should.equal(400)
+  should.equal(string.contains(resp.body, "invalid base_url"), True)
+}
+
+pub fn ui_proxy_request_body_too_large_returns_413_test() {
+  let base_url = start_sad()
+
+  let instance_id = "inst-ui-body-too-large-1"
+  create_agent(base_url, "echo_server", instance_id)
+  wait_phase(base_url, instance_id, "ready_continuous", 300)
+
+  // Oversized body relative to test config's max_request_body_bytes.
+  let big = string.repeat("a", 2_000_000)
+
+  let resp =
+    http_client.request_sync_string(
+      http.Post,
+      base_url <> "/agents/" <> instance_id <> "/ui/echo",
+      dict.insert(auth_headers(), "content-type", "text/plain"),
+      option.Some(big),
+      5000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp.status |> should.equal(413)
+}
+
 pub fn ui_proxy_rejects_websocket_upgrade_test() {
   let base_url = start_sad()
 
