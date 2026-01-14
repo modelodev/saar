@@ -13,7 +13,7 @@
 ////
 //// Relationships:
 //// - Called by `sad/bridge/interaction` and `sad/bridge/runner`.
-//// - Uses `sad/core/boundary_call` and `sad/core/artifact_registry_protocol`.
+//// - Uses `sad/otp/safe_call` and `sad/core/artifact_registry_protocol`.
 
 import gleam/erlang/process
 import gleam/list
@@ -21,7 +21,7 @@ import gleam/option
 import gleam/result
 import sad/artifacts
 import sad/core/artifact_registry_protocol
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
@@ -51,7 +51,7 @@ pub fn register_collected_artifacts(
     let artifacts.CollectedArtifact(name: name, path: path, mime: mime) = item
 
     let id_out =
-      boundary_call.call(artifact_registry, call_timeout_ms, fn(reply_to) {
+      safe_call.call(artifact_registry, call_timeout_ms, fn(reply_to) {
         artifact_registry_protocol.RegisterArtifact(
           path,
           mime,

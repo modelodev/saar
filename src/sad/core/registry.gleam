@@ -12,7 +12,7 @@
 ////
 //// Relationships:
 //// - Message protocol lives in `sad/core/messages.RegistryMsg`.
-//// - Boundary callers should use `sad/core/boundary_call` with `sad/core/messages.RegistryMsg`.
+//// - Boundary callers should use `sad/otp/safe_call` with `sad/core/messages.RegistryMsg`.
 
 import gleam/dict
 import gleam/erlang/process

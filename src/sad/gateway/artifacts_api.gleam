@@ -13,7 +13,7 @@
 ////
 //// Relationships:
 //// - Routed by `sad/gateway/http_server` after authentication.
-//// - Uses `sad/core/boundary_call` to talk to the ArtifactRegistry actor.
+//// - Uses `sad/otp/safe_call` to talk to the ArtifactRegistry actor.
 //// - Delegates path safety to `sad/workspace`.
 
 import gleam/bytes_tree
@@ -25,7 +25,7 @@ import gleam/option
 import mist
 
 import sad/core/artifact_registry_protocol
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/gateway/problem
 import sad/types/config as types_config
 import sad/types/core as types_core
@@ -82,7 +82,7 @@ fn get_artifact(
   let artifact_id = types_core.artifact_id(artifact_id_raw)
 
   let lookup =
-    boundary_call.call(artifact_registry, timeout_ms, fn(reply_to) {
+    safe_call.call(artifact_registry, timeout_ms, fn(reply_to) {
       artifact_registry_protocol.LookupArtifact(artifact_id, reply_to)
     })
 

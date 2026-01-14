@@ -5,7 +5,7 @@ import gleam/option
 import gleam/otp/actor
 import gleeunit
 import gleeunit/should
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/core/messages
 import sad/core/profiles
 import sad/types/core as types_core
@@ -23,7 +23,7 @@ pub fn profiles_actor_receives_initial_profiles() {
 
   let actor = start_profiles(dict.from_list([#(profile_id, profile)]))
 
-  boundary_call.call(actor, 1000, fn(reply_to) {
+  safe_call.call(actor, 1000, fn(reply_to) {
     messages.GetProfile(profile_id, reply_to)
   })
   |> should.equal(Ok(option.Some(profile)))
@@ -36,11 +36,11 @@ pub fn set_profiles_updates_state() {
   let actor = start_profiles(dict.new())
 
   let assert Ok(_) =
-    boundary_call.call(actor, 1000, fn(reply_to) {
+    safe_call.call(actor, 1000, fn(reply_to) {
       messages.SetProfiles(dict.from_list([#(profile_id, profile)]), reply_to)
     })
 
-  boundary_call.call(actor, 1000, fn(reply_to) {
+  safe_call.call(actor, 1000, fn(reply_to) {
     messages.GetProfile(profile_id, reply_to)
   })
   |> should.equal(Ok(option.Some(profile)))
@@ -52,7 +52,7 @@ pub fn set_profiles_returns_count() {
 
   let actor = start_profiles(dict.new())
 
-  boundary_call.call(actor, 1000, fn(reply_to) {
+  safe_call.call(actor, 1000, fn(reply_to) {
     messages.SetProfiles(
       dict.from_list([
         #(p1, dummy_profile(p1)),
@@ -77,7 +77,7 @@ pub fn get_profile_returns_some() {
 pub fn get_profile_returns_none() {
   let actor = start_profiles(dict.new())
 
-  boundary_call.call(actor, 1000, fn(reply_to) {
+  safe_call.call(actor, 1000, fn(reply_to) {
     messages.GetProfile(types_core.profile_id("missing"), reply_to)
   })
   |> should.equal(Ok(option.None))
@@ -96,7 +96,7 @@ pub fn list_profiles_returns_all_ids() {
     )
 
   let assert Ok(ids) =
-    boundary_call.call(actor, 1000, fn(reply_to) {
+    safe_call.call(actor, 1000, fn(reply_to) {
       messages.ListProfiles(reply_to)
     })
 

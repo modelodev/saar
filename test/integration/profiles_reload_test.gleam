@@ -6,7 +6,7 @@ import gleam/otp/actor
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/core/messages
 import sad/core/profiles
 import sad/profiles_sources
@@ -257,7 +257,7 @@ pub fn reload_git_source_failure_keeps_previous_test() {
   |> should.be_ok
 
   let assert Ok(before_ids) =
-    boundary_call.call(profiles_actor, 1000, fn(reply_to) {
+    safe_call.call(profiles_actor, 1000, fn(reply_to) {
       messages.ListProfiles(reply_to)
     })
   list.length(before_ids) |> should.equal(9)
@@ -273,7 +273,7 @@ pub fn reload_git_source_failure_keeps_previous_test() {
   |> should.be_error
 
   let assert Ok(after_ids) =
-    boundary_call.call(profiles_actor, 1000, fn(reply_to) {
+    safe_call.call(profiles_actor, 1000, fn(reply_to) {
       messages.ListProfiles(reply_to)
     })
   list.length(after_ids) |> should.equal(9)
@@ -323,7 +323,7 @@ fn assert_profile_description(
   let profile_id = types_core.profile_id(id)
 
   let assert Ok(option.Some(profile)) =
-    boundary_call.call(profiles_actor, 1000, fn(reply_to) {
+    safe_call.call(profiles_actor, 1000, fn(reply_to) {
       messages.GetProfile(profile_id, reply_to)
     })
 

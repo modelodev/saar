@@ -11,7 +11,7 @@ import port_helpers
 import sad/app_state
 import sad/core/agent
 import sad/core/artifact_registry_protocol
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/core/messages
 import sad/core/root_supervisor
 import sad/core/supervisor_names
@@ -52,7 +52,7 @@ pub fn stop_releases_managed_port_test() {
   let a1 = start_instance(manager, artifact_registry, profile, id1, cfg)
   wait_for_phase(a1, types_agent.ReadyContinuous, 400)
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.StopAgent(id1, reply_to)
   })
   |> test_assertions.assert_ok
@@ -83,7 +83,7 @@ pub fn stop_does_not_purge_artifacts_test() {
   let assert Ok(path) = workspace.workspace_path_validate("artifact.txt")
 
   let artifact_id =
-    boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+    safe_call.call(artifact_registry, 1000, fn(reply_to) {
       artifact_registry_protocol.RegisterArtifact(
         path,
         "text/plain",
@@ -93,14 +93,14 @@ pub fn stop_does_not_purge_artifacts_test() {
     })
     |> test_assertions.assert_ok
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.StopAgent(instance_id, reply_to)
   })
   |> test_assertions.assert_ok
 
   // Artifacts remain accessible in the registry.
   let assert Ok(Some(_entry)) =
-    boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+    safe_call.call(artifact_registry, 1000, fn(reply_to) {
       artifact_registry_protocol.LookupArtifact(artifact_id, reply_to)
     })
 
@@ -128,7 +128,7 @@ pub fn stop_clears_assigned_port_test() {
   let status0 = agent.status(agent_ref, 1000) |> test_assertions.assert_ok
   status0.assigned_port |> should.not_equal(None)
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.StopAgent(instance_id, reply_to)
   })
   |> test_assertions.assert_ok
@@ -155,14 +155,14 @@ pub fn start_after_stop_restores_assigned_port_test() {
     start_instance(manager, artifact_registry, profile, instance_id, cfg)
   wait_for_phase(agent_ref, types_agent.ReadyContinuous, 400)
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.StopAgent(instance_id, reply_to)
   })
   |> test_assertions.assert_ok
 
   wait_for_phase(agent_ref, types_agent.Stopped, 200)
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.StartExistingAgent(instance_id, reply_to)
   })
   |> test_assertions.assert_ok
@@ -180,7 +180,7 @@ pub fn delete_nonexistent_is_ok_test() {
 
   let assert Ok(instance_id) = types_core.instance_id("inst-missing")
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.DeleteAgent(instance_id, reply_to)
   })
   |> should.equal(Ok(Nil))
@@ -213,7 +213,7 @@ pub fn stop_while_interaction_inflight_client_sees_cancelled_test() {
 
   process.sleep(20)
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.StopAgent(instance_id, reply_to)
   })
   |> test_assertions.assert_ok
@@ -258,7 +258,7 @@ pub fn stop_while_interaction_inflight_cleans_worker_test() {
 
   process.sleep(20)
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.StopAgent(instance_id, reply_to)
   })
   |> test_assertions.assert_ok
@@ -268,7 +268,7 @@ pub fn stop_while_interaction_inflight_cleans_worker_test() {
   // Avoid racing StartExisting against a still-stopping agent.
   wait_for_phase(agent_ref, types_agent.Stopped, 200)
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.StartExistingAgent(instance_id, reply_to)
   })
   |> test_assertions.assert_ok
@@ -308,7 +308,7 @@ pub fn delete_while_interaction_inflight_client_sees_cancelled_test() {
   process.sleep(20)
 
   let _ =
-    boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+    safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
       messages.DeleteAgent(instance_id, reply_to)
     })
 
@@ -348,7 +348,7 @@ pub fn delete_while_interaction_inflight_cleans_everything_test() {
   let assert Ok(path) = workspace.workspace_path_validate("artifact.txt")
 
   let artifact_id =
-    boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+    safe_call.call(artifact_registry, 1000, fn(reply_to) {
       artifact_registry_protocol.RegisterArtifact(
         path,
         "text/plain",
@@ -372,19 +372,19 @@ pub fn delete_while_interaction_inflight_cleans_everything_test() {
   process.sleep(20)
 
   let _ =
-    boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+    safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
       messages.DeleteAgent(instance_id, reply_to)
     })
 
   let _ = process.receive(out, 2000)
 
-  boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+  safe_call.call(artifact_registry, 1000, fn(reply_to) {
     artifact_registry_protocol.LookupArtifact(artifact_id, reply_to)
   })
   |> should.equal(Ok(None))
 
   // Registry entry is removed.
-  boundary_call.call(registry, 1000, fn(reply_to) {
+  safe_call.call(registry, 1000, fn(reply_to) {
     messages.LookupByInstanceId(instance_id, reply_to)
   })
   |> should.equal(Ok(None))
@@ -417,7 +417,7 @@ pub fn delete_purges_artifacts_and_workspace_test() {
   let assert Ok(path) = workspace.workspace_path_validate("artifact.txt")
 
   let artifact_id =
-    boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+    safe_call.call(artifact_registry, 1000, fn(reply_to) {
       artifact_registry_protocol.RegisterArtifact(
         path,
         "text/plain",
@@ -427,12 +427,12 @@ pub fn delete_purges_artifacts_and_workspace_test() {
     })
     |> test_assertions.assert_ok
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.DeleteAgent(instance_id, reply_to)
   })
   |> test_assertions.assert_ok
 
-  boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+  safe_call.call(artifact_registry, 1000, fn(reply_to) {
     artifact_registry_protocol.LookupArtifact(artifact_id, reply_to)
   })
   |> should.equal(Ok(None))
@@ -467,7 +467,7 @@ pub fn delete_cleanup_failure_returns_500_test() {
   let assert Ok(path) = workspace.workspace_path_validate("x.txt")
 
   let _artifact_id =
-    boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+    safe_call.call(artifact_registry, 1000, fn(reply_to) {
       artifact_registry_protocol.RegisterArtifact(
         path,
         "text/plain",
@@ -478,11 +478,11 @@ pub fn delete_cleanup_failure_returns_500_test() {
     |> test_assertions.assert_ok
 
   case
-    boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+    safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
       messages.DeleteAgent(instance_id, reply_to)
     })
   {
-    Error(boundary_call.ActorError(messages.CleanupFailed(_))) -> Nil
+    Error(safe_call.ActorError(messages.CleanupFailed(_))) -> Nil
     _ -> panic as "Expected cleanup failure"
   }
 }
@@ -500,7 +500,7 @@ pub fn delete_cleanup_failure_still_purges_artifacts_test() {
   let assert Ok(path) = workspace.workspace_path_validate("x.txt")
 
   let artifact_id =
-    boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+    safe_call.call(artifact_registry, 1000, fn(reply_to) {
       artifact_registry_protocol.RegisterArtifact(
         path,
         "text/plain",
@@ -511,11 +511,11 @@ pub fn delete_cleanup_failure_still_purges_artifacts_test() {
     |> test_assertions.assert_ok
 
   let _ =
-    boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+    safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
       messages.DeleteAgent(instance_id, reply_to)
     })
 
-  boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+  safe_call.call(artifact_registry, 1000, fn(reply_to) {
     artifact_registry_protocol.LookupArtifact(artifact_id, reply_to)
   })
   |> should.equal(Ok(None))
@@ -572,7 +572,7 @@ fn start_instance(
       artifact_registry: artifact_registry,
     )
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.StartAgent(args, reply_to)
   })
   |> test_assertions.assert_ok

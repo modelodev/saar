@@ -2,7 +2,7 @@ import gleam/erlang/process
 import gleam/otp/actor
 import gleeunit
 import gleeunit/should
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/core/messages
 import sad/core/port_pool_actor
 import sad/net/tcp_listener
@@ -18,7 +18,7 @@ pub fn port_pool_actor_allocate_returns_port() {
   let pool = start_pool(port, port)
   let instance_id = instance_id("inst-1")
 
-  boundary_call.call(pool, 1000, fn(reply_to) {
+  safe_call.call(pool, 1000, fn(reply_to) {
     messages.Allocate(instance_id, reply_to)
   })
   |> should.equal(Ok(Ok(port)))
@@ -29,7 +29,7 @@ pub fn port_pool_actor_allocate_checked_returns_port() {
   let pool = start_pool(port, port)
   let instance_id = instance_id("inst-1")
 
-  boundary_call.call(pool, 1000, fn(reply_to) {
+  safe_call.call(pool, 1000, fn(reply_to) {
     messages.AllocateChecked("127.0.0.1", instance_id, reply_to)
   })
   |> should.equal(Ok(Ok(port)))
@@ -42,7 +42,7 @@ pub fn port_pool_actor_allocate_checked_in_use_error() {
   let instance_id = instance_id("inst-1")
 
   let result =
-    boundary_call.call(pool, 1000, fn(reply_to) {
+    safe_call.call(pool, 1000, fn(reply_to) {
       messages.AllocateChecked("127.0.0.1", instance_id, reply_to)
     })
 
@@ -58,17 +58,17 @@ pub fn port_pool_actor_release_idempotent() {
   let instance_id = instance_id("inst-1")
 
   let assert Ok(Ok(_)) =
-    boundary_call.call(pool, 1000, fn(reply_to) {
+    safe_call.call(pool, 1000, fn(reply_to) {
       messages.Allocate(instance_id, reply_to)
     })
 
   let assert Ok(Nil) =
-    boundary_call.call(pool, 1000, fn(reply_to) {
+    safe_call.call(pool, 1000, fn(reply_to) {
       messages.Release(instance_id, reply_to)
     })
 
   let assert Ok(Nil) =
-    boundary_call.call(pool, 1000, fn(reply_to) {
+    safe_call.call(pool, 1000, fn(reply_to) {
       messages.Release(instance_id, reply_to)
     })
 
@@ -83,11 +83,11 @@ pub fn port_pool_actor_exhausted_error() {
   let instance2 = instance_id("inst-2")
 
   let assert Ok(Ok(_)) =
-    boundary_call.call(pool, 1000, fn(reply_to) {
+    safe_call.call(pool, 1000, fn(reply_to) {
       messages.Allocate(instance1, reply_to)
     })
 
-  boundary_call.call(pool, 1000, fn(reply_to) {
+  safe_call.call(pool, 1000, fn(reply_to) {
     messages.Allocate(instance2, reply_to)
   })
   |> should.equal(Ok(Error(port_pool.PoolExhausted)))

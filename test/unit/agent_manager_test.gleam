@@ -8,7 +8,7 @@ import gleeunit
 import gleeunit/should
 import sad/app_state
 import sad/core/agent
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/core/messages
 import sad/core/root_supervisor
 import sad/core/supervisor_names
@@ -59,7 +59,7 @@ pub fn start_agent_same_key_one_wins_test() {
     process.spawn(fn() {
       process.send(
         out1,
-        boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+        safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
           messages.StartAgent(args, reply_to)
         }),
       )
@@ -69,7 +69,7 @@ pub fn start_agent_same_key_one_wins_test() {
     process.spawn(fn() {
       process.send(
         out2,
-        boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+        safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
           messages.StartAgent(args, reply_to)
         }),
       )
@@ -81,7 +81,7 @@ pub fn start_agent_same_key_one_wins_test() {
   assert_one_ok_one_already_exists(r1, r2)
 
   let assert Ok(items) =
-    boundary_call.call(registry, 1000, fn(reply_to) {
+    safe_call.call(registry, 1000, fn(reply_to) {
       messages.ListAll(reply_to)
     })
 
@@ -103,7 +103,7 @@ pub fn create_agent_profile_not_found_test() {
 
   let assert Ok(instance_id) = types_core.instance_id("inst-missing-profile")
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.CreateAgent(
       types_core.profile_id("missing"),
       instance_id,
@@ -113,7 +113,7 @@ pub fn create_agent_profile_not_found_test() {
   })
   |> should.equal(
     Error(
-      boundary_call.ActorError(
+      safe_call.ActorError(
         messages.ProfileNotFound(types_core.profile_id("missing")),
       ),
     ),
@@ -174,7 +174,7 @@ pub fn create_agent_uses_profiles_actor_test() {
     )
 
   let assert Ok(_) =
-    boundary_call.call(profiles, 1000, fn(reply_to) {
+    safe_call.call(profiles, 1000, fn(reply_to) {
       messages.SetProfiles(
         dict.from_list([#(profile.meta.id, profile)]),
         reply_to,
@@ -184,13 +184,13 @@ pub fn create_agent_uses_profiles_actor_test() {
   let assert Ok(instance_id) = types_core.instance_id("inst-from-profile")
 
   let _ =
-    boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+    safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
       messages.CreateAgent(profile.meta.id, instance_id, dict.new(), reply_to)
     })
     |> test_assertions.assert_ok
 
   let assert Ok(items) =
-    boundary_call.call(registry, 1000, fn(reply_to) {
+    safe_call.call(registry, 1000, fn(reply_to) {
       messages.ListAll(reply_to)
     })
 
@@ -242,7 +242,7 @@ pub fn start_agent_registration_failed_rolls_back_test() {
     )
 
   let assert Ok(_) =
-    boundary_call.call_unwrap_result(registry, 1000, fn(reply_to) {
+    safe_call.call_unwrap_result(registry, 1000, fn(reply_to) {
       messages.Register(status, agent_ref, reply_to)
     })
 
@@ -256,19 +256,19 @@ pub fn start_agent_registration_failed_rolls_back_test() {
       artifact_registry: artifact_registry,
     )
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.StartAgent(args, reply_to)
   })
   |> should.equal(
     Error(
-      boundary_call.ActorError(messages.RegistrationFailed(
+      safe_call.ActorError(messages.RegistrationFailed(
         messages.AlreadyExists,
       )),
     ),
   )
 
   let assert Ok(items) =
-    boundary_call.call(registry, 1000, fn(reply_to) {
+    safe_call.call(registry, 1000, fn(reply_to) {
       messages.ListAll(reply_to)
     })
 
@@ -276,17 +276,17 @@ pub fn start_agent_registration_failed_rolls_back_test() {
 }
 
 fn assert_one_ok_one_already_exists(
-  r1: Result(agent.AgentRef, boundary_call.ApiCallError(messages.StartError)),
-  r2: Result(agent.AgentRef, boundary_call.ApiCallError(messages.StartError)),
+  r1: Result(agent.AgentRef, safe_call.ApiCallError(messages.StartError)),
+  r2: Result(agent.AgentRef, safe_call.ApiCallError(messages.StartError)),
 ) -> Nil {
   case r1, r2 {
     Ok(_),
-      Error(boundary_call.ActorError(messages.RegistrationFailed(
+      Error(safe_call.ActorError(messages.RegistrationFailed(
         messages.AlreadyExists,
       )))
     -> Nil
 
-    Error(boundary_call.ActorError(messages.RegistrationFailed(
+    Error(safe_call.ActorError(messages.RegistrationFailed(
       messages.AlreadyExists,
     ))),
       Ok(_)
