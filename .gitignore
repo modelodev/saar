@@ -6,3 +6,5 @@ priv/sad_wrapper
 
 erl_crash.dump
 test-workspaces/
+
+inventario.yml
