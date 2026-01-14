@@ -60,7 +60,7 @@ pub fn start_agent_same_key_one_wins_test() {
       process.send(
         out1,
         safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-          messages.StartAgent(args, reply_to)
+          messages.Cmd(messages.StartAgent(args, reply_to))
         }),
       )
     })
@@ -70,7 +70,7 @@ pub fn start_agent_same_key_one_wins_test() {
       process.send(
         out2,
         safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-          messages.StartAgent(args, reply_to)
+          messages.Cmd(messages.StartAgent(args, reply_to))
         }),
       )
     })
@@ -104,11 +104,13 @@ pub fn create_agent_profile_not_found_test() {
   let assert Ok(instance_id) = types_core.instance_id("inst-missing-profile")
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.CreateAgent(
-      types_core.profile_id("missing"),
-      instance_id,
-      dict.new(),
-      reply_to,
+    messages.Cmd(
+      messages.CreateAgent(
+        types_core.profile_id("missing"),
+        instance_id,
+        dict.new(),
+        reply_to,
+      ),
     )
   })
   |> should.equal(
@@ -185,7 +187,7 @@ pub fn create_agent_uses_profiles_actor_test() {
 
   let _ =
     safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-      messages.CreateAgent(profile.meta.id, instance_id, dict.new(), reply_to)
+      messages.Cmd(messages.CreateAgent(profile.meta.id, instance_id, dict.new(), reply_to))
     })
     |> test_assertions.assert_ok
 
@@ -256,7 +258,7 @@ pub fn start_agent_registration_failed_rolls_back_test() {
     )
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.StartAgent(args, reply_to)
+    messages.Cmd(messages.StartAgent(args, reply_to))
   })
   |> should.equal(
     Error(
