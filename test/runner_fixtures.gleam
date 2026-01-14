@@ -1,7 +1,6 @@
 import gleam/dict
 import gleam/option
 import sad/types/core as types_core
-import sad/types/enums as types_enums
 import sad/types/input as types_input
 import sad/types/resolved_params
 import sad/types/runner as types_runner
@@ -13,11 +12,10 @@ pub fn base_input(
   let assert Ok(instance_id) = types_core.instance_id("inst-1")
 
   types_input.SadInput(
-    meta: types_input.SadInputMeta(
-      spec_version: "v0",
-      profile_id: types_core.profile_id("profile-1"),
-      instance_id: option.Some(instance_id),
-      mode: types_enums.Transient,
+    meta: types_input.TransientMeta(
+      "v0",
+      types_core.profile_id("profile-1"),
+      instance_id,
     ),
     params: dict.from_list([
       #("model", resolved_params.NormalValue(types_core.StringVal("gpt-4"))),

@@ -937,13 +937,16 @@ fn provisioning_input(
   let trace_raw = "provision-" <> types_core.instance_id_to_string(instance_id)
   let trace_id = types_core.trace_id(trace_raw)
 
+  let meta = case profile.meta.lifecycle {
+    types_enums.Transient ->
+      types_input.TransientMeta("v0", profile.meta.id, instance_id)
+
+    types_enums.Continuous ->
+      types_input.ContinuousMeta("v0", profile.meta.id, instance_id)
+  }
+
   types_input.SadInput(
-    meta: types_input.SadInputMeta(
-      spec_version: "v0",
-      profile_id: profile.meta.id,
-      instance_id: Some(instance_id),
-      mode: profile.meta.lifecycle,
-    ),
+    meta: meta,
     params: params,
     input: types_input.PayloadChat([], dict.new()),
     context: types_input.RequestContext(trace_id: trace_id, extra: dict.new()),
