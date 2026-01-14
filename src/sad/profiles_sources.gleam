@@ -37,6 +37,7 @@ import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/profile as types_profile
 import sad/types/runner as types_runner
+import sad/validation/params as param_validation
 import simplifile
 
 /// Errors returned while loading profiles from sources.
@@ -276,6 +277,15 @@ fn load_profile_file(
   )
 
   use profile <- result.try(resolve_runner_in_source(source_root, profile))
+  use profile <- result.try(
+    param_validation.validate_profile_params(profile)
+    |> result.map_error(fn(errs) {
+      ProfileDecodeError(
+        path: path,
+        message: "invalid parameter defaults: " <> string.inspect(errs),
+      )
+    }),
+  )
 
   Ok(#(profile.meta.id, profile))
 }
