@@ -659,7 +659,7 @@ fn encode_status(status: types_agent.AgentStatusView) -> json.Json {
       None -> json.null()
     }),
     #("failure_reason", case status.failure_reason {
-      Some(r) -> json.string(r)
+      Some(r) -> json.string(types_agent.failure_reason_to_string(r))
       None -> json.null()
     }),
   ])
@@ -696,7 +696,7 @@ fn encode_instance_summary(
       None -> json.null()
     }),
     #("failure_reason", case status.failure_reason {
-      Some(r) -> json.string(r)
+      Some(r) -> json.string(types_agent.failure_reason_to_string(r))
       None -> json.null()
     }),
     #("registered_at", json.int(registered_at)),

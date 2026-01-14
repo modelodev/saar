@@ -51,7 +51,7 @@ pub fn managed_port_exhaustion_transitions_to_failed_test() {
   wait_for_phase(a1, types_agent.ReadyContinuous, 200)
 
   let a2 = start_instance(manager, profile, id2, cfg)
-  wait_for_failure_reason(a2, "PORT_POOL_EXHAUSTED", 200)
+  wait_for_failure_reason(a2, types_agent.PortPoolExhausted, 200)
   Nil
 }
 
@@ -61,7 +61,7 @@ pub fn managed_port_in_use_transitions_to_failed_test() {
   let port = pick_free_port()
   let cfg = config_with_port_range(port)
 
-  // Occupy the port to force `PORT_IN_USE`.
+  // Occupy the port to force `types_agent.PortInUse`.
   let assert Ok(#(listener, _)) = tcp_listener.listen(host, port)
 
   let manager = start_root(cfg)
@@ -70,7 +70,7 @@ pub fn managed_port_in_use_transitions_to_failed_test() {
   let assert Ok(id1) = types_core.instance_id("inst-inuse-1")
 
   let a1 = start_instance(manager, profile, id1, cfg)
-  wait_for_failure_reason(a1, "PORT_IN_USE", 200)
+  wait_for_failure_reason(a1, types_agent.PortInUse, 200)
 
   tcp_listener.close(listener)
   Nil
@@ -91,7 +91,7 @@ pub fn managed_port_bind_failed_transitions_to_failed_test() {
   let assert Ok(id1) = types_core.instance_id("inst-bindfail-1")
 
   let a1 = start_instance(manager, profile, id1, cfg)
-  wait_for_failure_reason(a1, "PORT_BIND_FAILED", 200)
+  wait_for_failure_reason(a1, types_agent.PortBindFailed, 200)
   Nil
 }
 
@@ -197,7 +197,7 @@ fn wait_for_phase(
 
 fn wait_for_failure_reason(
   agent_ref: agent.AgentRef,
-  expected: String,
+  expected: types_agent.FailureReason,
   attempts: Int,
 ) -> Nil {
   case attempts {

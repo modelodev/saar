@@ -58,7 +58,7 @@ pub type AgentState {
   ReadyTransient(params: ResolvedParams)
   ReadyContinuous(params: ResolvedParams, resource: AgentResource)
   Stopped(params: ResolvedParams)
-  Failed(reason: String)
+  Failed(reason: types_agent.FailureReason)
 }
 
 pub fn agent_created(params: ResolvedParams) -> AgentState {
@@ -84,7 +84,7 @@ pub fn agent_stopped(params: ResolvedParams) -> AgentState {
   Stopped(params)
 }
 
-pub fn agent_failed(reason: String) -> AgentState {
+pub fn agent_failed(reason: types_agent.FailureReason) -> AgentState {
   Failed(reason)
 }
 
@@ -138,7 +138,9 @@ pub fn is_failed(state: AgentState) -> Bool {
   }
 }
 
-pub fn get_failure_reason(state: AgentState) -> option.Option(String) {
+pub fn get_failure_reason(
+  state: AgentState,
+) -> option.Option(types_agent.FailureReason) {
   case state {
     Failed(reason) -> option.Some(reason)
     _ -> option.None
@@ -344,7 +346,9 @@ pub opaque type AgentMsg {
   StartInstance
   StopInstance(StopReason)
   Terminate(StopReason)
-  ProvisioningDone(Result(#(AgentState, option.Option(Int)), String))
+  ProvisioningDone(
+    Result(#(AgentState, option.Option(Int)), types_agent.FailureReason),
+  )
   InteractionDone(
     Result(types_output.InteractionResult, types_output.InteractionError),
   )
@@ -599,7 +603,7 @@ fn log_buffer_limit_bytes(cfg: types_config.SadConfig) -> Int {
 
 fn handle_provisioning_done(
   state: AgentRuntimeState,
-  outcome: Result(#(AgentState, option.Option(Int)), String),
+  outcome: Result(#(AgentState, option.Option(Int)), types_agent.FailureReason),
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
   let #(next_state, assigned_port) = case outcome {
     Ok(#(state, port)) -> #(state, port)
@@ -970,14 +974,11 @@ fn handle_start_instance(
 
 fn handle_server_died(
   state: AgentRuntimeState,
-  exit_code: Int,
+  _exit_code: Int,
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
   let state = cancel_if_busy(state, "cancelled")
   actor.continue(
-    AgentRuntimeState(
-      ..state,
-      state: agent_failed("server_died:" <> int.to_string(exit_code)),
-    ),
+    AgentRuntimeState(..state, state: agent_failed(types_agent.ServerDied)),
   )
 }
 
@@ -1105,7 +1106,7 @@ pub fn terminate(agent: AgentRef, reason: StopReason) -> Nil {
 /// This is intended for core modules (not the gateway).
 pub fn internal_provisioning_done(
   agent: AgentRef,
-  outcome: Result(#(AgentState, option.Option(Int)), String),
+  outcome: Result(#(AgentState, option.Option(Int)), types_agent.FailureReason),
 ) -> Nil {
   process.send(subject(agent), ProvisioningDone(outcome))
 }
