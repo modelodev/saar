@@ -35,9 +35,9 @@ import sad/bridge/port_owner
 import sad/core/agent
 import sad/core/artifact_registry_protocol
 import sad/core/messages
+import sad/core/provisioning_policy
 import sad/net/port_check
 import sad/params
-import sad/port_pool
 import sad/types/agent as types_agent
 import sad/types/config as types_config
 import sad/types/core as types_core
@@ -417,7 +417,7 @@ fn handle_start_existing_agent(
             Error(_) -> {
               agent.internal_provisioning_done(
                 agent_ref,
-                Error("start_snapshot_failed"),
+                Error(types_agent.StartSnapshotFailed),
               )
               update_registry_status_best_effort(config, registry, agent_ref)
             }
@@ -565,7 +565,7 @@ fn provision(
   config: types_config.SadConfig,
   port_pool: process.Subject(messages.PortPoolMsg),
   args: messages.StartArgs,
-) -> Result(#(agent.AgentState, Option(Int)), String) {
+) -> Result(#(agent.AgentState, Option(Int)), types_agent.FailureReason) {
   let messages.StartArgs(
     profile: profile,
     instance_id: instance_id,
@@ -587,11 +587,11 @@ fn provision_continuous(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
-) -> Result(#(agent.AgentState, Option(Int)), String) {
+) -> Result(#(agent.AgentState, Option(Int)), types_agent.FailureReason) {
   let types_runner.RuntimeConfig(mode: mode, ..) = profile.runner.runtime
 
   case mode {
-    types_runner.NoNetwork -> Error("PORT_BIND_FAILED")
+    types_runner.NoNetwork -> Error(types_agent.NoNetwork)
 
     types_runner.ManagedPort ->
       provision_continuous_managed_port(
@@ -732,7 +732,7 @@ fn provision_continuous_managed_port(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
-) -> Result(#(agent.AgentState, Option(Int)), String) {
+) -> Result(#(agent.AgentState, Option(Int)), types_agent.FailureReason) {
   provision_continuous_managed_port_retry(
     config,
     port_pool_subject,
@@ -751,13 +751,13 @@ fn provision_continuous_managed_port_retry(
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
   remaining: Int,
-  last_reason: Option(String),
-) -> Result(#(agent.AgentState, Option(Int)), String) {
+  last_failure: Option(types_agent.FailureReason),
+) -> Result(#(agent.AgentState, Option(Int)), types_agent.FailureReason) {
   case remaining {
     0 ->
-      case last_reason {
+      case last_failure {
         Some(reason) -> Error(reason)
-        None -> Error("PORT_BIND_FAILED")
+        None -> Error(types_agent.PortBindFailed)
       }
 
     _ -> {
@@ -772,25 +772,33 @@ fn provision_continuous_managed_port_retry(
           params,
           host,
         )
+        |> result.map(fn(pair) {
+          let #(state, port) = pair
+          #(state, Some(port))
+        })
 
-      case attempt {
-        Ok(#(state, port)) -> Ok(#(state, Some(port)))
+      case
+        provisioning_policy.retry_step_with_last(
+          attempt,
+          remaining,
+          last_failure,
+        )
+      {
+        provisioning_policy.Done(outcome) -> outcome
 
-        Error(reason) ->
-          case reason {
-            "PORT_IN_USE" | "PORT_BIND_FAILED" ->
-              provision_continuous_managed_port_retry(
-                config,
-                port_pool_subject,
-                profile,
-                instance_id,
-                params,
-                remaining - 1,
-                Some(reason),
-              )
-
-            _ -> Error(reason)
-          }
+        provisioning_policy.Retry(
+          remaining: next_remaining,
+          last_failure: next_last,
+        ) ->
+          provision_continuous_managed_port_retry(
+            config,
+            port_pool_subject,
+            profile,
+            instance_id,
+            params,
+            next_remaining,
+            next_last,
+          )
       }
     }
   }
@@ -803,7 +811,7 @@ fn attempt_provision_continuous_managed_port(
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
   host: String,
-) -> Result(#(agent.AgentState, Int), String) {
+) -> Result(#(agent.AgentState, Int), types_agent.FailureReason) {
   use port <- result.try(allocate_port(
     config,
     port_pool_subject,
@@ -825,7 +833,7 @@ fn attempt_provision_continuous_managed_port(
         Error(_) -> {
           let _ = port_owner.stop(owner, 1000)
           release_port_best_effort(config, port_pool_subject, instance_id)
-          Error("PORT_BIND_FAILED")
+          Error(types_agent.PortBindFailed)
         }
       }
 
@@ -841,7 +849,7 @@ fn allocate_port(
   port_pool_subject: process.Subject(messages.PortPoolMsg),
   instance_id: types_core.InstanceId,
   host: String,
-) -> Result(Int, String) {
+) -> Result(Int, types_agent.FailureReason) {
   let out =
     process.call(port_pool_subject, call_timeout_ms(config), fn(reply_to) {
       messages.AllocateChecked(host, instance_id, reply_to)
@@ -849,17 +857,7 @@ fn allocate_port(
 
   case out {
     Ok(port) -> Ok(port)
-    Error(err) -> Error(port_pool_error_to_failure_reason(err))
-  }
-}
-
-fn port_pool_error_to_failure_reason(err: port_pool.PortPoolError) -> String {
-  case err {
-    port_pool.PoolExhausted -> "PORT_POOL_EXHAUSTED"
-    port_pool.PortInUse -> "PORT_IN_USE"
-    port_pool.BindCheckFailed(_) -> "PORT_BIND_FAILED"
-    port_pool.NoAvailablePortAfterRetries(_) -> "PORT_POOL_EXHAUSTED"
-    _ -> "PORT_BIND_FAILED"
+    Error(err) -> Error(provisioning_policy.from_port_pool_error(err))
   }
 }
 
@@ -875,7 +873,7 @@ fn start_port_owner(
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
   port: Int,
-) -> Result(port_owner.PortOwnerRef, String) {
+) -> Result(port_owner.PortOwnerRef, types_agent.FailureReason) {
   let #(runner_path, runner_args) = runner_command(profile.runner, config)
   let input = provisioning_input(profile, instance_id, params)
 
@@ -893,21 +891,8 @@ fn start_port_owner(
   {
     Ok(actor.Started(data: owner, ..)) -> Ok(owner)
     Error(actor.InitFailed(reason)) ->
-      Error(port_owner_start_failure_reason(reason))
-    Error(_) -> Error("START_SERVER_FAILED")
-  }
-}
-
-fn port_owner_start_failure_reason(reason: String) -> String {
-  // When a port is assigned (managed_port), `managed_port_env` performs a bind-check.
-  // Map that error back to stable provisioning failure reasons.
-  case string.contains(reason, "CheckPortInUse") {
-    True -> "PORT_IN_USE"
-    False ->
-      case string.contains(reason, "Managed port check failed") {
-        True -> "PORT_BIND_FAILED"
-        False -> "START_SERVER_FAILED"
-      }
+      Error(provisioning_policy.from_port_owner_start_reason(reason))
+    Error(_) -> Error(types_agent.StartServerFailed)
   }
 }
 

@@ -484,9 +484,9 @@ SAD asigna puertos para agentes `continuous` con `network_mode=managed_port` usa
 - `release(instance_id)` libera el puerto reservado (idempotente si no existe).
 - El orden de asignación no está garantizado (el actor puede usar un cursor/round-robin por eficiencia).
 - El bridge debe pedir `allocate_checked` **antes** de arrancar el servidor (port/wrapper). Si falla:
-  - `PoolExhausted` → `ProvisioningDone(Error("PORT_POOL_EXHAUSTED: ..."))`
-  - `PortInUse` → `ProvisioningDone(Error("PORT_IN_USE: ..."))` (fail-fast)
-  - `BindCheckFailed` → `ProvisioningDone(Error("PORT_BIND_FAILED: ..."))`
+  - `PoolExhausted` → `ProvisioningDone(Error("port_pool_exhausted: ..."))`
+  - `PortInUse` → `ProvisioningDone(Error("port_in_use: ..."))` (fail-fast)
+  - `BindCheckFailed` → `ProvisioningDone(Error("port_bind_failed: ..."))`
 - El release ocurre al completar `stop` y en `delete` (y en rollback/terminate/failure). Si la instancia se vuelve a arrancar (`start`), se reasigna puerto durante provisioning (puede cambiar).
 
 Referencia (API): `arquitectura/examples/snippets/port_pool_api_public.gleam`.

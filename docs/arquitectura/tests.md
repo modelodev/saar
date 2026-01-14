@@ -1041,13 +1041,13 @@ test/
 
 | Test | Descripción |
 |------|-------------|
-| `managed_port_exhaustion_transitions_to_failed` | Con rango de 1 puerto, 2 instancias continuous → una queda `Failed` con `failure_reason` estable `PORT_POOL_EXHAUSTED` |
-| `managed_port_in_use_transitions_to_failed` | Puerto ocupado en el SO → `Failed` con `PORT_IN_USE` |
-| `managed_port_bind_failed_transitions_to_failed` | Bind-check falla → `Failed` con `PORT_BIND_FAILED` |
-| `managed_port_race_fails_fast` | Puerto se ocupa tras check → `Failed` con `PORT_IN_USE` (fail-fast) |
+| `managed_port_exhaustion_transitions_to_failed` | Con rango de 1 puerto, 2 instancias continuous → una queda `Failed` con `failure_reason` estable `port_pool_exhausted` |
+| `managed_port_in_use_transitions_to_failed` | Puerto ocupado en el SO → `Failed` con `port_in_use` |
+| `managed_port_bind_failed_transitions_to_failed` | Bind-check falla → `Failed` con `port_bind_failed` |
+| `managed_port_race_fails_fast` | Puerto se ocupa tras check → `Failed` con `port_in_use` (fail-fast) |
 | `stop_releases_managed_port` | `stop` en continuous con `managed_port` libera el puerto al completar: crear otra instancia en rango 1 pasa |
 | `start_after_stop_reallocates_managed_port` | stop → start vuelve a provisioning y reasigna puerto (puede ser el mismo si está libre) |
-| `start_after_stop_can_fail_if_pool_taken` | stop(inst1) libera; create(inst2) ocupa; start(inst1) termina en `Failed` con `PORT_POOL_EXHAUSTED` |
+| `start_after_stop_can_fail_if_pool_taken` | stop(inst1) libera; create(inst2) ocupa; start(inst1) termina en `Failed` con `port_pool_exhausted` |
 | `delete_releases_managed_port` | `delete` libera el puerto: tras borrar, se puede crear otra instancia en rango 1 |
 
 ---

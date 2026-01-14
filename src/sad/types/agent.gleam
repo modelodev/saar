@@ -39,6 +39,38 @@ pub type AgentRunMode {
   RunBusy
 }
 
+/// Categorical failure reason for an instance.
+///
+/// This value is safe to expose to clients.
+pub type FailureReason {
+  PortInUse
+  PortBindFailed
+  PortPoolExhausted
+  StartServerFailed
+  StartSnapshotFailed
+  ServerDied
+  AgentDown
+  NoNetwork
+  Unknown
+}
+
+/// Returns a stable, client-facing string for a failure reason.
+///
+/// This is used by boundary encoders (e.g. HTTP JSON).
+pub fn failure_reason_to_string(reason: FailureReason) -> String {
+  case reason {
+    PortInUse -> "port_in_use"
+    PortBindFailed -> "port_bind_failed"
+    PortPoolExhausted -> "port_pool_exhausted"
+    StartServerFailed -> "start_server_failed"
+    StartSnapshotFailed -> "start_snapshot_failed"
+    ServerDied -> "server_died"
+    AgentDown -> "agent_down"
+    NoNetwork -> "no_network"
+    Unknown -> "unknown"
+  }
+}
+
 /// Public, serializable view of an agent instance state.
 ///
 /// This value is safe to log and to expose via HTTP.
@@ -50,7 +82,7 @@ pub type AgentStatusView {
     phase: AgentPhase,
     mode: AgentRunMode,
     assigned_port: Option(Int),
-    failure_reason: Option(String),
+    failure_reason: Option(FailureReason),
   )
 }
 

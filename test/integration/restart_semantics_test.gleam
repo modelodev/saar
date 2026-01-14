@@ -34,7 +34,7 @@ pub fn main() {
 ///
 /// This test does not assert that a specific OS port becomes free immediately
 /// (external runners can be flaky), but it does assert we never end up in
-/// `PORT_POOL_EXHAUSTED` due to leaked reservations.
+/// `types_agent.PortPoolExhausted` due to leaked reservations.
 pub fn manager_restart_does_not_orphan_port_pool_reservations_test() {
   port_helpers.ensure_wrapper_path()
 
@@ -79,7 +79,7 @@ pub fn manager_restart_does_not_orphan_port_pool_reservations_test() {
   let assert Ok(pid_after) = process.subject_owner(manager)
   pid_after |> should.not_equal(pid_before)
 
-  // Try to start again; we must not get stuck in PORT_POOL_EXHAUSTED.
+  // Try to start again; we must not get stuck in types_agent.PortPoolExhausted.
   start_until_ready_continuous(manager, profile, cfg, 20)
 
   Nil
@@ -156,8 +156,8 @@ fn start_until_ready_continuous(
       {
         Ok(Nil) -> Nil
 
-        Error(option.Some("PORT_POOL_EXHAUSTED")) ->
-          panic as "PORT_POOL_EXHAUSTED after manager restart"
+        Error(option.Some(types_agent.PortPoolExhausted)) ->
+          panic as "port_pool_exhausted after manager restart"
 
         Error(_) -> {
           let _ =
@@ -177,7 +177,7 @@ fn wait_for_ready_or_failure(
   agent_ref: agent.AgentRef,
   expected_phase: types_agent.AgentPhase,
   attempts: Int,
-) -> Result(Nil, option.Option(String)) {
+) -> Result(Nil, option.Option(types_agent.FailureReason)) {
   case attempts {
     0 ->
       case agent.status(agent_ref, 1000) {
