@@ -31,8 +31,8 @@ import sad/bridge/http_client
 import sad/bridge/interpolator
 import sad/bridge/managed_port_env
 import sad/core/agent
-import sad/core/boundary_call
 import sad/core/messages
+import sad/gateway/lookup_http
 import sad/gateway/problem
 import sad/types/config as types_config
 import sad/types/core as types_core
@@ -118,17 +118,13 @@ fn proxy_to_instance(
         Ok(instance_id) -> {
           let Deps(registry: registry, profiles: profiles) = deps
 
-          let found =
-            boundary_call.call(registry, registry_timeout_ms(cfg), fn(reply_to) {
-              messages.LookupByInstanceId(instance_id, reply_to)
-            })
-
-          case found {
-            Error(call_err) ->
-              problem.from_call_error(call_err, trace_id, req.path)
-            Ok(option.None) -> problem.not_found(trace_id, req.path)
-
-            Ok(option.Some(agent_ref)) ->
+          lookup_http.with_agent_ref(
+            registry,
+            registry_timeout_ms(cfg),
+            trace_id,
+            req.path,
+            instance_id,
+            fn(agent_ref) {
               proxy_via_profile(
                 req,
                 cfg,
@@ -138,7 +134,8 @@ fn proxy_to_instance(
                 instance_id,
                 rest,
               )
-          }
+            },
+          )
         }
       }
   }
@@ -169,17 +166,13 @@ fn proxy_via_profile(
           )
 
         option.Some(runner_port) -> {
-          let profile_out =
-            boundary_call.call(profiles, call_timeout_ms(cfg), fn(reply_to) {
-              messages.GetProfile(profile_id, reply_to)
-            })
-
-          case profile_out {
-            Error(call_err) ->
-              problem.from_call_error(call_err, trace_id, req.path)
-            Ok(option.None) -> problem.not_found(trace_id, req.path)
-
-            Ok(option.Some(profile)) ->
+          lookup_http.with_profile_or_404(
+            profiles,
+            call_timeout_ms(cfg),
+            trace_id,
+            req.path,
+            profile_id,
+            fn(profile) {
               proxy_to_interface(
                 req,
                 cfg,
@@ -190,7 +183,8 @@ fn proxy_via_profile(
                 profile_id,
                 rest,
               )
-          }
+            },
+          )
         }
       }
     }
@@ -261,14 +255,7 @@ fn proxy_http(
   profile_id: types_core.ProfileId,
   rest: List(String),
 ) -> response.Response(mist.ResponseData) {
-  let upstream_path = "/" <> string.join(rest, with: "/")
-
-  let query = case req.query {
-    option.Some(q) -> "?" <> q
-    option.None -> ""
-  }
-
-  let url = base_url <> upstream_path <> query
+  let url = build_upstream_url(base_url, rest, req.query)
 
   let max_body = max_request_body_bytes(cfg)
 
@@ -340,12 +327,16 @@ fn build_upstream_headers(
   instance_id: types_core.InstanceId,
   profile_id: types_core.ProfileId,
 ) -> dict.Dict(String, String) {
+  let forwarded_headers = [
+    "accept",
+    "accept-language",
+    "user-agent",
+    "content-type",
+  ]
+
   let headers =
-    base
-    |> add_if_present(req, "accept")
-    |> add_if_present(req, "accept-language")
-    |> add_if_present(req, "user-agent")
-    |> add_if_present(req, "content-type")
+    forwarded_headers
+    |> list.fold(base, fn(acc, key) { add_if_present(acc, req, key) })
 
   let headers =
     headers
@@ -370,6 +361,21 @@ fn build_upstream_headers(
   }
 
   dict.insert(headers, "x-forwarded-for", forwarded_for)
+}
+
+fn build_upstream_url(
+  base_url: String,
+  rest: List(String),
+  query: option.Option(String),
+) -> String {
+  let upstream_path = "/" <> string.join(rest, with: "/")
+
+  let query_string = case query {
+    option.Some(q) -> "?" <> q
+    option.None -> ""
+  }
+
+  base_url <> upstream_path <> query_string
 }
 
 fn add_if_present(

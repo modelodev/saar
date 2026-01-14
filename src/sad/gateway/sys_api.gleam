@@ -36,6 +36,7 @@ import sad/core/agent
 import sad/core/boundary_call
 import sad/core/messages
 import sad/decoders
+import sad/gateway/lookup_http
 import sad/gateway/problem
 import sad/profiles_sources
 import sad/types/agent as types_agent
@@ -455,16 +456,14 @@ fn handle_agent_logs_stream(
         Ok(instance_id) -> {
           let Deps(registry: registry, ..) = deps
 
-          case
-            boundary_call.call(registry, registry_timeout_ms(cfg), fn(reply_to) {
-              messages.LookupByInstanceId(instance_id, reply_to)
-            })
-          {
-            Error(call_err) ->
-              problem.from_call_error(call_err, trace_id, req.path)
-            Ok(None) -> problem.not_found(trace_id, req.path)
-            Ok(Some(agent_ref)) -> logs_stream_response(cfg, agent_ref)
-          }
+          lookup_http.with_agent_ref(
+            registry,
+            registry_timeout_ms(cfg),
+            trace_id,
+            req.path,
+            instance_id,
+            fn(agent_ref) { logs_stream_response(cfg, agent_ref) },
+          )
         }
       }
 
