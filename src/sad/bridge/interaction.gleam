@@ -34,6 +34,7 @@ import sad/bridge/runner
 import sad/bridge/runner_contract
 import sad/bridge/serialization
 import sad/core/artifact_registry_protocol
+import sad/ffi
 import sad/streams/sink
 import sad/streams/stream_pump
 import sad/types/config as types_config
@@ -803,7 +804,8 @@ fn append_wrapper_env(
 fn port_error_to_string(err: port_process.PortError) -> String {
   case err {
     port_process.WrapperNotFound(name) -> "Wrapper not found: " <> name
-    port_process.SpawnFailed(reason) -> "Failed to start runner: " <> reason
+    port_process.SpawnFailed(reason) ->
+      "Failed to start runner: " <> ffi.ffi_error_to_string(reason)
   }
 }
 
