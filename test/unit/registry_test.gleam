@@ -7,10 +7,9 @@ import gleam/otp/actor
 import gleeunit
 import gleeunit/should
 import sad/core/agent
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/core/messages
 import sad/core/registry
-import sad/otp/safe_call
 import sad/types/agent as types_agent
 import sad/types/core as types_core
 import sad/types/enums as types_enums
@@ -53,7 +52,7 @@ pub fn register_duplicate_fails() {
   let assert Ok(_) = register(registry, status, agent1)
 
   register(registry, status, agent2)
-  |> should.equal(Error(boundary_call.ActorError(messages.AlreadyExists)))
+  |> should.equal(Error(safe_call.ActorError(messages.AlreadyExists)))
 }
 
 pub fn register_duplicate_instance_id_fails() {
@@ -70,7 +69,7 @@ pub fn register_duplicate_instance_id_fails() {
     register(registry, status_view(profile1, instance_id), agent1)
 
   register(registry, status_view(profile2, instance_id), agent2)
-  |> should.equal(Error(boundary_call.ActorError(messages.AlreadyExists)))
+  |> should.equal(Error(safe_call.ActorError(messages.AlreadyExists)))
 }
 
 pub fn register_is_atomic_for_uniqueness() {
@@ -277,8 +276,8 @@ fn register(
   registry: process.Subject(messages.RegistryMsg),
   status: types_agent.AgentStatusView,
   agent_ref: agent.AgentRef,
-) -> Result(Nil, boundary_call.ApiCallError(messages.RegistryError)) {
-  boundary_call.call_unwrap_result(registry, 1000, fn(reply_to) {
+) -> Result(Nil, safe_call.ApiCallError(messages.RegistryError)) {
+  safe_call.call_unwrap_result(registry, 1000, fn(reply_to) {
     messages.Register(status, agent_ref, reply_to)
   })
 }
@@ -288,7 +287,7 @@ fn lookup(
   key: messages.InstanceKey,
   timeout_ms: Int,
 ) -> Result(option.Option(agent.AgentRef), safe_call.CallError) {
-  boundary_call.call(registry, timeout_ms, fn(reply_to) {
+  safe_call.call(registry, timeout_ms, fn(reply_to) {
     messages.Lookup(key, reply_to)
   })
 }
@@ -307,7 +306,7 @@ fn lookup_by_instance_id(
   instance_id: types_core.InstanceId,
   timeout_ms: Int,
 ) -> Result(option.Option(agent.AgentRef), safe_call.CallError) {
-  boundary_call.call(registry, timeout_ms, fn(reply_to) {
+  safe_call.call(registry, timeout_ms, fn(reply_to) {
     messages.LookupByInstanceId(instance_id, reply_to)
   })
 }
@@ -317,7 +316,7 @@ fn list_by_profile(
   profile_id: types_core.ProfileId,
   timeout_ms: Int,
 ) -> Result(List(types_core.InstanceId), safe_call.CallError) {
-  boundary_call.call(registry, timeout_ms, fn(reply_to) {
+  safe_call.call(registry, timeout_ms, fn(reply_to) {
     messages.ListByProfile(profile_id, reply_to)
   })
 }

@@ -12,7 +12,7 @@
 //// - Artifact/UI proxies (future sprints).
 ////
 //// Relationships:
-//// - Bridges HTTP requests to core actors via `sad/core/boundary_call`.
+//// - Bridges HTTP requests to core actors via `sad/otp/safe_call`.
 //// - Uses `sad/gateway/problem` for RFC7807 responses.
 
 import gleam/bit_array
@@ -33,7 +33,7 @@ import gleam/string
 import gleam/yielder
 import mist
 import sad/core/agent
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/core/messages
 import sad/decoders
 import sad/gateway/lookup
@@ -145,7 +145,7 @@ fn create_agent(
           let Deps(agent_manager: manager, ..) = deps
 
           let out =
-            boundary_call.call_unwrap_result(
+            safe_call.call_unwrap_result(
               manager,
               call_timeout_ms(cfg),
               fn(reply_to) {
@@ -178,10 +178,10 @@ fn create_agent(
               )
             }
 
-            Error(boundary_call.CallFailed(call_err)) ->
+            Error(safe_call.CallFailed(call_err)) ->
               problem.from_call_error(call_err, trace_id, path)
 
-            Error(boundary_call.ActorError(err)) ->
+            Error(safe_call.ActorError(err)) ->
               start_error_to_response(req, trace_id, err)
           }
         }
@@ -268,7 +268,7 @@ fn list_agents(
   let Deps(agent_manager: manager, ..) = deps
 
   case
-    boundary_call.call(manager, registry_timeout_ms(cfg), fn(reply_to) {
+    safe_call.call(manager, registry_timeout_ms(cfg), fn(reply_to) {
       messages.ListAgents(reply_to)
     })
   {
@@ -302,7 +302,7 @@ fn handle_agent_status(
       let Deps(registry: registry, ..) = deps
 
       case
-        boundary_call.call(registry, registry_timeout_ms(cfg), fn(reply_to) {
+        safe_call.call(registry, registry_timeout_ms(cfg), fn(reply_to) {
           messages.LookupStatusByInstanceId(instance_id, reply_to)
         })
       {
@@ -330,7 +330,7 @@ fn handle_agent_stop(
           let Deps(agent_manager: manager, ..) = deps
 
           case
-            boundary_call.call_unwrap_result(
+            safe_call.call_unwrap_result(
               manager,
               call_timeout_ms(cfg),
               fn(reply_to) { messages.StopAgent(instance_id, reply_to) },
@@ -338,10 +338,10 @@ fn handle_agent_stop(
           {
             Ok(_) -> accepted_json(instance_id)
 
-            Error(boundary_call.CallFailed(call_err)) ->
+            Error(safe_call.CallFailed(call_err)) ->
               problem.from_call_error(call_err, trace_id, req.path)
 
-            Error(boundary_call.ActorError(_)) ->
+            Error(safe_call.ActorError(_)) ->
               problem.from_error_kind(
                 types_enums.InfraError,
                 trace_id,
@@ -372,7 +372,7 @@ fn handle_agent_start(
           let Deps(agent_manager: manager, ..) = deps
 
           case
-            boundary_call.call_unwrap_result(
+            safe_call.call_unwrap_result(
               manager,
               call_timeout_ms(cfg),
               fn(reply_to) {
@@ -382,10 +382,10 @@ fn handle_agent_start(
           {
             Ok(_) -> accepted_json(instance_id)
 
-            Error(boundary_call.CallFailed(call_err)) ->
+            Error(safe_call.CallFailed(call_err)) ->
               problem.from_call_error(call_err, trace_id, req.path)
 
-            Error(boundary_call.ActorError(_)) ->
+            Error(safe_call.ActorError(_)) ->
               problem.from_error_kind(
                 types_enums.InfraError,
                 trace_id,
@@ -416,7 +416,7 @@ fn handle_agent_item(
           let Deps(agent_manager: manager, ..) = deps
 
           case
-            boundary_call.call_unwrap_result(
+            safe_call.call_unwrap_result(
               manager,
               call_timeout_ms(cfg),
               fn(reply_to) { messages.DeleteAgent(instance_id, reply_to) },
@@ -424,10 +424,10 @@ fn handle_agent_item(
           {
             Ok(_) -> accepted_json(instance_id)
 
-            Error(boundary_call.CallFailed(call_err)) ->
+            Error(safe_call.CallFailed(call_err)) ->
               problem.from_call_error(call_err, trace_id, req.path)
 
-            Error(boundary_call.ActorError(_)) ->
+            Error(safe_call.ActorError(_)) ->
               problem.from_error_kind(
                 types_enums.InfraError,
                 trace_id,
@@ -591,7 +591,7 @@ fn handle_sys_profiles(
       let Deps(profiles: profiles, ..) = deps
 
       case
-        boundary_call.call(profiles, registry_timeout_ms(cfg), fn(reply_to) {
+        safe_call.call(profiles, registry_timeout_ms(cfg), fn(reply_to) {
           messages.ListProfiles(reply_to)
         })
       {

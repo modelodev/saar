@@ -19,7 +19,7 @@ import gleam/erlang/process
 import gleam/http/response
 import gleam/json
 import mist
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/core/messages
 
 /// Returns a liveness response.
@@ -42,7 +42,7 @@ pub fn ready(
   timeout_ms: Int,
 ) -> response.Response(mist.ResponseData) {
   let status_code = case
-    boundary_call.call(profiles, timeout_ms, fn(reply_to) {
+    safe_call.call(profiles, timeout_ms, fn(reply_to) {
       messages.ListProfiles(reply_to)
     })
   {

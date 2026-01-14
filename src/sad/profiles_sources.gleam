@@ -29,7 +29,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/core/messages
 import sad/decoders
 import sad/ffi
@@ -147,7 +147,7 @@ pub fn reload_profiles(
 
   // Only swap on success.
   use count <- result.try(
-    boundary_call.call(profiles, timeout_ms, fn(reply_to) {
+    safe_call.call(profiles, timeout_ms, fn(reply_to) {
       messages.SetProfiles(loaded, reply_to)
     })
     |> result.map_error(fn(call_err) {

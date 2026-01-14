@@ -6,7 +6,7 @@ import gleeunit
 import gleeunit/should
 import sad/app_state
 import sad/core/agent
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/core/messages
 import sad/core/root_supervisor
 import sad/core/supervisor_names
@@ -110,7 +110,7 @@ fn start_instance(
       artifact_registry: artifact_registry,
     )
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.StartAgent(args, reply_to)
   })
   |> test_assertions.assert_ok

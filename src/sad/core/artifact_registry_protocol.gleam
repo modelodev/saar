@@ -12,7 +12,7 @@
 ////
 //// Relationships:
 //// - Implemented by `sad/core/artifact_registry`.
-//// - Called from boundary layers via `sad/core/boundary_call`.
+//// - Called from boundary layers via `sad/otp/safe_call`.
 
 import gleam/erlang/process.{type Subject}
 import gleam/option.{type Option}

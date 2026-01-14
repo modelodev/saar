@@ -10,7 +10,7 @@ import gleeunit/should
 import port_helpers
 import sad/app_state
 import sad/core/agent
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/core/messages
 import sad/core/root_supervisor
 import sad/core/supervisor_names
@@ -66,7 +66,7 @@ pub fn manager_restart_does_not_orphan_port_pool_reservations_test() {
   let a1 = start_instance(manager, profile, i1, cfg)
   wait_for_phase(a1, types_agent.ReadyContinuous, 400)
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.DeleteAgent(i1, reply_to)
   })
   |> test_assertions.assert_ok
@@ -161,7 +161,7 @@ fn start_until_ready_continuous(
 
         Error(_) -> {
           let _ =
-            boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+            safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
               messages.DeleteAgent(instance_id, reply_to)
             })
 
@@ -231,7 +231,7 @@ fn start_instance(
       artifact_registry: artifact_registry,
     )
 
-  boundary_call.call_unwrap_result(manager, 5000, fn(reply_to) {
+  safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
     messages.StartAgent(args, reply_to)
   })
   |> test_assertions.assert_ok

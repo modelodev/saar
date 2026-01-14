@@ -15,7 +15,7 @@ import sad/app_state
 import sad/bridge/http_client
 import sad/config_loader
 import sad/core/artifact_registry_protocol
-import sad/core/boundary_call
+import sad/otp/safe_call
 import sad/core/root_supervisor
 import sad/core/supervisor_names
 import sad/net/tcp_listener
@@ -136,7 +136,7 @@ pub fn get_artifact_outside_workspace_test() {
   let assert Ok(path) = workspace.workspace_path_validate("escape.txt")
 
   let artifact_id =
-    boundary_call.call(artifact_registry, 1000, fn(reply_to) {
+    safe_call.call(artifact_registry, 1000, fn(reply_to) {
       artifact_registry_protocol.RegisterArtifact(
         path,
         "text/plain",

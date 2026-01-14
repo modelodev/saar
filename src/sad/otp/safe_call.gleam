@@ -19,6 +19,7 @@ import gleam/erlang/process.{
   select_map, select_specific_monitor, selector_receive, send, subject_owner,
 }
 import gleam/int
+import gleam/result
 
 /// Errors returned by `call_within`.
 ///
@@ -26,6 +27,15 @@ import gleam/int
 pub type CallError {
   Disconnected
   TimedOut
+}
+
+/// Error returned by boundary calls to core actors.
+///
+/// `CallFailed` indicates the actor could not be reached (down or timed out).
+/// `ActorError` carries the domain error returned by the actor.
+pub type ApiCallError(e) {
+  CallFailed(CallError)
+  ActorError(e)
 }
 
 type CallEvt(reply) {
@@ -70,4 +80,29 @@ pub fn call_within(
       }
     }
   }
+}
+
+/// Calls an actor and returns its reply.
+///
+/// This is a thin wrapper over `call_within` to keep boundary code compact.
+pub fn call(
+  subject: Subject(message),
+  timeout_ms: Int,
+  make_message: fn(Subject(reply)) -> message,
+) -> Result(reply, CallError) {
+  call_within(subject, timeout_ms, make_message)
+}
+
+/// Calls an actor that replies with a `Result`.
+///
+/// Typical pattern for request/reply messages: the actor encodes domain failure
+/// as `Result(value, error)`.
+pub fn call_unwrap_result(
+  subject: Subject(message),
+  timeout_ms: Int,
+  make_message: fn(Subject(Result(value, error))) -> message,
+) -> Result(value, ApiCallError(error)) {
+  call_within(subject, timeout_ms, make_message)
+  |> result.map_error(CallFailed)
+  |> result.try(fn(reply) { reply |> result.map_error(ActorError) })
 }

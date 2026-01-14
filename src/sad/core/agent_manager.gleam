@@ -15,7 +15,7 @@
 //// Relationships:
 //// - Started under `sad/core/root_supervisor`.
 //// - Uses the core message protocols (`sad/core/messages`) and crash-only `process.call`.
-//// - Boundary layers should call this actor via `sad/core/boundary_call`.
+//// - Boundary layers should call this actor via `sad/otp/safe_call`.
 //// - Spawns AgentActor children via a named `factory_supervisor`.
 
 import envoy
