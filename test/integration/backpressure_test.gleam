@@ -89,6 +89,40 @@ pub fn disconnect_does_not_cancel() {
   }
 }
 
+pub fn disconnect_still_emits_interaction_done() {
+  let done = process.new_subject()
+
+  // Immediate disconnect should not prevent sending the final done message.
+  let stream_sink = start_sink(writer_always_error(safe_call.Disconnected))
+
+  let cfg =
+    types_config.InteractionStreamConfig(
+      batch_byte_size: 1,
+      flush_interval_ms: 1000,
+      push_timeout_ms: 250,
+    )
+
+  let pump = stream_pump.start(done, Some(stream_sink), cfg)
+  let trace_id = core.trace_id("trace-disconnect-done")
+
+  send_chunks(pump, trace_id, 50)
+  let expected = min_ok_result(trace_id)
+  stream_pump.finish(pump, Ok(expected))
+
+  case process.receive(done, 2000) {
+    Ok(msg) -> msg |> should.equal(Ok(expected))
+    Error(_) -> panic as "done missing after disconnect"
+  }
+}
+
+pub fn slow_ack_applies_backpressure() {
+  // Sink ACK slower than the timeout should return TimedOut.
+  let stream_sink = start_sink(writer_slow_ack(200))
+
+  sink.push_batch(stream_sink, [stream.event("x")], 25)
+  |> should.equal(Error(safe_call.TimedOut))
+}
+
 pub fn sink_disconnect_switches_to_discard() {
   let done = process.new_subject()
 
