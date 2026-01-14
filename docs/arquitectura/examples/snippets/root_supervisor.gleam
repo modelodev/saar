@@ -2,26 +2,26 @@
 // Source: arquitectura/actores.md:1138
 // Purpose: documentation-only; may not compile as-is.
 
-import gleam/erlang/process.{type Name, type Subject} as process
 import gleam/dict.{type Dict}
+import gleam/erlang/process.{type Name, type Subject}
 import gleam/otp/actor
 import gleam/otp/factory_supervisor
 import gleam/otp/static_supervisor.{type Supervisor} as supervisor
 import gleam/otp/supervision
 import gleam/result
-import sad/core/agent as agent
+import sad/app_state.{type AppState}
+import sad/bridge/bridge
+import sad/core/agent
 import sad/core/agent_manager
 import sad/core/artifact_registry
+import sad/core/messages.{
+  type AgentManagerMsg, type ArtifactRegistryMsg, type PortPoolMsg,
+  type ProfilesMsg, type RegistryMsg, type StartArgs,
+}
 import sad/core/port_pool_actor
 import sad/core/profiles
 import sad/core/registry
-import sad/bridge/bridge
 import sad/gateway/http_server
-import sad/app_state.{type AppState}
-import sad/core/messages.{
-  type AgentManagerMsg, type ArtifactRegistryMsg, type RegistryMsg, type ProfilesMsg, type PortPoolMsg,
-  type StartArgs,
-}
 import sad/types.{type Profile, type ProfileId}
 
 /// Nombres de procesos (átomos) a crear una única vez en el arranque.
@@ -63,10 +63,20 @@ pub opaque type SupervisorRef {
 }
 
 /// Arranca el árbol de supervisión completo.
-pub fn start(app_state: AppState, names: RootNames) -> actor.StartResult(SupervisorRef) {
+pub fn start(
+  app_state: AppState,
+  names: RootNames,
+) -> actor.StartResult(SupervisorRef) {
   // El supervisor raíz es estático: siempre tiene los mismos hijos.
   // Orden importa: Registry/ArtifactRegistry/PortPool antes del subtree dependiente (manager + factory + http).
-  let RootNames(registry_name, artifact_registry_name, port_pool_name, profiles_name, agent_factory_name, agent_manager_name) = names
+  let RootNames(
+    registry_name,
+    artifact_registry_name,
+    port_pool_name,
+    profiles_name,
+    agent_factory_name,
+    agent_manager_name,
+  ) = names
 
   // Subjects deterministas vía nombre (no requieren descubrir PIDs ni "which_children").
   let registry_subject = process.named_subject(registry_name)
@@ -78,30 +88,40 @@ pub fn start(app_state: AppState, names: RootNames) -> actor.StartResult(Supervi
   // Referencia al supervisor de factory vía nombre (evita pasar PIDs).
   let agent_factory = factory_supervisor.get_by_name(agent_factory_name)
 
-  let deps = agent_manager.ManagerDeps(
-    registry_subject,
-    artifact_registry_subject,
-    bridge.default_bridge(),
-    agent_factory,
-  )
+  let deps =
+    agent_manager.ManagerDeps(
+      registry_subject,
+      artifact_registry_subject,
+      bridge.default_bridge(),
+      agent_factory,
+    )
 
   let spec =
     supervisor.new(supervisor.RestForOne)
     |> supervisor.restart_tolerance(intensity: 5, period: 60)
     |> supervisor.add(registry_child_spec(registry_name))
     |> supervisor.add(artifact_registry_child_spec(artifact_registry_name))
-    |> supervisor.add(port_pool_child_spec(port_pool_name, app_state.config.port_range_min, app_state.config.port_range_max))
-    |> supervisor.add(profiles_child_spec(profiles_name, app_state.initial_profiles))
-    |> supervisor.add(agent_manager_child_spec(app_state, deps, agent_manager_name))
-    |> supervisor.add(
-      agent_factory_child_spec(
-        app_state,
-        artifact_registry_subject,
-        port_pool_subject,
-        registry_subject,
-        agent_factory_name,
-      )
-    )
+    |> supervisor.add(port_pool_child_spec(
+      port_pool_name,
+      app_state.config.port_range_min,
+      app_state.config.port_range_max,
+    ))
+    |> supervisor.add(profiles_child_spec(
+      profiles_name,
+      app_state.initial_profiles,
+    ))
+    |> supervisor.add(agent_manager_child_spec(
+      app_state,
+      deps,
+      agent_manager_name,
+    ))
+    |> supervisor.add(agent_factory_child_spec(
+      app_state,
+      artifact_registry_subject,
+      port_pool_subject,
+      registry_subject,
+      agent_factory_name,
+    ))
     |> supervisor.add(http_server_child_spec(app_state, agent_manager_subject))
 
   supervisor.start(spec)
@@ -153,15 +173,20 @@ fn agent_factory_child_spec(
   port_pool: Subject(PortPoolMsg),
   registry: Subject(RegistryMsg),
   name: Name(factory_supervisor.Message(StartArgs, agent.AgentRef)),
-) -> supervision.ChildSpecification(factory_supervisor.Supervisor(StartArgs, agent.AgentRef)) {
-  let agent_deps = agent.AgentDeps(
-    artifact_registry: artifact_registry,
-    port_pool: port_pool,
-    registry: registry,
-    bridge: bridge.default_bridge(),
-  )
+) -> supervision.ChildSpecification(
+  factory_supervisor.Supervisor(StartArgs, agent.AgentRef),
+) {
+  let agent_deps =
+    agent.AgentDeps(
+      artifact_registry: artifact_registry,
+      port_pool: port_pool,
+      registry: registry,
+      bridge: bridge.default_bridge(),
+    )
 
-  factory_supervisor.worker_child(fn(args: StartArgs) { agent.start_link(args, agent_deps, 10_000) })
+  factory_supervisor.worker_child(fn(args: StartArgs) {
+    agent.start_link(args, agent_deps, 10_000)
+  })
   |> factory_supervisor.restart_strategy(supervision.Temporary)
   |> factory_supervisor.named(name)
   |> factory_supervisor.supervised
@@ -180,7 +205,9 @@ fn http_server_child_spec(
   app_state: AppState,
   agent_manager_subject: Subject(AgentManagerMsg),
 ) -> supervision.ChildSpecification(Nil) {
-  supervision.worker(fn() { http_server.start(app_state.config, agent_manager_subject) })
+  supervision.worker(fn() {
+    http_server.start(app_state.config, agent_manager_subject)
+  })
 }
 
 /// Obtiene referencia al registry.

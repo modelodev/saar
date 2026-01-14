@@ -4,9 +4,11 @@
 // sad/core/artifact_registry_api.gleam
 
 import gleam/erlang/process.{type Subject}
+import sad/core/messages.{
+  type ArtifactRegistryMsg, LookupArtifact, PurgeByInstance, RegisterArtifact,
+}
 import sad/otp/safe_call
 import sad/otp/safe_call.{type CallError}
-import sad/core/messages.{type ArtifactRegistryMsg, RegisterArtifact, LookupArtifact, PurgeByInstance}
 import sad/types.{type ArtifactId, type InstanceId, type WorkspacePath}
 
 pub type ArtifactEntry {
@@ -47,4 +49,3 @@ pub fn purge_by_instance(
     PurgeByInstance(instance_id, reply_to)
   })
 }
-

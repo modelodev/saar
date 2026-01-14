@@ -2,10 +2,7 @@
 /// Las líneas se almacenan en orden cronológico [oldest, ..., newest].
 /// Se guarda el LogEvent completo para conservar ts_ms y trace_id.
 pub type LogBuffer {
-  LogBuffer(
-    lines: Deque(LogEvent),
-    total_bytes: Int,
-  )
+  LogBuffer(lines: Deque(LogEvent), total_bytes: Int)
 }
 
 // SadConfig está definido en tipos.md §8.1

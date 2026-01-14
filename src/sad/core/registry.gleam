@@ -298,7 +298,7 @@ fn status_after_down(
       phase: types_agent.Failed,
       mode: types_agent.RunIdle,
       assigned_port: None,
-      failure_reason: Some("agent_down"),
+      failure_reason: Some(types_agent.AgentDown),
     )
 
   case down {

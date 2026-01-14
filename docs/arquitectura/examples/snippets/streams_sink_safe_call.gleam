@@ -5,14 +5,21 @@ import gleam/result
 import sad/otp/safe_call
 import sad/otp/safe_call.{type CallError}
 
-pub type StreamSink = Subject(StreamSinkMsg)
+pub type StreamSink =
+  Subject(StreamSinkMsg)
 
 pub type StreamSinkMsg {
   /// Batch = lista ordenada de `StreamEvent` completos (no framing SSE).
   /// El sink serializa y escribe al socket en el mismo orden.
-  PushBatch(events: List(StreamEvent), reply_to: Subject(Result(Nil, CallError)))
+  PushBatch(
+    events: List(StreamEvent),
+    reply_to: Subject(Result(Nil, CallError)),
+  )
   /// Evento terminal: el sink debe emitir el evento final y cerrar el stream SSE.
-  Finish(result: Result(InteractionResult, InteractionError), reply_to: Subject(Result(Nil, CallError)))
+  Finish(
+    result: Result(InteractionResult, InteractionError),
+    reply_to: Subject(Result(Nil, CallError)),
+  )
 }
 
 /// Empuja un batch de `StreamEvent` al StreamSink.
@@ -23,7 +30,11 @@ pub fn push_batch(
   events: List(StreamEvent),
   timeout_ms: Int,
 ) -> Result(Nil, CallError) {
-  case safe_call.call_within(sink, timeout_ms, fn(reply_to) { PushBatch(events, reply_to) }) {
+  case
+    safe_call.call_within(sink, timeout_ms, fn(reply_to) {
+      PushBatch(events, reply_to)
+    })
+  {
     Ok(Ok(_)) -> Ok(Nil)
     Ok(Error(e)) -> Error(e)
     Error(e) -> Error(e)
@@ -36,7 +47,11 @@ pub fn finish(
   result: Result(InteractionResult, InteractionError),
   timeout_ms: Int,
 ) -> Result(Nil, CallError) {
-  case safe_call.call_within(sink, timeout_ms, fn(reply_to) { Finish(result, reply_to) }) {
+  case
+    safe_call.call_within(sink, timeout_ms, fn(reply_to) {
+      Finish(result, reply_to)
+    })
+  {
     Ok(Ok(_)) -> Ok(Nil)
     Ok(Error(e)) -> Error(e)
     Error(e) -> Error(e)

@@ -7,6 +7,12 @@ Este repositorio es un proyecto Gleam/BEAM con `target = erlang"`.
 - Los métodos no deben superar las 100 líneas salvo justificación clara.
 - No debe haber 3 cases anidados, y 2 cases anidados se permiten con justificación.
 
+## Reutilización (anti-duplicación)
+
+- Antes de crear un módulo/función/helper nuevo, busca equivalentes en el repo (p.ej. `rg "<keyword>" src test`).
+- Si existe un equivalente estable y testeado, reutilízalo en vez de duplicar.
+- Si no encaja, documenta brevemente el motivo (en el PR/commit o en el módulo) antes de introducir la nueva utilidad.
+
 ## Convenciones de documentación
 
 - En gleam, puede usarse tanto:

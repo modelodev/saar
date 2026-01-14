@@ -351,10 +351,10 @@ pub type PortPoolMsg {
 ```
 
 **Semántica v0:**
-- `PoolExhausted` MUST traducirse a un fallo estable `PORT_POOL_EXHAUSTED` (safe-to-log) durante provisioning.
-- `PortInUse` MUST traducirse a un fallo estable `PORT_IN_USE` (safe-to-log) durante provisioning.
-- `BindCheckFailed` MUST traducirse a un fallo estable `PORT_BIND_FAILED` (safe-to-log) durante provisioning.
-- Si el puerto se ocupa entre el bind-check y el arranque real, el provisioning falla **rápido** con `PORT_IN_USE` (sin reintentos).
+- `PoolExhausted` MUST traducirse a un fallo estable `port_pool_exhausted` (safe-to-log) durante provisioning.
+- `PortInUse` MUST traducirse a un fallo estable `port_in_use` (safe-to-log) durante provisioning.
+- `BindCheckFailed` MUST traducirse a un fallo estable `port_bind_failed` (safe-to-log) durante provisioning.
+- Si el puerto se ocupa entre el bind-check y el arranque real, el provisioning falla **rápido** con `port_in_use` (sin reintentos).
 - En v0, el puerto reservado se libera en `delete` (y en rollback/terminate), no en `stop`.
 
 ## 14. SSE (`sad/sse.gleam`)

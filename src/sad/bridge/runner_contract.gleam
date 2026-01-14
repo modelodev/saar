@@ -16,14 +16,13 @@
 //// - Consumed by `sad/bridge/runner` when reading stdout.
 //// - Uses `sad/types/runner` and `sad/types/enums`.
 
-import gleam/dict
-import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/json
 import gleam/list
 import gleam/option
 import gleam/result
 import gleam/string
+import sad/json_pointer
 import sad/types/enums as types_enums
 import sad/types/runner as types_runner
 
@@ -222,48 +221,7 @@ fn raw_runner_error_decoder() -> decode.Decoder(RawRunnerError) {
 
 fn json_option_decoder() -> decode.Decoder(option.Option(json.Json)) {
   decode.optional(decode.dynamic)
-  |> decode.map(fn(value) { option.map(value, json_from_dynamic) })
-}
-
-fn json_from_dynamic(value: Dynamic) -> json.Json {
-  // `gleam/json` on Erlang represents Json values as iodata/binaries containing
-  // already-encoded JSON. Values coming from `decode.dynamic` are *decoded* Erlang
-  // terms (maps/lists/etc.), so we must re-encode them into the Json representation.
-  case decode.run(value, decode.bool) {
-    Ok(b) -> json.bool(b)
-    Error(_) ->
-      case decode.run(value, decode.int) {
-        Ok(i) -> json.int(i)
-        Error(_) ->
-          case decode.run(value, decode.float) {
-            Ok(f) -> json.float(f)
-            Error(_) ->
-              case decode.run(value, decode.string) {
-                Ok(s) -> json.string(s)
-                Error(_) ->
-                  case decode.run(value, decode.list(of: decode.dynamic)) {
-                    Ok(items) -> json.array(items, json_from_dynamic)
-                    Error(_) ->
-                      case
-                        decode.run(
-                          value,
-                          decode.dict(decode.string, decode.dynamic),
-                        )
-                      {
-                        Ok(entries) ->
-                          entries
-                          |> dict.to_list
-                          |> list.map(fn(pair) {
-                            #(pair.0, json_from_dynamic(pair.1))
-                          })
-                          |> json.object
-                        Error(_) -> json.null()
-                      }
-                  }
-              }
-          }
-      }
-  }
+  |> decode.map(fn(value) { option.map(value, json_pointer.dynamic_to_json) })
 }
 
 fn parse_runner_error(

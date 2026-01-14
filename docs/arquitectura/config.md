@@ -312,9 +312,9 @@ Defaults canonicos: `docs/plan/limits.toml` (tabla generada en `docs/plan/limits
 - El helper puro es *best-effort* respecto al SO; para garantía real se usa `allocate_checked` con bind-check.
 - En agentes `continuous` con `network_mode=managed_port`, el puerto se **reserva durante provisioning** y se expone en `AgentStatusView.assigned_port`.
 - **Release (v0):** el puerto reservado se libera en `stop`, `delete`, `rollback` y `terminate` (idempotente).
-- **Exhaustión:** si no hay puertos libres, el provisioning falla con un error estable `PORT_POOL_EXHAUSTED` y la instancia transita a `Failed` (visible en status). La mitigación es ampliar el rango o ejecutar deletes de instancias antiguas/paradas.
-- **Puerto ocupado:** si el bind-check detecta que el puerto está en uso, el provisioning falla con `PORT_IN_USE` (fail-fast, sin reintentos).
-- **Bind-check fallido:** si el bind-check falla por un error real del sistema, el provisioning falla con `PORT_BIND_FAILED`.
+- **Exhaustión:** si no hay puertos libres, el provisioning falla con un error estable `port_pool_exhausted` y la instancia transita a `Failed` (visible en status). La mitigación es ampliar el rango o ejecutar deletes de instancias antiguas/paradas.
+- **Puerto ocupado:** si el bind-check detecta que el puerto está en uso, el provisioning falla con `port_in_use` (fail-fast, sin reintentos).
+- **Bind-check fallido:** si el bind-check falla por un error real del sistema, el provisioning falla con `port_bind_failed`.
 - **No persistencia (v0):** el pool no se persiste entre reinicios. Aunque hay bind-check, se recomienda que el rango esté dedicado a SAD.
 
 #### Ejemplo `config.toml`

@@ -4,10 +4,7 @@ fn daemonize() -> Nil {
   // 3. Child continues
   // 4. Redirect stdout/stderr to log file
   // 5. Close stdin
-  ffi.daemonize(
-    pid_file: get_pid_file_path(),
-    log_file: get_log_file_path(),
-  )
+  ffi.daemonize(pid_file: get_pid_file_path(), log_file: get_log_file_path())
 }
 
 fn kill_running_server() -> Nil {
@@ -32,7 +29,8 @@ fn show_status() -> Nil {
       case ffi.process_alive(pid) {
         True -> io.println("SAD running (PID " <> int.to_string(pid) <> ")")
         False -> {
-          delete_pid_file()  // Stale PID file
+          delete_pid_file()
+          // Stale PID file
           io.println("SAD not running")
         }
       }

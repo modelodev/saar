@@ -10,10 +10,10 @@ pub fn interpolate_string(
   // 2. Para cada match, resolver el valor
   // 3. Si alguno falla, retornar Error
   // 4. Si todos OK, sustituir y retornar el string
-  
+
   let placeholder_regex =
     regexp.from_string("\\{\\{([A-Za-z0-9_]+)\\.([A-Za-z0-9_-]+)\\}\\}")
-  
+
   regexp.scan(placeholder_regex, template)
   |> list.try_fold(template, fn(acc, match) {
     let assert [namespace, key] = match.submatches
@@ -62,13 +62,15 @@ pub fn interpolate_json(
     // Inserción estructurada por JSON Pointer: {"$from": "/input/messages"}
     // El puntero se resuelve contra la estructura de `SAD_INPUT_JSON`.
     // (Conceptual: implementar resolviendo sobre el Json generado por sad_input_to_json()).
-    json.Object([#("$from", json.String(ptr))]) -> resolve_from_sad_input_json(ptr, ctx)
+    json.Object([#("$from", json.String(ptr))]) ->
+      resolve_from_sad_input_json(ptr, ctx)
     json.Object(fields) -> {
       fields
       |> list.try_map(fn(pair) {
         let #(k, v) = pair
         use interpolated_v <- result.try(interpolate_json(v, ctx))
-        Ok(#(k, interpolated_v))  // Claves NO se interpolan
+        Ok(#(k, interpolated_v))
+        // Claves NO se interpolan
       })
       |> result.map(json.Object)
     }

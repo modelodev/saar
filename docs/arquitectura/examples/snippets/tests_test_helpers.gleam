@@ -31,7 +31,9 @@ pub fn empty_env(_key: String) -> Result(String, Nil) {
 }
 
 /// Mock de env lookup con valores fijos.
-pub fn mock_env(values: Dict(String, String)) -> fn(String) -> Result(String, Nil) {
+pub fn mock_env(
+  values: Dict(String, String),
+) -> fn(String) -> Result(String, Nil) {
   fn(key) { dict.get(values, key) }
 }
 

@@ -2,30 +2,24 @@
 // Source: arquitectura/bridge.md:137
 // Purpose: documentation-only; may not compile as-is.
 
-import gleam/json.{type Json}
 import gleam/dict.{type Dict}
+import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import sad/types.{
-  type SadInput, type SadInputMeta,
-  type ConfigValue, value_to_string,
-  type Lifecycle, lifecycle_to_string,
-  type ProfileId, profile_id_to_string,
-  type InstanceId, instance_id_to_string,
-  type RequestContext,
-  type TraceId, trace_id_to_string,
-  type RunnerError, type ErrorKind, error_kind_to_string,
-  type SadHelpers, type FileRef,
-  type InputPayload, PayloadChat, PayloadFiles, PayloadMixed,
-  type ChatMessage,
-  type Value, type InputValue, StringVal, IntVal, FloatVal, BoolVal, ListVal,
-  type Runner, type ToolConfig, type RuntimeConfig, type ArtifactConfig,
-  network_mode_to_string,
-  type LogEvent,
-  // Streaming (tipos genéricos)
-  type StreamEvent, ContentChunk, StreamStarted, StreamFinished, StreamError,
-  type StreamContext,
+  type ArtifactConfig, type ChatMessage, type ConfigValue, type ErrorKind,
+  type FileRef, type InputPayload, type InputValue, type InstanceId,
+  type Lifecycle, type LogEvent, type ProfileId, type RequestContext,
+  type Runner, type RunnerError, type RuntimeConfig, type SadHelpers,
+  type SadInput, type SadInputMeta, type StreamContext, type StreamEvent,
+  type ToolConfig, type TraceId, type Value, BoolVal, ContentChunk, FloatVal,
+  IntVal, ListVal, PayloadChat, PayloadFiles, PayloadMixed, StreamError,
+  StreamFinished, StreamStarted, StringVal, error_kind_to_string,
+  instance_id_to_string, lifecycle_to_string, network_mode_to_string,
+  profile_id_to_string, trace_id_to_string, value_to_string,
 }
+
+// Streaming (tipos genéricos)
 
 // ============================================================================
 // SERIALIZACIÓN DE SadInput
@@ -142,7 +136,8 @@ pub fn input_payload_to_json(payload: InputPayload) -> Json {
   case payload {
     PayloadChat(messages, extra) -> {
       let base = [#("messages", json.array(messages, chat_message_to_json))]
-      let extra_fields = extra
+      let extra_fields =
+        extra
         |> dict.to_list
         |> list.map(fn(pair) { #(pair.0, input_value_to_json(pair.1)) })
       json.object(list.append(base, extra_fields))
@@ -155,7 +150,8 @@ pub fn input_payload_to_json(payload: InputPayload) -> Json {
         #("messages", json.array(messages, chat_message_to_json)),
         #("files", json.array(files, file_ref_to_json)),
       ]
-      let extra_fields = extra
+      let extra_fields =
+        extra
         |> dict.to_list
         |> list.map(fn(pair) { #(pair.0, input_value_to_json(pair.1)) })
       json.object(list.append(base, extra_fields))
@@ -169,11 +165,14 @@ pub fn runner_to_json(runner: Runner) -> Json {
     #("type", json.string(runner.type_)),
     #("tool_config", tool_config_to_json(runner.tool_config)),
     #("runtime", runtime_config_to_json(runner.runtime)),
-    #("env_map", json.object(
-      runner.env_map
-      |> dict.to_list
-      |> list.map(fn(pair) { #(pair.0, json.string(pair.1)) })
-    )),
+    #(
+      "env_map",
+      json.object(
+        runner.env_map
+        |> dict.to_list
+        |> list.map(fn(pair) { #(pair.0, json.string(pair.1)) }),
+      ),
+    ),
     #("args", json.array(runner.args, json.string)),
     #("artifact_config", artifact_config_to_json(runner.artifact_config)),
   ])
@@ -247,7 +246,6 @@ pub fn log_event_to_json(event: LogEvent) -> Json {
     }),
   ])
 }
-
 // ============================================================================
 // NOTA SOBRE STREAMING
 // ============================================================================

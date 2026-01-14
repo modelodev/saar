@@ -256,7 +256,8 @@ fn wait_for_phase(
       case status.phase {
         types_agent.Failed ->
           case status.failure_reason {
-            Some(reason) -> panic as reason
+            Some(reason) ->
+              panic as types_agent.failure_reason_to_string(reason)
             None -> panic as "Agent entered Failed"
           }
 

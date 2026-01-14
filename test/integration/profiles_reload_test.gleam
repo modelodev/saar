@@ -28,17 +28,19 @@ pub fn reload_dir_source_ok_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(7)
+  count |> should.equal(9)
 
   ids
   |> list.map(types_core.profile_id_to_string)
   |> list.sort(string.compare)
   |> should.equal([
     "artifact_gen",
+    "bad_base_url",
     "crasher",
     "echo_cli",
     "echo_server",
     "greedy_logger",
+    "runner_only_continuous",
     "slow_poke",
     "streaming_echo",
   ])
@@ -64,7 +66,7 @@ pub fn reload_duplicate_ids_first_source_wins_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(7)
+  count |> should.equal(9)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI for testing")
 }
 
@@ -95,7 +97,7 @@ pub fn reload_duplicate_ids_conflict_partial_keeps_first_and_adds_new_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(8)
+  count |> should.equal(10)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI for testing")
   assert_profile_description(profiles_actor, "extra_echo_cli", "Extra profile")
 }
@@ -120,7 +122,7 @@ pub fn reload_duplicate_ids_order_inverts_winner_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(7)
+  count |> should.equal(9)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI overridden")
 }
 
@@ -144,7 +146,7 @@ pub fn reload_duplicate_ids_within_single_dir_first_file_wins_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(7)
+  count |> should.equal(9)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI overridden")
 }
 
@@ -182,7 +184,7 @@ pub fn reload_duplicate_ids_three_sources_keeps_first_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(7)
+  count |> should.equal(9)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI for testing")
 }
 
@@ -211,7 +213,7 @@ pub fn reload_duplicate_ids_within_dir_keeps_first_and_adds_new_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(8)
+  count |> should.equal(10)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI overridden")
   assert_profile_description(profiles_actor, "extra_echo_cli", "Extra profile")
 }
@@ -258,7 +260,7 @@ pub fn reload_git_source_failure_keeps_previous_test() {
     boundary_call.call(profiles_actor, 1000, fn(reply_to) {
       messages.ListProfiles(reply_to)
     })
-  list.length(before_ids) |> should.equal(7)
+  list.length(before_ids) |> should.equal(9)
 
   // Then: reload from a failing git source; it must not swap.
   let cfg =
@@ -274,7 +276,7 @@ pub fn reload_git_source_failure_keeps_previous_test() {
     boundary_call.call(profiles_actor, 1000, fn(reply_to) {
       messages.ListProfiles(reply_to)
     })
-  list.length(after_ids) |> should.equal(7)
+  list.length(after_ids) |> should.equal(9)
 }
 
 fn config_with_dir_source(path: String) -> types_config.SadConfig {

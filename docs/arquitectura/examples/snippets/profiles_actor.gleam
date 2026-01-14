@@ -3,11 +3,13 @@
 // Purpose: documentation-only; may not compile as-is.
 
 import gleam/dict.{type Dict}
+import gleam/erlang/process.{type Name, type Subject}
 import gleam/option.{type Option}
-import gleam/option as option
+import gleam/option
 import gleam/otp/actor
-import gleam/erlang/process.{type Name, type Subject} as process
-import sad/core/messages.{type ProfilesMsg, SetProfiles, GetProfile, ListProfiles}
+import sad/core/messages.{
+  type ProfilesMsg, GetProfile, ListProfiles, SetProfiles,
+}
 import sad/types.{type Profile, type ProfileId}
 
 type State =
@@ -29,7 +31,10 @@ pub fn start(
   |> actor.start
 }
 
-fn handle_message(state: State, msg: ProfilesMsg) -> actor.Next(State, ProfilesMsg) {
+fn handle_message(
+  state: State,
+  msg: ProfilesMsg,
+) -> actor.Next(State, ProfilesMsg) {
   case msg {
     SetProfiles(profiles, reply_to) -> {
       process.send(reply_to, dict.size(profiles))

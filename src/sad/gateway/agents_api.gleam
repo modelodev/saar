@@ -33,9 +33,9 @@ import gleam/string
 import gleam/yielder
 import mist
 import sad/core/agent
-import sad/core/boundary_call
 import sad/core/messages
 import sad/decoders
+import sad/gateway/lookup_http
 import sad/gateway/problem
 import sad/otp/safe_call
 import sad/streams/sink
@@ -83,10 +83,11 @@ fn handle_agent_info(
     http.Get ->
       case parse_instance_id_or_400(instance_raw, trace_id, req.path) {
         Error(resp) -> resp
-        Ok(instance_id) ->
-          with_agent_ref(
-            cfg,
-            deps,
+        Ok(instance_id) -> {
+          let Deps(registry: registry) = deps
+          lookup_http.with_agent_ref(
+            registry,
+            registry_timeout_ms(cfg),
             trace_id,
             req.path,
             instance_id,
@@ -98,6 +99,7 @@ fn handle_agent_info(
               }
             },
           )
+        }
       }
 
     _ -> empty_response(405)
@@ -115,15 +117,17 @@ fn handle_agent_interact(
     http.Post ->
       case parse_instance_id_or_400(instance_raw, trace_id, req.path) {
         Error(resp) -> resp
-        Ok(instance_id) ->
-          with_agent_ref(
-            cfg,
-            deps,
+        Ok(instance_id) -> {
+          let Deps(registry: registry) = deps
+          lookup_http.with_agent_ref(
+            registry,
+            registry_timeout_ms(cfg),
             trace_id,
             req.path,
             instance_id,
             fn(agent_ref) { interact_with_agent(req, cfg, trace_id, agent_ref) },
           )
+        }
       }
 
     _ -> empty_response(405)
@@ -663,27 +667,6 @@ fn interaction_error_to_response(
         "Agent is busy",
       )
     _, _ -> problem.from_error_kind(err.kind, trace_id, req.path, err.message)
-  }
-}
-
-fn with_agent_ref(
-  cfg: types_config.SadConfig,
-  deps: Deps,
-  trace_id: types_core.TraceId,
-  path: String,
-  instance_id: types_core.InstanceId,
-  cont: fn(agent.AgentRef) -> response.Response(mist.ResponseData),
-) -> response.Response(mist.ResponseData) {
-  let Deps(registry: registry) = deps
-
-  case
-    boundary_call.call(registry, registry_timeout_ms(cfg), fn(reply_to) {
-      messages.LookupByInstanceId(instance_id, reply_to)
-    })
-  {
-    Error(call_err) -> problem.from_call_error(call_err, trace_id, path)
-    Ok(None) -> problem.not_found(trace_id, path)
-    Ok(Some(agent_ref)) -> cont(agent_ref)
   }
 }
 

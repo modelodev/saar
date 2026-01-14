@@ -5,18 +5,18 @@
 // sad/core/registry_api.gleam
 
 import gleam/erlang/process.{type Subject}
-import gleam/option.{type Option}
 import gleam/list
-import sad/otp/safe_call
-import sad/otp/safe_call.{type CallError, type ApiCallError}
-import sad/core/messages.{
-  type RegistryMsg, Register, Unregister, UnregisterByInstanceId, UpdateStatus,
-  Lookup, ListByProfile, ListAll, type RegistryError,
-}
+import gleam/option.{type Option}
 import sad/core/agent.{type AgentRef}
+import sad/core/messages.{
+  type RegistryError, type RegistryMsg, ListAll, ListByProfile, Lookup, Register,
+  Unregister, UnregisterByInstanceId, UpdateStatus,
+}
+import sad/otp/safe_call
+import sad/otp/safe_call.{type ApiCallError, type CallError}
 import sad/types.{
-  type InstanceKey, InstanceKey, type ProfileId, type InstanceId,
-  type AgentStatusView, type InstanceSummary,
+  type AgentStatusView, type InstanceId, type InstanceKey, type InstanceSummary,
+  type ProfileId, InstanceKey,
 }
 
 /// Registra un agente en el registry con status inicial.
@@ -27,15 +27,14 @@ pub fn register(
   agent: AgentRef,
   timeout_ms: Int,
 ) -> Result(Nil, ApiCallError(RegistryError)) {
-  safe_call.call_result_within(registry, timeout_ms, fn(reply_to) { Register(status, agent, reply_to) })
+  safe_call.call_result_within(registry, timeout_ms, fn(reply_to) {
+    Register(status, agent, reply_to)
+  })
 }
 
 /// Elimina un agente del registry.
 /// Fire-and-forget: no espera confirmación.
-pub fn unregister(
-  registry: Subject(RegistryMsg),
-  key: InstanceKey,
-) -> Nil {
+pub fn unregister(registry: Subject(RegistryMsg), key: InstanceKey) -> Nil {
   actor.send(registry, Unregister(key))
 }
 
@@ -54,7 +53,9 @@ pub fn lookup(
   key: InstanceKey,
   timeout_ms: Int,
 ) -> Result(Option(AgentRef), CallError) {
-  safe_call.call_within(registry, timeout_ms, fn(reply_to) { Lookup(key, reply_to) })
+  safe_call.call_within(registry, timeout_ms, fn(reply_to) {
+    Lookup(key, reply_to)
+  })
 }
 
 /// Busca un agente por profile_id e instance_id.
@@ -74,7 +75,9 @@ pub fn list_by_profile(
   profile_id: ProfileId,
   timeout_ms: Int,
 ) -> Result(List(InstanceId), CallError) {
-  safe_call.call_within(registry, timeout_ms, fn(reply_to) { ListByProfile(profile_id, reply_to) })
+  safe_call.call_within(registry, timeout_ms, fn(reply_to) {
+    ListByProfile(profile_id, reply_to)
+  })
 }
 
 /// Lista todas las instancias registradas.
@@ -96,7 +99,10 @@ pub fn update_status(
 }
 
 /// Cuenta el número de instancias registradas.
-pub fn count(registry: Subject(RegistryMsg), timeout_ms: Int) -> Result(Int, CallError) {
+pub fn count(
+  registry: Subject(RegistryMsg),
+  timeout_ms: Int,
+) -> Result(Int, CallError) {
   case list_all(registry, timeout_ms) {
     Ok(keys) -> Ok(list.length(keys))
     Error(e) -> Error(e)
