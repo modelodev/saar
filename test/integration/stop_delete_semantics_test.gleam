@@ -54,7 +54,7 @@ pub fn stop_releases_managed_port_test() {
   wait_for_phase(a1, types_agent.ReadyContinuous, 400)
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.StopAgent(id1, reply_to)
+    messages.Cmd(messages.StopAgent(id1, reply_to))
   })
   |> test_assertions.assert_ok
 
@@ -95,7 +95,7 @@ pub fn stop_does_not_purge_artifacts_test() {
     |> test_assertions.assert_ok
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.StopAgent(instance_id, reply_to)
+    messages.Cmd(messages.StopAgent(instance_id, reply_to))
   })
   |> test_assertions.assert_ok
 
@@ -130,7 +130,7 @@ pub fn stop_clears_assigned_port_test() {
   status0.assigned_port |> should.not_equal(None)
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.StopAgent(instance_id, reply_to)
+    messages.Cmd(messages.StopAgent(instance_id, reply_to))
   })
   |> test_assertions.assert_ok
 
@@ -157,14 +157,14 @@ pub fn start_after_stop_restores_assigned_port_test() {
   wait_for_phase(agent_ref, types_agent.ReadyContinuous, 400)
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.StopAgent(instance_id, reply_to)
+    messages.Cmd(messages.StopAgent(instance_id, reply_to))
   })
   |> test_assertions.assert_ok
 
   wait_for_phase(agent_ref, types_agent.Stopped, 200)
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.StartExistingAgent(instance_id, reply_to)
+    messages.Cmd(messages.StartExistingAgent(instance_id, reply_to))
   })
   |> test_assertions.assert_ok
 
@@ -182,7 +182,7 @@ pub fn delete_nonexistent_is_ok_test() {
   let assert Ok(instance_id) = types_core.instance_id("inst-missing")
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.DeleteAgent(instance_id, reply_to)
+    messages.Cmd(messages.DeleteAgent(instance_id, reply_to))
   })
   |> should.equal(Ok(Nil))
 }
@@ -215,7 +215,7 @@ pub fn stop_while_interaction_inflight_client_sees_cancelled_test() {
   process.sleep(20)
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.StopAgent(instance_id, reply_to)
+    messages.Cmd(messages.StopAgent(instance_id, reply_to))
   })
   |> test_assertions.assert_ok
 
@@ -260,7 +260,7 @@ pub fn stop_while_interaction_inflight_cleans_worker_test() {
   process.sleep(20)
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.StopAgent(instance_id, reply_to)
+    messages.Cmd(messages.StopAgent(instance_id, reply_to))
   })
   |> test_assertions.assert_ok
 
@@ -270,7 +270,7 @@ pub fn stop_while_interaction_inflight_cleans_worker_test() {
   wait_for_phase(agent_ref, types_agent.Stopped, 200)
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.StartExistingAgent(instance_id, reply_to)
+    messages.Cmd(messages.StartExistingAgent(instance_id, reply_to))
   })
   |> test_assertions.assert_ok
 
@@ -310,7 +310,7 @@ pub fn delete_while_interaction_inflight_client_sees_cancelled_test() {
 
   let _ =
     safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-      messages.DeleteAgent(instance_id, reply_to)
+      messages.Cmd(messages.DeleteAgent(instance_id, reply_to))
     })
 
   let assert Ok(result) = process.receive(out, 2000)
@@ -374,7 +374,7 @@ pub fn delete_while_interaction_inflight_cleans_everything_test() {
 
   let _ =
     safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-      messages.DeleteAgent(instance_id, reply_to)
+      messages.Cmd(messages.DeleteAgent(instance_id, reply_to))
     })
 
   let _ = process.receive(out, 2000)
@@ -429,7 +429,7 @@ pub fn delete_purges_artifacts_and_workspace_test() {
     |> test_assertions.assert_ok
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.DeleteAgent(instance_id, reply_to)
+    messages.Cmd(messages.DeleteAgent(instance_id, reply_to))
   })
   |> test_assertions.assert_ok
 
@@ -480,7 +480,7 @@ pub fn delete_cleanup_failure_returns_500_test() {
 
   case
     safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-      messages.DeleteAgent(instance_id, reply_to)
+      messages.Cmd(messages.DeleteAgent(instance_id, reply_to))
     })
   {
     Error(safe_call.ActorError(messages.CleanupFailed(_))) -> Nil
@@ -513,7 +513,7 @@ pub fn delete_cleanup_failure_still_purges_artifacts_test() {
 
   let _ =
     safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-      messages.DeleteAgent(instance_id, reply_to)
+      messages.Cmd(messages.DeleteAgent(instance_id, reply_to))
     })
 
   safe_call.call(artifact_registry, 1000, fn(reply_to) {
@@ -574,7 +574,7 @@ fn start_instance(
     )
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.StartAgent(args, reply_to)
+    messages.Cmd(messages.StartAgent(args, reply_to))
   })
   |> test_assertions.assert_ok
 }

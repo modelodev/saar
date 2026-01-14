@@ -114,11 +114,16 @@ pub type StartArgs {
   )
 }
 
-/// Message protocol for the (future) AgentManagerActor.
+/// Message protocol for the AgentManagerActor.
 ///
-/// This is part of the core OTP skeleton; functional behavior is introduced in
-/// later sprints.
+/// Public callers should only send `Cmd` values.
 pub type AgentManagerMsg {
+  Cmd(AgentManagerCmd)
+  Internal(AgentManagerInternal)
+}
+
+/// External commands accepted by the AgentManagerActor.
+pub type AgentManagerCmd {
   /// Creates and starts an agent from a `profile_id`.
   ///
   /// This is the gateway-friendly entry point used by `/sys/agents`.
@@ -132,9 +137,13 @@ pub type AgentManagerMsg {
   StopAgent(types_core.InstanceId, Subject(Result(Nil, StopError)))
   StartExistingAgent(types_core.InstanceId, Subject(Result(Nil, Nil)))
   DeleteAgent(types_core.InstanceId, Subject(Result(Nil, DeleteError)))
+  ListAgents(Subject(List(types_agent.InstanceSummary)))
+}
+
+/// Internal events handled by the AgentManagerActor.
+pub type AgentManagerInternal {
   DeleteWorkerDone(types_core.InstanceId, Result(Nil, DeleteError))
   DeleteWorkerDown(Down)
-  ListAgents(Subject(List(types_agent.InstanceSummary)))
 }
 
 pub type StartError {

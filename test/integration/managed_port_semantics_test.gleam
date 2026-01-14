@@ -250,7 +250,7 @@ fn start_instance(
     )
 
   safe_call.call_unwrap_result(manager, 30_000, fn(reply_to) {
-    messages.StartAgent(args, reply_to)
+    messages.Cmd(messages.StartAgent(args, reply_to))
   })
   |> test_assertions.assert_ok
 }

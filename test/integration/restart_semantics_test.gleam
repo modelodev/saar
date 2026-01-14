@@ -67,7 +67,7 @@ pub fn manager_restart_does_not_orphan_port_pool_reservations_test() {
   wait_for_phase(a1, types_agent.ReadyContinuous, 400)
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.DeleteAgent(i1, reply_to)
+    messages.Cmd(messages.DeleteAgent(i1, reply_to))
   })
   |> test_assertions.assert_ok
 
@@ -158,7 +158,7 @@ fn start_until_ready_continuous(
         Error(_) -> {
           let _ =
             safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-              messages.DeleteAgent(instance_id, reply_to)
+              messages.Cmd(messages.DeleteAgent(instance_id, reply_to))
             })
 
           process.sleep(250)
@@ -237,7 +237,7 @@ fn start_instance(
     )
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.StartAgent(args, reply_to)
+    messages.Cmd(messages.StartAgent(args, reply_to))
   })
   |> test_assertions.assert_ok
 }

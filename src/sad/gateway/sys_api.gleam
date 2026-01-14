@@ -149,11 +149,13 @@ fn create_agent(
               manager,
               call_timeout_ms(cfg),
               fn(reply_to) {
-                messages.CreateAgent(
-                  types_core.profile_id(profile_id),
-                  instance_id,
-                  init_params,
-                  reply_to,
+                messages.Cmd(
+                  messages.CreateAgent(
+                    types_core.profile_id(profile_id),
+                    instance_id,
+                    init_params,
+                    reply_to,
+                  ),
                 )
               },
             )
@@ -269,7 +271,7 @@ fn list_agents(
 
   case
     safe_call.call(manager, registry_timeout_ms(cfg), fn(reply_to) {
-      messages.ListAgents(reply_to)
+      messages.Cmd(messages.ListAgents(reply_to))
     })
   {
     Error(call_err) -> problem.from_call_error(call_err, trace_id, req.path)
@@ -333,7 +335,9 @@ fn handle_agent_stop(
             safe_call.call_unwrap_result(
               manager,
               call_timeout_ms(cfg),
-              fn(reply_to) { messages.StopAgent(instance_id, reply_to) },
+              fn(reply_to) {
+                messages.Cmd(messages.StopAgent(instance_id, reply_to))
+              },
             )
           {
             Ok(_) -> accepted_json(instance_id)
@@ -376,7 +380,7 @@ fn handle_agent_start(
               manager,
               call_timeout_ms(cfg),
               fn(reply_to) {
-                messages.StartExistingAgent(instance_id, reply_to)
+                messages.Cmd(messages.StartExistingAgent(instance_id, reply_to))
               },
             )
           {
@@ -419,7 +423,9 @@ fn handle_agent_item(
             safe_call.call_unwrap_result(
               manager,
               call_timeout_ms(cfg),
-              fn(reply_to) { messages.DeleteAgent(instance_id, reply_to) },
+              fn(reply_to) {
+                messages.Cmd(messages.DeleteAgent(instance_id, reply_to))
+              },
             )
           {
             Ok(_) -> accepted_json(instance_id)

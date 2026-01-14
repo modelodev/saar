@@ -96,6 +96,16 @@ fn handle_message(
   msg: messages.AgentManagerMsg,
 ) -> actor.Next(State, messages.AgentManagerMsg) {
   case msg {
+    messages.Cmd(cmd) -> handle_cmd(state, cmd)
+    messages.Internal(internal) -> handle_internal(state, internal)
+  }
+}
+
+fn handle_cmd(
+  state: State,
+  cmd: messages.AgentManagerCmd,
+) -> actor.Next(State, messages.AgentManagerMsg) {
+  case cmd {
     messages.CreateAgent(profile_id, instance_id, init_params, reply_to) ->
       handle_create_agent(state, profile_id, instance_id, init_params, reply_to)
 
@@ -111,12 +121,15 @@ fn handle_message(
     messages.DeleteAgent(instance_id, reply_to) ->
       handle_delete_agent(state, instance_id, reply_to)
 
-    messages.DeleteWorkerDone(_instance_id, _result) -> actor.continue(state)
-
-    messages.DeleteWorkerDown(_down) -> actor.continue(state)
-
     messages.ListAgents(reply_to) -> handle_list_agents(state, reply_to)
   }
+}
+
+fn handle_internal(
+  state: State,
+  _internal: messages.AgentManagerInternal,
+) -> actor.Next(State, messages.AgentManagerMsg) {
+  actor.continue(state)
 }
 
 fn handle_create_agent(
