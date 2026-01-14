@@ -27,6 +27,7 @@ import sad/types/enums as types_enums
 import sad/types/input as types_input
 import sad/types/profile as types_profile
 import sad/types/runner as types_runner
+import sad/validation/params as param_validation
 
 /// Describes the "shape" of a dynamic value.
 ///
@@ -442,8 +443,8 @@ fn instance_id_decoder() -> decode.Decoder(types_core.InstanceId) {
 
 fn fixed_param_decoder() -> decode.Decoder(types_profile.Parameter) {
   let decoder = {
-    use expected <- decode.field("type", value_type_decoder())
-    use value <- decode.field("value", value_decoder(expected))
+    use expected <- decode.field("type", param_validation.param_type_decoder())
+    use value <- decode.field("value", param_validation.param_value_decoder(expected))
     decode.success(types_profile.FixedParam(value))
   }
   decoder
@@ -452,11 +453,11 @@ fn fixed_param_decoder() -> decode.Decoder(types_profile.Parameter) {
 fn config_param_decoder() -> decode.Decoder(types_profile.Parameter) {
   let decoder = {
     use key <- decode.field("key", decode.string)
-    use expected <- decode.field("type", value_type_decoder())
+    use expected <- decode.field("type", param_validation.param_type_decoder())
     use default <- decode.optional_field(
       "default",
       None,
-      decode.optional(value_decoder(expected)),
+      decode.optional(param_validation.param_value_decoder(expected)),
     )
     decode.success(types_profile.ConfigParam(key, default, expected))
   }
@@ -466,11 +467,11 @@ fn config_param_decoder() -> decode.Decoder(types_profile.Parameter) {
 fn secret_param_decoder() -> decode.Decoder(types_profile.Parameter) {
   let decoder = {
     use key <- decode.field("key", decode.string)
-    use expected <- decode.field("type", value_type_decoder())
+    use expected <- decode.field("type", param_validation.param_type_decoder())
     use default <- decode.optional_field(
       "default",
       None,
-      decode.optional(value_decoder(expected)),
+      decode.optional(param_validation.param_value_decoder(expected)),
     )
     case default {
       Some(_) ->
@@ -484,11 +485,11 @@ fn secret_param_decoder() -> decode.Decoder(types_profile.Parameter) {
 fn init_param_decoder() -> decode.Decoder(types_profile.Parameter) {
   let decoder = {
     use key <- decode.field("key", decode.string)
-    use expected <- decode.field("type", value_type_decoder())
+    use expected <- decode.field("type", param_validation.param_type_decoder())
     use default <- decode.optional_field(
       "default",
       None,
-      decode.optional(value_decoder(expected)),
+      decode.optional(param_validation.param_value_decoder(expected)),
     )
     decode.success(types_profile.InitParam(key, default, expected))
   }
@@ -1030,32 +1031,6 @@ fn number_value_decoder() -> decode.Decoder(types_core.Value) {
   let int_decoder = decode.int |> decode.map(types_core.IntVal)
   let float_decoder = decode.float |> decode.map(types_core.FloatVal)
   decode.one_of(int_decoder, or: [float_decoder])
-}
-
-fn value_type_decoder() -> decode.Decoder(types_profile.ParamType) {
-  let decoder = {
-    use value <- decode.then(decode.string)
-    case value {
-      "string" -> decode.success(types_profile.ParamString)
-      "int" -> decode.success(types_profile.ParamInt)
-      "float" -> decode.success(types_profile.ParamFloat)
-      "bool" -> decode.success(types_profile.ParamBool)
-      _ -> decode.failure(types_profile.ParamString, expected: "ParamType")
-    }
-  }
-  decoder
-}
-
-fn value_decoder(
-  expected: types_profile.ParamType,
-) -> decode.Decoder(types_core.Value) {
-  case expected {
-    types_profile.ParamString ->
-      decode.string |> decode.map(types_core.StringVal)
-    types_profile.ParamInt -> decode.int |> decode.map(types_core.IntVal)
-    types_profile.ParamFloat -> decode.float |> decode.map(types_core.FloatVal)
-    types_profile.ParamBool -> decode.bool |> decode.map(types_core.BoolVal)
-  }
 }
 
 fn chat_messages_decoder() -> decode.Decoder(List(types_input.ChatMessage)) {
