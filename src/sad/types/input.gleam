@@ -21,7 +21,6 @@ import gleam/dict.{type Dict}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import sad/types/core
-import sad/types/enums
 import sad/types/resolved_params
 import sad/types/runner
 
@@ -112,12 +111,19 @@ pub type RequestContext {
 }
 
 /// Metadata describing the request and profile selection.
+///
+/// The lifecycle is encoded by the variant and the instance id is always
+/// present.
 pub type SadInputMeta {
-  SadInputMeta(
+  TransientMeta(
     spec_version: String,
     profile_id: core.ProfileId,
-    instance_id: Option(core.InstanceId),
-    mode: enums.Lifecycle,
+    instance_id: core.InstanceId,
+  )
+  ContinuousMeta(
+    spec_version: String,
+    profile_id: core.ProfileId,
+    instance_id: core.InstanceId,
   )
 }
 

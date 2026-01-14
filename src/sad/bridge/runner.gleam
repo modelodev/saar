@@ -651,13 +651,11 @@ fn provision_result_from_events(
 fn instance_id_from_input(
   input: types_input.SadInput,
 ) -> Result(types_core.InstanceId, types_output.InteractionError) {
-  let types_input.SadInput(meta: meta, context: context, ..) = input
-  let types_input.SadInputMeta(instance_id: instance_id, ..) = meta
+  let types_input.SadInput(meta: meta, ..) = input
 
-  case instance_id {
-    option.Some(id) -> Ok(id)
-    option.None ->
-      Error(interaction_error(context.trace_id, "missing_instance_id"))
+  case meta {
+    types_input.TransientMeta(_, _, instance_id) -> Ok(instance_id)
+    types_input.ContinuousMeta(_, _, instance_id) -> Ok(instance_id)
   }
 }
 

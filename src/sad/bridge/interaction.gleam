@@ -69,14 +69,17 @@ pub fn run(
   assigned_port: Option(Int),
   stream_mode: sink.StreamMode,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
+  let meta = case profile.meta.lifecycle {
+    types_enums.Transient ->
+      types_input.TransientMeta("v0", profile_id, instance_id)
+
+    types_enums.Continuous ->
+      types_input.ContinuousMeta("v0", profile_id, instance_id)
+  }
+
   let input =
     types_input.SadInput(
-      meta: types_input.SadInputMeta(
-        spec_version: "v0",
-        profile_id: profile_id,
-        instance_id: Some(instance_id),
-        mode: profile.meta.lifecycle,
-      ),
+      meta: meta,
       params: params,
       input: inputs,
       context: context,
