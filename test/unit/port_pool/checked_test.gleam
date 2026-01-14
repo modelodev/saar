@@ -35,6 +35,17 @@ pub fn allocate_checked_with_success_test() {
   port |> should.equal(9001)
 }
 
+pub fn allocate_checked_with_in_use_fails_fast_test() {
+  let pool0 = new_pool(9050, 9050)
+  let instance = instance_id("inst-1")
+
+  let check_ok = fn(_port) { Ok(Nil) }
+  let use_in_use = fn(_port) { Error(port_pool.CheckPortInUse) }
+
+  port_pool_checked.allocate_checked_with(pool0, instance, check_ok, use_in_use)
+  |> should.equal(Error(port_pool.PortInUse))
+}
+
 pub fn allocate_checked_with_in_use_retries_and_exhausts_test() {
   let pool0 = new_pool(9010, 9011)
   let instance = instance_id("inst-1")

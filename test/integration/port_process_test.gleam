@@ -1,4 +1,6 @@
+import envoy
 import gleeunit
+import gleeunit/should
 import port_helpers
 import sad/bridge/port_process
 import sad/bridge/runner_contract
@@ -52,6 +54,30 @@ pub fn noeol_fragment_is_infra_error_test() {
   }
 
   port_helpers.wait_for_exit(process, read_timeout_ms, 10)
+}
+
+pub fn port_process_spawns_wrapper_test() {
+  // Validate that SAD_WRAPPER_PATH overrides wrapper resolution.
+  envoy.set("SAD_WRAPPER_PATH", "/bin/true")
+
+  let env = port_helpers.base_env(500, [])
+
+  let process =
+    port_process.start(
+      "python3",
+      ["./test/fixtures/source_local/runners/echo_cli.py"],
+      env,
+      ".",
+      max_event_bytes,
+    )
+    |> test_assertions.assert_ok
+
+  port_process.wrapper_path(process) |> should.equal("/bin/true")
+
+  // /bin/true should exit immediately, so the runner should never emit output.
+  port_helpers.wait_for_exit(process, read_timeout_ms, 20)
+
+  port_helpers.ensure_wrapper_path()
 }
 
 pub fn echo_cli_result_is_received_test() {

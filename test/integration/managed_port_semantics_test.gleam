@@ -136,6 +136,88 @@ pub fn port_injected_into_env_test() {
   test_port |> should.equal(int.to_string(port))
 }
 
+pub fn base_url_interpolation_uses_runner_host_port_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let port = pick_free_port()
+  let cfg = config_with_port_range(port)
+
+  let manager = start_root(cfg)
+  let profile = echo_server_profile_managed_port()
+
+  let assert Ok(id1) = types_core.instance_id("inst-base-url-1")
+
+  let a1 = start_instance(manager, profile, id1, cfg)
+  wait_for_phase(a1, types_agent.ReadyContinuous, 200)
+
+  // If base_url interpolation is correct, the server is reachable on the assigned port.
+  let url = "http://" <> host <> ":" <> int.to_string(port) <> "/health"
+
+  let resp =
+    http_client.request_sync_string(http.Get, url, dict.new(), None, 1000, 1024)
+    |> test_assertions.assert_ok
+
+  resp.status |> should.equal(200)
+}
+
+pub fn managed_port_in_use_fails_fast_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let port = pick_free_port()
+  let cfg = config_with_port_range(port)
+
+  // Occupy the port to force `types_agent.PortInUse`.
+  let assert Ok(#(listener, _)) = tcp_listener.listen(host, port)
+
+  let manager = start_root(cfg)
+  let profile = echo_server_profile_managed_port()
+
+  let assert Ok(id1) = types_core.instance_id("inst-fast-inuse-1")
+
+  let a1 = start_instance(manager, profile, id1, cfg)
+  // Expect a fast transition: no prolonged retries.
+  wait_for_failure_reason(a1, types_agent.PortInUse, 30)
+
+  tcp_listener.close(listener)
+  Nil
+}
+
+pub fn managed_port_race_fails_fast_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let port = pick_free_port()
+  let cfg = config_with_port_range(port)
+
+  let manager = start_root(cfg)
+  let profile = echo_server_profile_managed_port()
+
+  let assert Ok(id1) = types_core.instance_id("inst-race-1")
+
+  // Try to occupy the port concurrently with provisioning.
+  let occupied = process.new_subject()
+  let _ = process.spawn(fn() { occupy_port_with_retries(port, occupied, 200) })
+
+  let a1 = start_instance(manager, profile, id1, cfg)
+
+  // We accept either outcome as long as it resolves quickly:
+  // - ReadyContinuous when no race happens
+  // - Failed with PortInUse/PortBindFailed when the race is hit
+  wait_for_ready_or_failed_reason_any(
+    a1,
+    types_agent.ReadyContinuous,
+    types_agent.PortInUse,
+    types_agent.PortBindFailed,
+    200,
+  )
+
+  case process.receive(occupied, 0) {
+    Ok(listener) -> tcp_listener.close(listener)
+    Error(_) -> Nil
+  }
+
+  Nil
+}
+
 fn start_root(
   cfg: types_config.SadConfig,
 ) -> process.Subject(messages.AgentManagerMsg) {
@@ -222,6 +304,74 @@ fn wait_for_failure_reason(
         }
       }
     }
+  }
+}
+
+fn wait_for_ready_or_failed_reason_any(
+  agent_ref: agent.AgentRef,
+  ready_phase: types_agent.AgentPhase,
+  expected_a: types_agent.FailureReason,
+  expected_b: types_agent.FailureReason,
+  attempts: Int,
+) -> Nil {
+  case attempts {
+    0 -> panic as "Timed out waiting for ready/failed"
+
+    _ -> {
+      let status = agent.status(agent_ref, 1000) |> test_assertions.assert_ok
+
+      case status.phase == ready_phase {
+        True -> Nil
+        False ->
+          case status.phase {
+            types_agent.Failed ->
+              case status.failure_reason {
+                Some(reason) ->
+                  case reason == expected_a || reason == expected_b {
+                    True -> Nil
+                    False ->
+                      panic as types_agent.failure_reason_to_string(reason)
+                  }
+
+                None -> panic as "Agent entered Failed"
+              }
+
+            _ -> {
+              process.sleep(20)
+              wait_for_ready_or_failed_reason_any(
+                agent_ref,
+                ready_phase,
+                expected_a,
+                expected_b,
+                attempts - 1,
+              )
+            }
+          }
+      }
+    }
+  }
+}
+
+fn occupy_port_with_retries(
+  port: Int,
+  reply_to: process.Subject(tcp_listener.Listener),
+  attempts: Int,
+) -> Nil {
+  case attempts {
+    0 -> Nil
+
+    _ ->
+      case tcp_listener.listen(host, port) {
+        Ok(#(listener, _)) -> {
+          process.send(reply_to, listener)
+          Nil
+        }
+
+        Error(_) -> {
+          process.sleep(1)
+          occupy_port_with_retries(port, reply_to, attempts - 1)
+        }
+      }
   }
 }
 

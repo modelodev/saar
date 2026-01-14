@@ -675,7 +675,7 @@ fn start_interaction(
   let params = get_params(state.state) |> option.unwrap(dict.new())
 
   let worker_pid =
-    process.spawn(fn() {
+    process.spawn_unlinked(fn() {
       let AgentRequest(
         profile_id: profile_id,
         instance_id: instance_id,
@@ -747,7 +747,7 @@ fn spawn_hard_timeout(
   timeout_ms: Int,
 ) -> process.Pid {
   let timeout_ms = int.max(timeout_ms, 1)
-  process.spawn(fn() {
+  process.spawn_unlinked(fn() {
     process.sleep(timeout_ms)
     process.send(inbox, HardTimeout(trace_id))
   })

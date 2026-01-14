@@ -39,6 +39,25 @@ pub fn ffi_open_port_binary_mode_test() {
   ffi.port_close(port)
 }
 
+pub fn ffi_open_port_raw_mode_test() {
+  let port =
+    ffi.open_port("/bin/echo", ["hello"], [], ".")
+    |> test_assertions.assert_ok
+
+  // In raw/binary mode, the chunk should preserve the newline emitted by echo.
+  // If the port were opened in `{line, N}` mode, newline handling would differ.
+  let result = read_until_message(port, 5)
+
+  case result {
+    Ok(ffi.PortDataChunk(chunk)) ->
+      string.ends_with(chunk, "\n") |> should.equal(True)
+    Ok(ffi.PortExit(_)) -> panic as "Port exited before emitting chunk"
+    Error(_) -> panic as "Timed out waiting for port data"
+  }
+
+  ffi.port_close(port)
+}
+
 fn read_until_message(port: Port, attempts: Int) -> Result(ffi.PortMessage, Nil) {
   case attempts {
     0 -> Error(Nil)

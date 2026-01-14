@@ -193,10 +193,84 @@ pub fn agent_down_removes_entry() {
     register(registry, status_view(profile_id, instance_id), agent_ref)
 
   process.kill(pid)
-  process.sleep(20)
 
-  lookup_by_instance_id(registry, instance_id, 1000)
-  |> should.equal(Ok(option.None))
+  wait_lookup_by_instance_id_none(registry, instance_id, 50)
+}
+
+pub fn agent_down_removes_instance_id_index() {
+  let registry = start_registry()
+
+  let profile_id = types_core.profile_id("p1")
+  let assert Ok(instance_id) = types_core.instance_id("inst-down-reuse")
+
+  let status = status_view(profile_id, instance_id)
+
+  let #(agent_ref, pid) = start_test_agent_ref()
+  let assert Ok(_) = register(registry, status, agent_ref)
+
+  process.kill(pid)
+
+  wait_lookup_by_instance_id_none(registry, instance_id, 50)
+
+  // Once the old entry is removed, re-registering must succeed.
+  let #(agent_ref2, _) = start_test_agent_ref()
+  register(registry, status, agent_ref2) |> should.equal(Ok(Nil))
+}
+
+pub fn monitor_established_on_register() {
+  let registry = start_registry()
+
+  let profile_id = types_core.profile_id("p1")
+  let assert Ok(instance_id) = types_core.instance_id("inst-monitor")
+
+  let #(agent_ref, pid) = start_test_agent_ref()
+  let assert Ok(_) =
+    register(registry, status_view(profile_id, instance_id), agent_ref)
+
+  process.kill(pid)
+
+  let key = messages.InstanceKey(profile_id, instance_id)
+  wait_lookup_none(registry, key, 50)
+}
+
+fn wait_lookup_by_instance_id_none(
+  registry: process.Subject(messages.RegistryMsg),
+  instance_id: types_core.InstanceId,
+  attempts: Int,
+) -> Nil {
+  case attempts {
+    0 -> panic as "Timed out waiting for instance_id index removal"
+
+    _ ->
+      case lookup_by_instance_id(registry, instance_id, 1000) {
+        Ok(option.None) -> Nil
+
+        _ -> {
+          process.sleep(10)
+          wait_lookup_by_instance_id_none(registry, instance_id, attempts - 1)
+        }
+      }
+  }
+}
+
+fn wait_lookup_none(
+  registry: process.Subject(messages.RegistryMsg),
+  key: messages.InstanceKey,
+  attempts: Int,
+) -> Nil {
+  case attempts {
+    0 -> panic as "Timed out waiting for registry removal"
+
+    _ ->
+      case lookup(registry, key, 1000) {
+        Ok(option.None) -> Nil
+
+        _ -> {
+          process.sleep(10)
+          wait_lookup_none(registry, key, attempts - 1)
+        }
+      }
+  }
 }
 
 fn register(
