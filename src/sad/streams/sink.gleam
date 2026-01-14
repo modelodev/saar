@@ -53,6 +53,14 @@ pub opaque type StreamSink {
   StreamSink(WireProtocol, process.Subject(StreamSinkMsg))
 }
 
+/// Streaming mode for an interaction.
+///
+/// `Streaming` carries the sink for event delivery.
+pub type StreamMode {
+  Streaming(StreamSink)
+  NonStreaming
+}
+
 /// Returns the wire protocol attached to this sink.
 pub fn protocol(sink: StreamSink) -> WireProtocol {
   let StreamSink(protocol, _) = sink

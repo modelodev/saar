@@ -257,7 +257,7 @@ fn interact_sync(
   req0: agent.AgentRequest,
   timeout_ms: Int,
 ) -> response.Response(mist.ResponseData) {
-  let out = agent.interact(agent_ref, req0, None, timeout_ms)
+  let out = agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms)
 
   case out {
     Ok(result) -> json_response(200, encode_interaction_result(result))
@@ -297,7 +297,13 @@ fn interact_streaming(
   // Trigger the interaction asynchronously so we can return the SSE response.
   let _pid =
     process.spawn(fn() {
-      let out = agent.interact(agent_ref, req0, Some(stream_sink), timeout_ms)
+      let out =
+        agent.interact(
+          agent_ref,
+          req0,
+          sink.Streaming(stream_sink),
+          timeout_ms,
+        )
 
       // If the interaction errors before any streaming can happen (e.g. Busy),
       // emit a terminal payload best-effort for AG-UI.

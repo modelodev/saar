@@ -7,6 +7,7 @@ import gleeunit
 import gleeunit/should
 import sad/core/agent
 import sad/otp/safe_call
+import sad/streams/sink
 import sad/types/agent as types_agent
 import sad/types/config as types_config
 import sad/types/core as types_core
@@ -56,7 +57,7 @@ pub fn run_mode_matches_actor_mode() {
 
   let deps =
     agent.AgentDeps(
-      start_interaction: fn(_agent_ref, _req, _timeout_ms, _streaming, _sink) {
+      start_interaction: fn(_agent_ref, _req, _timeout_ms, _stream_mode) {
         process.send(started, Nil)
         process.spawn(fn() { process.sleep(60_000) })
       },
@@ -82,7 +83,7 @@ pub fn run_mode_matches_actor_mode() {
 
   let _ =
     process.spawn(fn() {
-      let out = agent.interact(agent_ref, req, option.None, 1000)
+      let out = agent.interact(agent_ref, req, sink.NonStreaming, 1000)
       process.send(done, out)
     })
 
@@ -109,7 +110,7 @@ pub fn interact_while_busy_rejected() {
 
   let deps =
     agent.AgentDeps(
-      start_interaction: fn(_agent_ref, _req, _timeout_ms, _streaming, _sink) {
+      start_interaction: fn(_agent_ref, _req, _timeout_ms, _stream_mode) {
         process.send(started, Nil)
         process.spawn(fn() { process.sleep(60_000) })
       },
@@ -135,13 +136,13 @@ pub fn interact_while_busy_rejected() {
   let done = process.new_subject()
   let _ =
     process.spawn(fn() {
-      let out = agent.interact(agent_ref, req1, option.None, 1000)
+      let out = agent.interact(agent_ref, req1, sink.NonStreaming, 1000)
       process.send(done, out)
     })
 
   let assert Ok(_) = process.receive(started, 1000)
 
-  let out2 = agent.interact(agent_ref, req2, option.None, 1000)
+  let out2 = agent.interact(agent_ref, req2, sink.NonStreaming, 1000)
 
   case out2 {
     Ok(_) -> panic as "expected busy rejection"
@@ -404,7 +405,7 @@ pub fn interact_delegates_to_actor() {
 
   let deps =
     agent.AgentDeps(
-      start_interaction: fn(_agent_ref, _req, _timeout_ms, _streaming, _sink) {
+      start_interaction: fn(_agent_ref, _req, _timeout_ms, _stream_mode) {
         process.send(started, "started")
         process.spawn(fn() { process.sleep(60_000) })
       },
@@ -429,7 +430,7 @@ pub fn interact_delegates_to_actor() {
   let done = process.new_subject()
   let _ =
     process.spawn(fn() {
-      let out = agent.interact(agent_ref, req, option.None, 1000)
+      let out = agent.interact(agent_ref, req, sink.NonStreaming, 1000)
       process.send(done, out)
     })
 
@@ -481,7 +482,7 @@ pub fn interact_respects_timeout() {
 
   let req = test_request(profile.meta.id, instance_id, "cap")
 
-  let out = agent.interact(agent_ref, req, option.None, 500)
+  let out = agent.interact(agent_ref, req, sink.NonStreaming, 500)
 
   case out {
     Ok(_) -> panic as "expected timeout"
@@ -517,7 +518,7 @@ pub fn killing_worker_does_not_crash_actor() {
 
   let deps =
     agent.AgentDeps(
-      start_interaction: fn(_agent_ref, _req, _timeout_ms, _streaming, _sink) {
+      start_interaction: fn(_agent_ref, _req, _timeout_ms, _stream_mode) {
         let pid = process.spawn(fn() { process.sleep(60_000) })
         process.send(started, pid)
         pid
@@ -543,7 +544,7 @@ pub fn killing_worker_does_not_crash_actor() {
   let done = process.new_subject()
   let _ =
     process.spawn(fn() {
-      let out = agent.interact(agent_ref, req, option.None, 1000)
+      let out = agent.interact(agent_ref, req, sink.NonStreaming, 1000)
       process.send(done, out)
     })
 
@@ -573,7 +574,7 @@ pub fn worker_down_without_done_is_handled() {
 
   let deps =
     agent.AgentDeps(
-      start_interaction: fn(_agent_ref, _req, _timeout_ms, _streaming, _sink) {
+      start_interaction: fn(_agent_ref, _req, _timeout_ms, _stream_mode) {
         let pid = process.spawn(fn() { process.sleep(60_000) })
         process.send(started, pid)
         pid
@@ -599,7 +600,7 @@ pub fn worker_down_without_done_is_handled() {
   let done = process.new_subject()
   let _ =
     process.spawn(fn() {
-      let out = agent.interact(agent_ref, req, option.None, 1000)
+      let out = agent.interact(agent_ref, req, sink.NonStreaming, 1000)
       process.send(done, out)
     })
 
@@ -643,7 +644,7 @@ pub fn timeout_does_not_crash_actor() {
 
   let req = test_request(profile.meta.id, instance_id, "cap")
 
-  let out = agent.interact(agent_ref, req, option.None, 500)
+  let out = agent.interact(agent_ref, req, sink.NonStreaming, 500)
 
   case out {
     Ok(_) -> panic as "expected timeout"
@@ -680,7 +681,7 @@ pub fn hard_timeout_not_extended_by_output() {
   let done = process.new_subject()
   let _ =
     process.spawn(fn() {
-      let out = agent.interact(agent_ref, req, option.None, 500)
+      let out = agent.interact(agent_ref, req, sink.NonStreaming, 500)
       process.send(done, out)
     })
 
@@ -846,7 +847,7 @@ pub fn no_cancel_endpoint() {
 
   let deps =
     agent.AgentDeps(
-      start_interaction: fn(_agent_ref, _req, _timeout_ms, _streaming, _sink) {
+      start_interaction: fn(_agent_ref, _req, _timeout_ms, _stream_mode) {
         process.send(started, Nil)
         process.spawn(fn() { process.sleep(60_000) })
       },
@@ -870,7 +871,7 @@ pub fn no_cancel_endpoint() {
 
   let caller_pid =
     process.spawn(fn() {
-      let _ = agent.interact(agent_ref, req, option.None, 1000)
+      let _ = agent.interact(agent_ref, req, sink.NonStreaming, 1000)
       Nil
     })
 
@@ -878,7 +879,7 @@ pub fn no_cancel_endpoint() {
   process.kill(caller_pid)
   process.sleep(20)
 
-  let out = agent.interact(agent_ref, req, option.None, 1000)
+  let out = agent.interact(agent_ref, req, sink.NonStreaming, 1000)
 
   case out {
     Ok(_) -> panic as "expected still busy"
