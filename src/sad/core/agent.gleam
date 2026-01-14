@@ -182,7 +182,7 @@ pub type AgentRequest {
 
 /// A reply target for an in-flight interaction.
 ///
-/// When a `StreamSink` is present, the bridge is responsible for pushing chunks.
+/// When `StreamMode` is `Streaming`, the bridge is responsible for chunks.
 pub type ReplyTarget {
   ReplyTo(
     process.Subject(
@@ -334,7 +334,7 @@ pub type StartSnapshot {
 pub opaque type AgentMsg {
   Interact(
     req: AgentRequest,
-    stream_sink: option.Option(sink.StreamSink),
+    stream_mode: sink.StreamMode,
     reply_to: process.Subject(
       Result(types_output.InteractionResult, types_output.InteractionError),
     ),
@@ -379,8 +379,7 @@ pub type AgentDeps {
       AgentRef,
       AgentRequest,
       Int,
-      Bool,
-      option.Option(sink.StreamSink),
+      sink.StreamMode,
     ) ->
       process.Pid,
     cancel_interaction: fn(process.Pid) -> Nil,
@@ -390,7 +389,7 @@ pub type AgentDeps {
 
 pub fn default_deps() -> AgentDeps {
   AgentDeps(
-    start_interaction: fn(_agent, _req, _timeout_ms, _streaming, _sink) {
+    start_interaction: fn(_agent, _req, _timeout_ms, _stream_mode) {
       process.spawn(fn() { process.sleep(60_000) })
     },
     cancel_interaction: fn(pid) { process.kill(pid) },
@@ -502,8 +501,8 @@ fn handle_message(
 
     ProvisioningDone(outcome) -> handle_provisioning_done(state, outcome)
 
-    Interact(req, stream_sink, reply_to) ->
-      handle_interact(state, req, stream_sink, reply_to)
+    Interact(req, stream_mode, reply_to) ->
+      handle_interact(state, req, stream_mode, reply_to)
 
     InteractionDone(result) -> handle_interaction_done(state, result)
 
@@ -618,7 +617,7 @@ fn handle_provisioning_done(
 fn handle_interact(
   state: AgentRuntimeState,
   req: AgentRequest,
-  stream_sink: option.Option(sink.StreamSink),
+  stream_mode: sink.StreamMode,
   reply_to: process.Subject(
     Result(types_output.InteractionResult, types_output.InteractionError),
   ),
@@ -650,7 +649,7 @@ fn handle_interact(
           actor.continue(state)
         }
 
-        True -> start_interaction(state, req, stream_sink, reply_to)
+        True -> start_interaction(state, req, stream_mode, reply_to)
       }
   }
 }
@@ -658,16 +657,12 @@ fn handle_interact(
 fn start_interaction(
   state: AgentRuntimeState,
   req: AgentRequest,
-  stream_sink: option.Option(sink.StreamSink),
+  stream_mode: sink.StreamMode,
   reply_to: process.Subject(
     Result(types_output.InteractionResult, types_output.InteractionError),
   ),
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
   let AgentRequest(context: context, capability: capability, ..) = req
-
-  let streaming =
-    option.is_some(stream_sink)
-    && is_streaming_capability(state.profile.interface, capability)
 
   let timeout_ms =
     resolve_call_timeout_for(state.config, state.profile.interface, capability)
@@ -697,8 +692,7 @@ fn start_interaction(
           state.config,
           state.artifact_registry,
           state.assigned_port,
-          streaming,
-          stream_sink,
+          stream_mode,
         )
 
       internal_interaction_done(state.self_ref, out)
@@ -711,9 +705,9 @@ fn start_interaction(
 
   let started_at_ms = ffi.now_ms()
 
-  let target = case stream_sink {
-    option.Some(s) -> StreamTo(s, reply_to)
-    option.None -> ReplyTo(reply_to)
+  let target = case stream_mode {
+    sink.Streaming(s) -> StreamTo(s, reply_to)
+    sink.NonStreaming -> ReplyTo(reply_to)
   }
 
   let in_flight =
@@ -788,30 +782,6 @@ pub fn resolve_call_timeout_for(
         option.Some(ms) -> ms
         option.None -> default_timeout_ms
       }
-  }
-}
-
-fn is_streaming_capability(
-  interface: types_profile.Interface,
-  capability_name: String,
-) -> Bool {
-  let maybe_streaming = case interface {
-    types_profile.HttpInterface(_, _, _, caps) ->
-      case dict.get(caps, capability_name) {
-        Ok(cap) -> option.Some(cap.streaming)
-        Error(_) -> option.None
-      }
-
-    types_profile.RunnerInterface(caps) ->
-      case dict.get(caps, capability_name) {
-        Ok(cap) -> option.Some(cap.streaming)
-        Error(_) -> option.None
-      }
-  }
-
-  case maybe_streaming {
-    option.Some(streaming) -> streaming
-    option.None -> False
   }
 }
 
@@ -1049,17 +1019,18 @@ pub fn attach_logs(
 ///
 /// - If the actor is Busy, the call is rejected with `AgentError` and message
 ///   `interact_while_busy`.
+/// - `stream_mode` decides whether the reply is streamed or returned inline.
 /// - Call failures are mapped into `InfraError` using the request trace id.
 pub fn interact(
   agent: AgentRef,
   req: AgentRequest,
-  stream_sink: option.Option(sink.StreamSink),
+  stream_mode: sink.StreamMode,
   timeout_ms: Int,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   let AgentRequest(context: context, ..) = req
 
   safe_call.call_within(subject(agent), timeout_ms, fn(reply_to) {
-    Interact(req, stream_sink, reply_to)
+    Interact(req, stream_mode, reply_to)
   })
   |> unwrap_or_disconnected(context.trace_id)
 }

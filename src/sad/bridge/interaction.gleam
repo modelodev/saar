@@ -50,6 +50,9 @@ import sad/types/stream
 ///
 /// This function is pure with respect to agent state: concurrency guards and
 /// hard timeouts are enforced by the caller (AgentActor).
+///
+/// `stream_mode` selects whether the bridge pushes SSE chunks or returns a
+/// single response.
 pub fn run(
   profile: types_profile.Profile,
   profile_id: types_core.ProfileId,
@@ -64,8 +67,7 @@ pub fn run(
     artifact_registry_protocol.ArtifactRegistryMsg,
   ),
   assigned_port: Option(Int),
-  streaming: Bool,
-  stream_sink: Option(sink.StreamSink),
+  stream_mode: sink.StreamMode,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   let input =
     types_input.SadInput(
@@ -93,8 +95,8 @@ pub fn run(
           ))
 
         Ok(cap) ->
-          case streaming && cap.streaming {
-            True ->
+          case stream_mode, cap.streaming {
+            sink.Streaming(stream_sink), True ->
               execute_runner_streaming(
                 input,
                 instance_id,
@@ -103,7 +105,7 @@ pub fn run(
                 artifact_registry,
                 stream_sink,
               )
-            False ->
+            _, _ ->
               execute_runner_sync(input, workspace, config, artifact_registry)
           }
       }
@@ -118,15 +120,15 @@ pub fn run(
           ))
 
         Ok(cap) ->
-          case streaming && cap.streaming {
-            True ->
+          case stream_mode, cap.streaming {
+            sink.Streaming(_), True ->
               Error(types_output.sad_error(
                 context.trace_id,
                 types_enums.InfraError,
                 "http_streaming_not_supported",
               ))
 
-            False ->
+            _, _ ->
               execute_http_sync(
                 base_url,
                 headers,
@@ -196,18 +198,8 @@ fn execute_runner_streaming(
   artifact_registry: process.Subject(
     artifact_registry_protocol.ArtifactRegistryMsg,
   ),
-  stream_sink: Option(sink.StreamSink),
+  stream_sink: sink.StreamSink,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
-  use sink <- result.try(case stream_sink {
-    Some(s) -> Ok(s)
-    None ->
-      Error(types_output.sad_error(
-        input.context.trace_id,
-        types_enums.InfraError,
-        "missing_stream_sink",
-      ))
-  })
-
   let types_config.SadConfig(stream: stream_cfg, ..) = config
   let types_config.StreamConfig(
     interaction_stream: pump_cfg,
@@ -216,10 +208,10 @@ fn execute_runner_streaming(
   ) = stream_cfg
 
   let done = process.new_subject()
-  let pump = stream_pump.start(done, Some(sink), pump_cfg)
+  let pump = stream_pump.start(done, Some(stream_sink), pump_cfg)
 
   // Emit protocol start eagerly.
-  case sink.protocol(sink) {
+  case sink.protocol(stream_sink) {
     sink.AgUi ->
       stream_pump.push(pump, agui_run_started(input.context.trace_id))
     sink.A2uiV08 -> Nil
@@ -287,7 +279,7 @@ fn execute_runner_streaming(
     proc,
     read_timeout_ms,
     input,
-    sink,
+    stream_sink,
     pump,
     flags,
     config,
@@ -300,7 +292,7 @@ fn read_runner_stream(
   proc: port_process.PortProcess,
   read_timeout_ms: Int,
   input: types_input.SadInput,
-  sink: sink.StreamSink,
+  stream_sink: sink.StreamSink,
   pump: stream_pump.StreamPump,
   flags: StreamFlags,
   config: types_config.SadConfig,
@@ -317,7 +309,7 @@ fn read_runner_stream(
         proc,
         read_timeout_ms,
         input,
-        sink,
+        stream_sink,
         pump,
         flags,
         config,
@@ -362,7 +354,7 @@ fn read_runner_stream(
               proc,
               read_timeout_ms,
               input,
-              sink,
+              stream_sink,
               pump,
               flags,
               config,
@@ -372,12 +364,18 @@ fn read_runner_stream(
 
           types_runner.RunnerEventChunk(delta) -> {
             let flags =
-              emit_chunk(pump, sink, input.context.trace_id, delta, flags)
+              emit_chunk(
+                pump,
+                stream_sink,
+                input.context.trace_id,
+                delta,
+                flags,
+              )
             read_runner_stream(
               proc,
               read_timeout_ms,
               input,
-              sink,
+              stream_sink,
               pump,
               flags,
               config,
@@ -397,7 +395,13 @@ fn read_runner_stream(
                 instance_id,
               )
 
-            emit_terminal(pump, sink, input.context.trace_id, final, flags)
+            emit_terminal(
+              pump,
+              stream_sink,
+              input.context.trace_id,
+              final,
+              flags,
+            )
             stream_pump.finish(pump, final)
             final
           }
@@ -415,7 +419,7 @@ fn read_runner_stream(
 
 fn emit_chunk(
   pump: stream_pump.StreamPump,
-  sink: sink.StreamSink,
+  stream_sink: sink.StreamSink,
   trace_id: types_core.TraceId,
   delta: String,
   flags: StreamFlags,
@@ -425,7 +429,7 @@ fn emit_chunk(
     a2ui_started: a2ui_started,
   ) = flags
 
-  case sink.protocol(sink) {
+  case sink.protocol(stream_sink) {
     sink.AgUi -> {
       case agui_started {
         False -> stream_pump.push(pump, agui_text_message_start())
@@ -450,12 +454,12 @@ fn emit_chunk(
 
 fn emit_terminal(
   pump: stream_pump.StreamPump,
-  sink: sink.StreamSink,
+  stream_sink: sink.StreamSink,
   trace_id: types_core.TraceId,
   result: Result(types_output.InteractionResult, types_output.InteractionError),
   flags: StreamFlags,
 ) -> Nil {
-  case sink.protocol(sink) {
+  case sink.protocol(stream_sink) {
     sink.A2uiV08 -> Nil
 
     sink.AgUi ->

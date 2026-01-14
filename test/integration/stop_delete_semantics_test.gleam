@@ -17,6 +17,7 @@ import sad/core/root_supervisor
 import sad/core/supervisor_names
 import sad/decoders
 import sad/net/tcp_listener
+import sad/streams/sink
 import sad/types/agent as types_agent
 import sad/types/config as types_config
 import sad/types/core as types_core
@@ -764,5 +765,5 @@ fn interact_echo(
       context: ctx,
     )
 
-  agent.interact(agent_ref, req, None, 5000)
+  agent.interact(agent_ref, req, sink.NonStreaming, 5000)
 }
