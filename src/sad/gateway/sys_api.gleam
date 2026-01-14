@@ -36,6 +36,7 @@ import sad/core/agent
 import sad/core/boundary_call
 import sad/core/messages
 import sad/decoders
+import sad/gateway/lookup
 import sad/gateway/lookup_http
 import sad/gateway/problem
 import sad/profiles_sources
@@ -597,22 +598,12 @@ fn handle_sys_profiles(
         Error(call_err) -> problem.from_call_error(call_err, trace_id, req.path)
 
         Ok(ids) -> {
+          let timeout_ms = registry_timeout_ms(cfg)
+
           let metas =
             ids
             |> list.filter_map(fn(id) {
-              case
-                boundary_call.call(
-                  profiles,
-                  registry_timeout_ms(cfg),
-                  fn(reply_to) { messages.GetProfile(id, reply_to) },
-                )
-              {
-                Ok(Some(profile)) -> {
-                  let types_profile.Profile(meta: meta, ..) = profile
-                  Ok(encode_profile_meta(meta))
-                }
-                _ -> Error(Nil)
-              }
+              profile_meta_from_id(profiles, timeout_ms, id)
             })
 
           json_response(
@@ -633,6 +624,18 @@ fn encode_profile_meta(meta: types_profile.ProfileMeta) -> json.Json {
     #("lifecycle", json.string(types_enums.lifecycle_to_string(meta.lifecycle))),
     #("description", json.string(meta.description)),
   ])
+}
+
+fn profile_meta_from_id(
+  profiles: process.Subject(messages.ProfilesMsg),
+  timeout_ms: Int,
+  profile_id: types_core.ProfileId,
+) -> Result(json.Json, Nil) {
+  case lookup.get_profile(profiles, timeout_ms, profile_id) {
+    Ok(option.Some(types_profile.Profile(meta: meta, ..))) ->
+      Ok(encode_profile_meta(meta))
+    _ -> Error(Nil)
+  }
 }
 
 fn encode_status(status: types_agent.AgentStatusView) -> json.Json {
