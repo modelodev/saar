@@ -564,6 +564,60 @@ pub fn post_agents_interact_timeout() {
   resp.status |> should.equal(504)
 }
 
+pub fn post_agents_interact_timeout_then_next_request_ok() {
+  let base_url = start_sad()
+
+  let timed_out_id = "inst-timeout-then-ok-1"
+  create_agent(base_url, "echo_cli", timed_out_id)
+  wait_phase(base_url, timed_out_id, "ready_transient", 200)
+
+  let body =
+    "{"
+    <> "\"capability\":\"echo\","
+    <> "\"inputs\":{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]},"
+    <> "\"context\":{\"trace_id\":\"trace-timeout-then-ok-1\"}"
+    <> "}"
+
+  let resp1 =
+    http_client.request_sync_string(
+      http.Post,
+      base_url <> "/agents/" <> timed_out_id <> "/interact",
+      dict.insert(auth_headers(), "content-type", "application/json"),
+      Some(body),
+      5000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp1.status |> should.equal(504)
+
+  // After a timeout, the gateway must still be able to serve subsequent requests.
+  let ok_id = "inst-timeout-then-ok-2"
+  create_agent(base_url, "echo_server", ok_id)
+  wait_phase(base_url, ok_id, "ready_continuous", 200)
+
+  let body2 =
+    "{"
+    <> "\"capability\":\"echo\","
+    <> "\"inputs\":{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]},"
+    <> "\"context\":{\"trace_id\":\"trace-timeout-then-ok-2\"}"
+    <> "}"
+
+  let resp2 =
+    http_client.request_sync_string(
+      http.Post,
+      base_url <> "/agents/" <> ok_id <> "/interact",
+      dict.insert(auth_headers(), "content-type", "application/json"),
+      Some(body2),
+      5000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp2.status |> should.equal(200)
+  should.equal(string.contains(resp2.body, "\"trace_id\""), True)
+}
+
 pub fn post_agents_interact_streaming_a2ui_header_switches_wire() {
   let base_url = start_sad()
 
@@ -595,6 +649,65 @@ pub fn post_agents_interact_streaming_a2ui_header_switches_wire() {
   should.equal(string.contains(first, "\"type\":"), False)
 
   http_client.close_sse(conn)
+}
+
+pub fn post_agents_interact_streaming_a2ui_disconnect_is_terminal() {
+  let base_url = start_sad()
+
+  let instance_id = "inst-a2ui-terminal-1"
+  create_agent(base_url, "streaming_echo", instance_id)
+
+  wait_phase(base_url, instance_id, "ready_transient", 200)
+
+  let url = base_url <> "/agents/" <> instance_id <> "/interact"
+
+  let body =
+    "{"
+    <> "\"capability\":\"echo\","
+    <> "\"inputs\":{\"messages\":[{\"role\":\"user\",\"content\":\"hello world\"}]},"
+    <> "\"context\":{\"trace_id\":\"trace-a2ui-terminal-1\"}"
+    <> "}"
+
+  let headers =
+    auth_headers()
+    |> dict.insert("content-type", "application/json")
+    |> dict.insert("x-sad-ui-protocol", "a2ui/v0.8")
+
+  let conn =
+    http_client.open_sse(http.Post, url, headers, Some(body), 2000) |> assert_ok
+
+  wait_a2ui_and_then_close(conn, False, 40)
+}
+
+fn wait_a2ui_and_then_close(
+  conn: http_client.SseConnection,
+  saw_begin_rendering: Bool,
+  attempts: Int,
+) -> Nil {
+  case attempts {
+    0 -> panic as "Timed out waiting for A2UI stream to close"
+
+    _ ->
+      case http_client.sse_receive(conn, 250) {
+        http_client.SseTimeout ->
+          wait_a2ui_and_then_close(conn, saw_begin_rendering, attempts - 1)
+
+        http_client.SseClosed -> {
+          saw_begin_rendering |> should.equal(True)
+          http_client.close_sse(conn)
+        }
+
+        http_client.SseData(data) -> {
+          // A2UI frames are not wrapped in AG-UI envelopes.
+          should.equal(string.contains(data, "\"type\":"), False)
+
+          let saw =
+            saw_begin_rendering || string.contains(data, "\"beginRendering\"")
+
+          wait_a2ui_and_then_close(conn, saw, attempts - 1)
+        }
+      }
+  }
 }
 
 fn load_cfg0() -> types_config.SadConfig {
