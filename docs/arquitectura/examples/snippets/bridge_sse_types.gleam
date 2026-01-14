@@ -2,7 +2,7 @@
 // Source: arquitectura/bridge.md:1498
 // Purpose: documentation-only; may not compile as-is.
 
-import gleam/erlang/process.{type Subject} as process
+import gleam/erlang/process.{type Subject}
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
@@ -47,9 +47,14 @@ pub fn open_sse(
 
   // Timeout aquí es solo para recibir status+headers iniciales.
   // El timeout total de interacción lo aplica SAD (deadline en el worker).
-  sse.event_source(req, 5_000, events)
-  |> result.map(fn(#(_client_ref, control)) { SseConnection(control: control, events: events) })
-  |> result.map_error(fn(err) { ConnectionError("SSE start failed: " <> string.inspect(err)) })
+  sse.event_source(req, 5000, events)
+  |> result.map(fn(pair) {
+    let #(_client_ref, control) = pair
+    SseConnection(control: control, events: events)
+  })
+  |> result.map_error(fn(err) {
+    ConnectionError("SSE start failed: " <> string.inspect(err))
+  })
 }
 
 /// Lee el siguiente evento SSE de la conexión.

@@ -4,7 +4,7 @@
 
 // Ubicación: sad/core/messages.gleam
 import gleam/otp/actor
-import sad/core/agent as agent
+import sad/core/agent
 import sad/types.{type InstanceSummary}
 
 /// Argumentos para crear un agente.
@@ -14,7 +14,8 @@ pub type StartArgs {
     /// `POST /sys/reload-profiles` solo afecta a nuevas instancias.
     profile: Profile,
     instance_id: InstanceId,
-    params: ResolvedParams,  // YA RESUELTOS
+    params: ResolvedParams,
+    // YA RESUELTOS
     workspace: String,
     config: SadConfig,
   )

@@ -1,3 +1,4 @@
+import gleam/json
 import gleam/option
 import gleeunit
 import gleeunit/should
@@ -48,6 +49,22 @@ pub fn allows_result_first_test() {
 
   runner_contract.validate_sequence(events, True)
   |> should.equal(Ok(Nil))
+}
+
+pub fn decodes_object_data_test() {
+  runner_contract.decode_event(
+    "{\"t\":\"result\",\"status\":\"success\",\"data\":{},\"artifacts\":[]}",
+  )
+  |> should.equal(
+    Ok(
+      types_runner.RunnerEventResult(
+        response: types_runner.RunnerSuccess(
+          data: option.Some(json.object([])),
+          artifacts: [],
+        ),
+      ),
+    ),
+  )
 }
 
 fn success_result() -> types_runner.RunnerEvent {

@@ -11,13 +11,22 @@ import gleam/erlang/process.{type Subject}
 import gleam/erlang/process
 import mist
 import sad/otp/safe_call.{type CallError}
-import sad/types.{type StreamEvent, type InteractionResult, type InteractionError}
+import sad/types.{
+  type InteractionError, type InteractionResult, type StreamEvent,
+}
 
-pub type StreamSink = Subject(StreamSinkMsg)
+pub type StreamSink =
+  Subject(StreamSinkMsg)
 
 pub type StreamSinkMsg {
-  PushBatch(events: List(StreamEvent), reply_to: Subject(Result(Nil, CallError)))
-  Finish(result: Result(InteractionResult, InteractionError), reply_to: Subject(Result(Nil, CallError)))
+  PushBatch(
+    events: List(StreamEvent),
+    reply_to: Subject(Result(Nil, CallError)),
+  )
+  Finish(
+    result: Result(InteractionResult, InteractionError),
+    reply_to: Subject(Result(Nil, CallError)),
+  )
 }
 
 pub fn start_stream_sink(
@@ -30,15 +39,16 @@ pub fn start_stream_sink(
 
   // Pseudocódigo: Mist ofrece `server_sent_events(init, handler)` con un loop.
   // La idea es que *este loop es el “actor” del sink*.
-  let _pid =
-    process.spawn(fn() {
-      loop(subject, sse, wire)
-    })
+  let _pid = process.spawn(fn() { loop(subject, sse, wire) })
 
   subject
 }
 
-fn loop(subject: StreamSink, sse: mist.Sse, wire: fn(StreamEvent) -> String) -> Nil {
+fn loop(
+  subject: StreamSink,
+  sse: mist.Sse,
+  wire: fn(StreamEvent) -> String,
+) -> Nil {
   // Pseudocódigo de receive (en la implementación real se usaría el receive/selector de Gleam+Mist).
   let msg = process.receive(subject)
   case msg {
@@ -79,4 +89,3 @@ fn write_finish_and_close(
 ) -> Result(Nil, CallError) {
   Ok(Nil)
 }
-

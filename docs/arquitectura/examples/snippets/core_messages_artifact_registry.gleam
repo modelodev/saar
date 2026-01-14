@@ -7,8 +7,14 @@ pub opaque type ArtifactId {
   ArtifactId(String)
 }
 
-pub fn artifact_id(s: String) -> ArtifactId { ArtifactId(s) }
-pub fn artifact_id_to_string(id: ArtifactId) -> String { let ArtifactId(s) = id s }
+pub fn artifact_id(s: String) -> ArtifactId {
+  ArtifactId(s)
+}
+
+pub fn artifact_id_to_string(id: ArtifactId) -> String {
+  let ArtifactId(s) = id
+  s
+}
 
 /// Genera un nuevo ArtifactId único.
 pub fn generate_artifact_id() -> ArtifactId {
@@ -37,17 +43,18 @@ pub type ArtifactRegistryMsg {
     instance_id: InstanceId,
     reply_to: Subject(ArtifactId),
   )
-  
+
   /// Busca un artefacto por ID.
   LookupArtifact(
     artifact_id: ArtifactId,
     reply_to: Subject(Option(ArtifactEntry)),
   )
-  
+
   /// Elimina todos los artefactos de una instancia.
   /// Se llama cuando se elimina la instancia (cleanup del workspace).
   PurgeByInstance(
     instance_id: InstanceId,
-    reply_to: Subject(Int),  // Número de artefactos eliminados
+    reply_to: Subject(Int),
+    // Número de artefactos eliminados
   )
 }

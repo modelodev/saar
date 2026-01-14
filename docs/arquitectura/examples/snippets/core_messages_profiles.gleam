@@ -14,4 +14,3 @@ pub type ProfilesMsg {
   /// Lista ids disponibles.
   ListProfiles(Subject(List(ProfileId)))
 }
-
