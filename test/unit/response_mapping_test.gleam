@@ -18,11 +18,7 @@ pub fn main() {
 }
 
 pub fn response_mapping_text_pointer_ok_test() {
-  let mapping =
-    types_profile.ResponseMapping(
-      text_pointer: Some("/answer"),
-      artifacts_pointer: None,
-    )
+  let mapping = types_profile.Text("/answer")
 
   let body =
     dynamic.properties([
@@ -37,11 +33,7 @@ pub fn response_mapping_text_pointer_ok_test() {
 }
 
 pub fn response_mapping_text_pointer_missing_test() {
-  let mapping =
-    types_profile.ResponseMapping(
-      text_pointer: Some("/missing"),
-      artifacts_pointer: None,
-    )
+  let mapping = types_profile.Text("/missing")
 
   let body =
     dynamic.properties([
@@ -55,11 +47,7 @@ pub fn response_mapping_text_pointer_missing_test() {
 }
 
 pub fn response_mapping_pointer_invalid_test() {
-  let mapping =
-    types_profile.ResponseMapping(
-      text_pointer: Some("bad"),
-      artifacts_pointer: None,
-    )
+  let mapping = types_profile.Text("bad")
 
   let body =
     dynamic.properties([
@@ -77,11 +65,7 @@ pub fn response_mapping_pointer_invalid_test() {
 }
 
 pub fn response_mapping_text_pointer_wrong_type_test() {
-  let mapping =
-    types_profile.ResponseMapping(
-      text_pointer: Some("/answer"),
-      artifacts_pointer: None,
-    )
+  let mapping = types_profile.Text("/answer")
 
   let body =
     dynamic.properties([
@@ -99,11 +83,7 @@ pub fn response_mapping_text_pointer_wrong_type_test() {
 }
 
 pub fn response_mapping_text_pointer_wrong_type_object_test() {
-  let mapping =
-    types_profile.ResponseMapping(
-      text_pointer: Some("/answer"),
-      artifacts_pointer: None,
-    )
+  let mapping = types_profile.Text("/answer")
 
   let body =
     dynamic.properties([
@@ -126,11 +106,7 @@ pub fn response_mapping_text_pointer_wrong_type_object_test() {
 }
 
 pub fn response_mapping_artifacts_pointer_wrong_type_test() {
-  let mapping =
-    types_profile.ResponseMapping(
-      text_pointer: None,
-      artifacts_pointer: Some("/files"),
-    )
+  let mapping = types_profile.Artifacts("/files")
 
   let body =
     dynamic.properties([
@@ -148,11 +124,7 @@ pub fn response_mapping_artifacts_pointer_wrong_type_test() {
 }
 
 pub fn response_mapping_artifacts_pointer_test() {
-  let mapping =
-    types_profile.ResponseMapping(
-      text_pointer: None,
-      artifacts_pointer: Some("/files"),
-    )
+  let mapping = types_profile.Artifacts("/files")
 
   let body =
     dynamic.properties([
@@ -173,11 +145,7 @@ pub fn response_mapping_artifacts_pointer_test() {
 }
 
 pub fn response_mapping_both_pointers_test() {
-  let mapping =
-    types_profile.ResponseMapping(
-      text_pointer: Some("/answer"),
-      artifacts_pointer: Some("/files"),
-    )
+  let mapping = types_profile.Both("/answer", "/files")
 
   let body =
     dynamic.properties([
@@ -201,6 +169,23 @@ pub fn response_mapping_none_test() {
 
   let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =
     response_mapping.apply_response_mapping(trace_id(), None, body)
+
+  text |> should.equal(Some("{\"answer\":\"ok\"}"))
+  artifacts |> should.equal(None)
+}
+
+pub fn response_mapping_default_test() {
+  let body =
+    dynamic.properties([
+      #(dynamic.string("answer"), dynamic.string("ok")),
+    ])
+
+  let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =
+    response_mapping.apply_response_mapping(
+      trace_id(),
+      Some(types_profile.Default),
+      body,
+    )
 
   text |> should.equal(Some("{\"answer\":\"ok\"}"))
   artifacts |> should.equal(None)
