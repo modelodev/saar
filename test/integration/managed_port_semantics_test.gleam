@@ -193,21 +193,28 @@ pub fn managed_port_race_fails_fast_test() {
 
   let assert Ok(id1) = types_core.instance_id("inst-race-1")
 
+  // Try to occupy the port concurrently with provisioning.
+  let occupied = process.new_subject()
+  let _ = process.spawn(fn() { occupy_port_with_retries(port, occupied, 200) })
+
   let a1 = start_instance(manager, profile, id1, cfg)
 
-  // Try to occupy the port shortly after start to simulate a race.
-  let listener = occupy_port_with_retries(port, 200)
-
-  // Depending on when the port becomes occupied, either `PortInUse` or `PortBindFailed`
-  // is acceptable as long as it fails fast.
-  wait_for_failure_reason_any(
+  // We accept either outcome as long as it resolves quickly:
+  // - ReadyContinuous when no race happens
+  // - Failed with PortInUse/PortBindFailed when the race is hit
+  wait_for_ready_or_failed_reason_any(
     a1,
+    types_agent.ReadyContinuous,
     types_agent.PortInUse,
     types_agent.PortBindFailed,
     200,
   )
 
-  tcp_listener.close(listener)
+  case process.receive(occupied, 0) {
+    Ok(listener) -> tcp_listener.close(listener)
+    Error(_) -> Nil
+  }
+
   Nil
 }
 
@@ -300,57 +307,69 @@ fn wait_for_failure_reason(
   }
 }
 
-fn wait_for_failure_reason_any(
+fn wait_for_ready_or_failed_reason_any(
   agent_ref: agent.AgentRef,
+  ready_phase: types_agent.AgentPhase,
   expected_a: types_agent.FailureReason,
   expected_b: types_agent.FailureReason,
   attempts: Int,
 ) -> Nil {
   case attempts {
-    0 -> panic as "Timed out waiting for failure reason"
+    0 -> panic as "Timed out waiting for ready/failed"
 
     _ -> {
       let status = agent.status(agent_ref, 1000) |> test_assertions.assert_ok
 
-      case status.failure_reason {
-        Some(reason) ->
-          case reason == expected_a || reason == expected_b {
-            True -> Nil
-            False -> {
+      case status.phase == ready_phase {
+        True -> Nil
+        False ->
+          case status.phase {
+            types_agent.Failed ->
+              case status.failure_reason {
+                Some(reason) ->
+                  case reason == expected_a || reason == expected_b {
+                    True -> Nil
+                    False ->
+                      panic as types_agent.failure_reason_to_string(reason)
+                  }
+
+                None -> panic as "Agent entered Failed"
+              }
+
+            _ -> {
               process.sleep(20)
-              wait_for_failure_reason_any(
+              wait_for_ready_or_failed_reason_any(
                 agent_ref,
+                ready_phase,
                 expected_a,
                 expected_b,
                 attempts - 1,
               )
             }
           }
-
-        None -> {
-          process.sleep(20)
-          wait_for_failure_reason_any(
-            agent_ref,
-            expected_a,
-            expected_b,
-            attempts - 1,
-          )
-        }
       }
     }
   }
 }
 
-fn occupy_port_with_retries(port: Int, attempts: Int) {
+fn occupy_port_with_retries(
+  port: Int,
+  reply_to: process.Subject(tcp_listener.Listener),
+  attempts: Int,
+) -> Nil {
   case attempts {
-    0 -> panic as "Failed to occupy port for race"
+    0 -> Nil
 
     _ ->
       case tcp_listener.listen(host, port) {
-        Ok(#(listener, _)) -> listener
+        Ok(#(listener, _)) -> {
+          process.send(reply_to, listener)
+          Nil
+        }
+
         Error(_) -> {
           process.sleep(1)
-          occupy_port_with_retries(port, attempts - 1)
+          occupy_port_with_retries(port, reply_to, attempts - 1)
         }
       }
   }
