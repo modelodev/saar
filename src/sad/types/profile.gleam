@@ -130,10 +130,14 @@ pub type RunnerCapability {
 ///
 /// JSON pointers can be used to locate text and artifacts in a response body.
 pub type ResponseMapping {
-  ResponseMapping(
-    text_pointer: Option(String),
-    artifacts_pointer: Option(String),
-  )
+  /// Use the default mapping behavior.
+  Default
+  /// Resolve text from a JSON pointer.
+  Text(String)
+  /// Resolve artifacts from a JSON pointer.
+  Artifacts(String)
+  /// Resolve both text and artifacts from JSON pointers.
+  Both(String, String)
 }
 
 /// A single HTTP-exposed capability.

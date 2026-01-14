@@ -40,7 +40,8 @@ pub type MappingResult {
 
 /// Applies response mapping pointers to a dynamic payload.
 ///
-/// When `mapping` is `None`, the payload is serialized as a JSON string.
+/// When `mapping` is `None` or `Default`, the payload is serialized as a JSON
+/// string.
 ///
 /// Example:
 /// ```gleam
@@ -49,11 +50,7 @@ pub type MappingResult {
 /// import sad/response_mapping
 /// import sad/types/profile as types_profile
 ///
-/// let mapping =
-///   types_profile.ResponseMapping(
-///     text_pointer: Some("/answer"),
-///     artifacts_pointer: None,
-///   )
+/// let mapping = types_profile.Text("/answer")
 ///
 /// let payload =
 ///   dynamic.properties([
@@ -78,28 +75,44 @@ fn apply_response_mapping_pure(
   body: dynamic.Dynamic,
 ) -> Result(MappingResult, MappingFailure) {
   case mapping {
-    None ->
-      Ok(MappingResult(
-        text: Some(json.to_string(json_pointer.dynamic_to_json(body))),
-        artifacts: None,
-      ))
-
-    Some(types_profile.ResponseMapping(text_pointer, artifacts_pointer)) -> {
-      use text_value <- result.try(resolve_pointer_option(text_pointer, body))
-      use artifacts_value <- result.try(resolve_pointer_option(
-        artifacts_pointer,
-        body,
-      ))
-
-      use text <- result.try(text_from_value(text_value, text_pointer))
-      use artifacts <- result.try(artifacts_from_value(
-        artifacts_value,
-        artifacts_pointer,
-      ))
-
-      Ok(MappingResult(text: text, artifacts: artifacts))
-    }
+    None -> default_mapping(body)
+    Some(types_profile.Default) -> default_mapping(body)
+    Some(types_profile.Text(text_pointer)) ->
+      apply_pointer_mapping(Some(text_pointer), None, body)
+    Some(types_profile.Artifacts(artifacts_pointer)) ->
+      apply_pointer_mapping(None, Some(artifacts_pointer), body)
+    Some(types_profile.Both(text_pointer, artifacts_pointer)) ->
+      apply_pointer_mapping(Some(text_pointer), Some(artifacts_pointer), body)
   }
+}
+
+fn default_mapping(
+  body: dynamic.Dynamic,
+) -> Result(MappingResult, MappingFailure) {
+  Ok(MappingResult(
+    text: Some(json.to_string(json_pointer.dynamic_to_json(body))),
+    artifacts: None,
+  ))
+}
+
+fn apply_pointer_mapping(
+  text_pointer: Option(String),
+  artifacts_pointer: Option(String),
+  body: dynamic.Dynamic,
+) -> Result(MappingResult, MappingFailure) {
+  use text_value <- result.try(resolve_pointer_option(text_pointer, body))
+  use artifacts_value <- result.try(resolve_pointer_option(
+    artifacts_pointer,
+    body,
+  ))
+
+  use text <- result.try(text_from_value(text_value, text_pointer))
+  use artifacts <- result.try(artifacts_from_value(
+    artifacts_value,
+    artifacts_pointer,
+  ))
+
+  Ok(MappingResult(text: text, artifacts: artifacts))
 }
 
 fn resolve_pointer_option(

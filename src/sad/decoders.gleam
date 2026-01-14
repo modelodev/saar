@@ -818,10 +818,12 @@ fn response_mapping_decoder() -> decode.Decoder(types_profile.ResponseMapping) {
       None,
       decode.optional(decode.string),
     )
-    decode.success(types_profile.ResponseMapping(
-      text_pointer: text_pointer,
-      artifacts_pointer: artifacts_pointer,
-    ))
+    decode.success(case text_pointer, artifacts_pointer {
+      None, None -> types_profile.Default
+      Some(text), None -> types_profile.Text(text)
+      None, Some(artifacts) -> types_profile.Artifacts(artifacts)
+      Some(text), Some(artifacts) -> types_profile.Both(text, artifacts)
+    })
   }
   decoder
 }
