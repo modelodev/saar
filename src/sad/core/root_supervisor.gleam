@@ -96,6 +96,8 @@ pub fn start(
     |> supervisor.add(artifact_registry_child_spec(artifact_registry_name))
     |> supervisor.add(port_pool_child_spec(port_pool_name, min_port, max_port))
     |> supervisor.add(profiles_child_spec(profiles_name, initial_profiles))
+    // Keep agent_manager before agent_factory so rest_for_one restarts
+    // the factory (and its agents) when the manager crashes.
     |> supervisor.add(agent_manager_child_spec(
       agent_manager_name,
       config,
