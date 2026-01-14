@@ -3,6 +3,7 @@ import gleam/option.{None, Some}
 import gleam/string
 import gleeunit
 import gleeunit/should
+import sad/bridge/runner_contract
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums
@@ -239,4 +240,66 @@ pub fn runner_event_variants_test() {
 
   list.length(events)
   |> should.equal(4)
+}
+
+pub fn runner_event_roundtrip_test() {
+  // Note: these JSON shapes are part of the runner JSONL contract.
+  // This test ensures the `types_runner.RunnerEvent` variants match what the
+  // decoder expects.
+
+  let log_line = "{\"t\":\"log\",\"message\":\"hello\",\"level\":\"info\"}"
+  case runner_contract.decode_event(log_line) {
+    Ok(types_runner.RunnerEventLog(message: m, level: l)) -> {
+      m |> should.equal("hello")
+      l |> should.equal("info")
+    }
+    Ok(other) -> panic as string.inspect(other)
+    Error(e) -> panic as string.inspect(e)
+  }
+
+  let chunk_line = "{\"t\":\"chunk\",\"delta\":\"hi\"}"
+  case runner_contract.decode_event(chunk_line) {
+    Ok(types_runner.RunnerEventChunk(delta: d)) -> d |> should.equal("hi")
+    Ok(other) -> panic as string.inspect(other)
+    Error(e) -> panic as string.inspect(e)
+  }
+
+  let result_line =
+    "{\"t\":\"result\",\"status\":\"success\",\"data\":{\"ok\":true},\"artifacts\":[{\"name\":\"a\",\"path\":\"out.txt\",\"mime\":\"text/plain\"}]}"
+
+  case runner_contract.decode_event(result_line) {
+    Ok(types_runner.RunnerEventResult(response: resp)) ->
+      case resp {
+        types_runner.RunnerSuccess(data: data, artifacts: arts) -> {
+          data |> should.not_equal(None)
+
+          list.length(arts) |> should.equal(1)
+          let assert [types_runner.ArtifactRef(name: n, path: p, mime: mime)] =
+            arts
+          n |> should.equal("a")
+          p |> should.equal("out.txt")
+          mime |> should.equal("text/plain")
+        }
+
+        types_runner.RunnerFailure(..) -> panic as "Expected success response"
+      }
+
+    Ok(other) -> panic as string.inspect(other)
+    Error(e) -> panic as string.inspect(e)
+  }
+
+  let provision_line =
+    "{\"t\":\"provision_result\",\"status\":\"success\",\"log_files\":[\"provision.log\"]}"
+
+  case runner_contract.decode_event(provision_line) {
+    Ok(types_runner.RunnerEventProvisionResult(result: result)) -> {
+      let types_runner.RunnerProvisionResult(status: s, log_files: files) =
+        result
+      s |> should.equal(types_runner.StatusSuccess)
+      files |> should.equal(["provision.log"])
+    }
+
+    Ok(other) -> panic as string.inspect(other)
+    Error(e) -> panic as string.inspect(e)
+  }
 }
