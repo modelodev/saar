@@ -32,6 +32,7 @@ import gleam/result
 import gleam/string
 import gleam/yielder
 import mist
+import sad/adapters/agui
 import sad/core/agent
 import sad/core/messages
 import sad/decoders
@@ -368,26 +369,7 @@ fn agui_run_error(
   trace_id: types_core.TraceId,
   err: types_output.InteractionError,
 ) -> stream.StreamEvent {
-  let payload =
-    json.object([
-      #("type", json.string("RUN_ERROR")),
-      #("threadId", json.string(types_core.trace_id_to_string(trace_id))),
-      #("runId", json.string(types_core.trace_id_to_string(trace_id))),
-      #(
-        "error",
-        json.object([
-          #("kind", json.string(types_enums.error_kind_to_string(err.kind))),
-          #("message", json.string(err.message)),
-          #(
-            "trace_id",
-            json.string(types_core.trace_id_to_string(err.trace_id)),
-          ),
-        ]),
-      ),
-    ])
-    |> json.to_string
-
-  stream.event(payload)
+  agui.run_error(trace_id, err)
 }
 
 fn decode_interact_body(body: String) -> Result(InteractParsed, String) {

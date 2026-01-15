@@ -25,6 +25,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import sad/adapters/agui
 import sad/artifacts
 import sad/bridge/artifact_registration
 import sad/bridge/http_client
@@ -35,6 +36,7 @@ import sad/bridge/runner_contract
 import sad/bridge/serialization
 import sad/core/artifact_registry_protocol
 import sad/ffi
+import sad/sse
 import sad/streams/sink
 import sad/streams/stream_pump
 import sad/types/config as types_config
@@ -191,7 +193,7 @@ fn execute_runner_sync(
 }
 
 type StreamFlags {
-  StreamFlags(agui_message_started: Bool, a2ui_started: Bool)
+  StreamFlags(agui_state: agui.AgUiState, a2ui_started: Bool)
 }
 
 fn execute_runner_streaming(
@@ -214,11 +216,22 @@ fn execute_runner_streaming(
   let done = process.new_subject()
   let pump = stream_pump.start(done, Some(stream_sink), pump_cfg)
 
+  let flags0 = StreamFlags(agui_state: agui.new(), a2ui_started: False)
+
   // Emit protocol start eagerly.
-  case sink.protocol(stream_sink) {
-    sink.AgUi ->
-      stream_pump.push(pump, agui_run_started(input.context.trace_id))
-    sink.A2uiV08 -> Nil
+  let flags = case sink.protocol(stream_sink) {
+    sink.AgUi -> {
+      let #(agui_state, events) =
+        agui.convert(
+          flags0.agui_state,
+          agui.StreamStarted(input.context.trace_id),
+        )
+
+      events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
+
+      StreamFlags(agui_state: agui_state, a2ui_started: False)
+    }
+    sink.A2uiV08 -> flags0
   }
 
   let #(runner_path, runner_args) = runner_command(input.runner_def, config)
@@ -276,8 +289,6 @@ fn execute_runner_streaming(
     |> json.to_string
 
   port_process.send(proc, control_line <> "\n")
-
-  let flags = StreamFlags(agui_message_started: False, a2ui_started: False)
 
   read_runner_stream(
     proc,
@@ -428,20 +439,14 @@ fn emit_chunk(
   delta: String,
   flags: StreamFlags,
 ) -> StreamFlags {
-  let StreamFlags(
-    agui_message_started: agui_started,
-    a2ui_started: a2ui_started,
-  ) = flags
+  let StreamFlags(agui_state: agui_state, a2ui_started: a2ui_started) = flags
 
   case sink.protocol(stream_sink) {
     sink.AgUi -> {
-      case agui_started {
-        False -> stream_pump.push(pump, agui_text_message_start())
-        True -> Nil
-      }
-
-      stream_pump.push(pump, agui_text_message_content(delta))
-      StreamFlags(agui_message_started: True, a2ui_started: a2ui_started)
+      let #(agui_state, events) =
+        agui.convert(agui_state, agui.ContentChunk(delta))
+      events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
+      StreamFlags(agui_state: agui_state, a2ui_started: a2ui_started)
     }
 
     sink.A2uiV08 -> {
@@ -451,7 +456,7 @@ fn emit_chunk(
       }
 
       stream_pump.push(pump, a2ui_data_model_update(trace_id, delta))
-      StreamFlags(agui_message_started: agui_started, a2ui_started: True)
+      StreamFlags(agui_state: agui_state, a2ui_started: True)
     }
   }
 }
@@ -469,153 +474,57 @@ fn emit_terminal(
     sink.AgUi ->
       case result {
         Ok(ok) -> {
-          let StreamFlags(agui_message_started: started, ..) = flags
-          case started {
-            True -> stream_pump.push(pump, agui_text_message_end())
-            False -> Nil
-          }
-
-          stream_pump.push(pump, agui_run_finished(trace_id, ok.artifacts))
+          let StreamFlags(agui_state: agui_state, ..) = flags
+          let #(_next_state, events) =
+            agui.convert(
+              agui_state,
+              agui.StreamFinished(trace_id, ok.artifacts),
+            )
+          events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
+          Nil
         }
 
-        Error(err) -> stream_pump.push(pump, agui_run_error(trace_id, err))
+        Error(err) -> {
+          let StreamFlags(agui_state: agui_state, ..) = flags
+          let #(_next_state, events) =
+            agui.convert(agui_state, agui.StreamError(err))
+          events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
+          Nil
+        }
       }
   }
 }
 
-fn agui_run_started(trace_id: types_core.TraceId) -> stream.StreamEvent {
-  stream.event(
-    json.to_string(
-      json.object([
-        #("type", json.string("RUN_STARTED")),
-        #("threadId", json.string(types_core.trace_id_to_string(trace_id))),
-        #("runId", json.string(types_core.trace_id_to_string(trace_id))),
-      ]),
-    ),
-  )
-}
-
-fn agui_text_message_start() -> stream.StreamEvent {
-  stream.event(
-    json.to_string(
-      json.object([
-        #("type", json.string("TEXT_MESSAGE_START")),
-        #("messageId", json.string("msg-1")),
-        #("role", json.string("assistant")),
-      ]),
-    ),
-  )
-}
-
-fn agui_text_message_content(delta: String) -> stream.StreamEvent {
-  stream.event(
-    json.to_string(
-      json.object([
-        #("type", json.string("TEXT_MESSAGE_CONTENT")),
-        #("messageId", json.string("msg-1")),
-        #("delta", json.string(delta)),
-      ]),
-    ),
-  )
-}
-
-fn agui_text_message_end() -> stream.StreamEvent {
-  stream.event(
-    json.to_string(
-      json.object([
-        #("type", json.string("TEXT_MESSAGE_END")),
-        #("messageId", json.string("msg-1")),
-      ]),
-    ),
-  )
-}
-
-fn agui_run_finished(
-  trace_id: types_core.TraceId,
-  artifacts: List(types_output.PublicArtifact),
-) -> stream.StreamEvent {
-  stream.event(
-    json.to_string(
-      json.object([
-        #("type", json.string("RUN_FINISHED")),
-        #("threadId", json.string(types_core.trace_id_to_string(trace_id))),
-        #("runId", json.string(types_core.trace_id_to_string(trace_id))),
-        #("artifacts", json.array(artifacts, encode_artifact)),
-      ]),
-    ),
-  )
-}
-
-fn agui_run_error(
-  trace_id: types_core.TraceId,
-  err: types_output.InteractionError,
-) -> stream.StreamEvent {
-  stream.event(
-    json.to_string(
-      json.object([
-        #("type", json.string("RUN_ERROR")),
-        #("threadId", json.string(types_core.trace_id_to_string(trace_id))),
-        #("runId", json.string(types_core.trace_id_to_string(trace_id))),
-        #(
-          "error",
-          json.object([
-            #("kind", json.string(types_enums.error_kind_to_string(err.kind))),
-            #("message", json.string(err.message)),
-            #(
-              "trace_id",
-              json.string(types_core.trace_id_to_string(err.trace_id)),
-            ),
-          ]),
-        ),
-      ]),
-    ),
-  )
-}
-
 fn a2ui_begin_rendering(trace_id: types_core.TraceId) -> stream.StreamEvent {
-  stream.event(
-    json.to_string(
+  json.object([
+    #(
+      "beginRendering",
       json.object([
-        #(
-          "beginRendering",
-          json.object([
-            #("surfaceId", json.string(types_core.trace_id_to_string(trace_id))),
-          ]),
-        ),
+        #("surfaceId", json.string(types_core.trace_id_to_string(trace_id))),
       ]),
     ),
-  )
+  ])
+  |> json.to_string
+  |> sse.line
+  |> stream.event
 }
 
 fn a2ui_data_model_update(
   trace_id: types_core.TraceId,
   delta: String,
 ) -> stream.StreamEvent {
-  stream.event(
-    json.to_string(
+  json.object([
+    #(
+      "dataModelUpdate",
       json.object([
-        #(
-          "dataModelUpdate",
-          json.object([
-            #("surfaceId", json.string(types_core.trace_id_to_string(trace_id))),
-            #("delta", json.string(delta)),
-          ]),
-        ),
+        #("surfaceId", json.string(types_core.trace_id_to_string(trace_id))),
+        #("delta", json.string(delta)),
       ]),
     ),
-  )
-}
-
-fn encode_artifact(artifact: types_output.PublicArtifact) -> json.Json {
-  json.object([
-    #("id", json.string(types_core.artifact_id_to_string(artifact.id))),
-    #("name", json.string(artifact.name)),
-    #("url", case artifact.url {
-      Some(u) -> json.string(u)
-      None -> json.null()
-    }),
-    #("mime", json.string(artifact.mime)),
   ])
+  |> json.to_string
+  |> sse.line
+  |> stream.event
 }
 
 fn runner_response_to_result(
