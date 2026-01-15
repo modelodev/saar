@@ -531,7 +531,7 @@
       "stories": {
         "S16-T01": {"status": "completed", "branch": "feat/s16-t01-adapter-agui", "commit": "6f9ca49d3cca0474b72155bbfe9bff3d41fdc478"},
         "S16-T02": {"status": "completed", "branch": "feat/s16-t02-adapter-a2ui", "commit": "0a51e5ca6589dac5d1e25ff719f8b0738b132ea6"},
-        "S16-T03": {"status": "in_progress", "branch": "feat/s16-t03-adapter-a2a"},
+        "S16-T03": {"status": "completed", "branch": "feat/s16-t03-adapter-a2a", "commit": "577f11c577ffebb22d72038790622adfc2c34c72"},
         "S16-T04": {"status": "pending", "branch": null},
         "S16-T05": {"status": "pending", "branch": null}
       }
