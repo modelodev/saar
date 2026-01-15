@@ -710,6 +710,196 @@ fn wait_a2ui_and_then_close(
   }
 }
 
+pub fn get_agent_card_auth_required() {
+  let base_url = start_sad()
+
+  let url =
+    base_url <> "/instances/inst-agent-card-auth-1/.well-known/agent-card.json"
+
+  let resp =
+    http_client.request_sync_string(
+      http.Get,
+      url,
+      dict.new(),
+      None,
+      2000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp.status |> should.equal(401)
+}
+
+pub fn post_a2a_message_send_auth_required() {
+  let base_url = start_sad()
+
+  let url = base_url <> "/instances/inst-a2a-send-auth-1/a2a/message:send"
+
+  let resp =
+    http_client.request_sync_string(
+      http.Post,
+      url,
+      dict.new(),
+      None,
+      2000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp.status |> should.equal(401)
+}
+
+pub fn post_a2a_message_stream_auth_required() {
+  let base_url = start_sad()
+
+  let url = base_url <> "/instances/inst-a2a-stream-auth-1/a2a/message:stream"
+
+  let resp =
+    http_client.request_sync_string(
+      http.Post,
+      url,
+      dict.new(),
+      None,
+      2000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp.status |> should.equal(401)
+}
+
+pub fn post_a2a_message_send_ok() {
+  let base_url = start_sad()
+
+  let instance_id = "inst-a2a-send-1"
+  create_agent(base_url, "echo_cli", instance_id)
+  wait_phase(base_url, instance_id, "ready_transient", 200)
+
+  let url = base_url <> "/instances/" <> instance_id <> "/a2a/message:send"
+
+  let body =
+    "{"
+    <> "\"message\":{"
+    <> "\"messageId\":\"msg-a2a-1\","
+    <> "\"role\":\"user\","
+    <> "\"parts\":[{\"text\":\"hi\"}]"
+    <> "}"
+    <> "}"
+
+  let resp =
+    http_client.request_sync_string(
+      http.Post,
+      url,
+      dict.insert(auth_headers(), "content-type", "application/json"),
+      Some(body),
+      5000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp.status |> should.equal(200)
+  should.equal(string.contains(resp.body, "\"result\""), True)
+  should.equal(string.contains(resp.body, "\"contextId\""), True)
+  should.equal(string.contains(resp.body, "\"state\":\"completed\""), True)
+}
+
+pub fn post_a2a_message_stream_ok() {
+  let base_url = start_sad_with_sse_keep_alive_interval_ms(50)
+
+  let instance_id = "inst-a2a-stream-1"
+  create_agent(base_url, "streaming_echo", instance_id)
+  wait_phase(base_url, instance_id, "ready_transient", 200)
+
+  let url = base_url <> "/instances/" <> instance_id <> "/a2a/message:stream"
+
+  let body =
+    "{"
+    <> "\"message\":{"
+    <> "\"messageId\":\"msg-a2a-stream-1\","
+    <> "\"role\":\"user\","
+    <> "\"parts\":[{\"text\":\"hello\"}]"
+    <> "}"
+    <> "}"
+
+  let headers =
+    auth_headers()
+    |> dict.insert("content-type", "application/json")
+
+  let conn =
+    http_client.open_sse(http.Post, url, headers, Some(body), 2000) |> assert_ok
+
+  let started = wait_sse_contains(conn, "\"state\":\"working\"", 40)
+  should.equal(string.contains(started, "\"taskId\""), True)
+
+  let msg = wait_sse_contains(conn, "\"role\":\"assistant\"", 80)
+  should.equal(string.contains(msg, "\"text\""), True)
+
+  let _done = wait_sse_contains(conn, "\"state\":\"completed\"", 120)
+  http_client.close_sse(conn)
+}
+
+pub fn post_a2a_message_stream_a2ui_extension() {
+  let base_url = start_sad_with_sse_keep_alive_interval_ms(50)
+
+  let instance_id = "inst-a2a-a2ui-1"
+  create_agent(base_url, "streaming_echo", instance_id)
+  wait_phase(base_url, instance_id, "ready_transient", 200)
+
+  let url = base_url <> "/instances/" <> instance_id <> "/a2a/message:stream"
+
+  let body =
+    "{"
+    <> "\"message\":{"
+    <> "\"messageId\":\"msg-a2a-a2ui-1\","
+    <> "\"role\":\"user\","
+    <> "\"parts\":[{\"text\":\"hello\"}]"
+    <> "}"
+    <> "}"
+
+  let headers =
+    auth_headers()
+    |> dict.insert("content-type", "application/json")
+    |> dict.insert(
+      "x-a2a-extensions",
+      "https://a2ui.org/a2a-extension/a2ui/v0.8",
+    )
+
+  let conn =
+    http_client.open_sse(http.Post, url, headers, Some(body), 2000) |> assert_ok
+
+  let _started = wait_sse_contains(conn, "\"state\":\"working\"", 40)
+
+  let msg =
+    wait_sse_contains(conn, "\"mimeType\":\"application/json+a2ui\"", 120)
+
+  should.equal(string.contains(msg, "\"data\""), True)
+
+  http_client.close_sse(conn)
+}
+
+fn wait_sse_contains(
+  conn: http_client.SseConnection,
+  needle: String,
+  attempts: Int,
+) -> String {
+  case attempts {
+    0 -> panic as "Timed out waiting for SSE payload"
+
+    _ ->
+      case http_client.sse_receive(conn, 250) {
+        http_client.SseTimeout -> wait_sse_contains(conn, needle, attempts - 1)
+
+        http_client.SseClosed -> panic as "SSE closed"
+
+        http_client.SseData(data) ->
+          case string.contains(data, needle) {
+            True -> data
+            False -> wait_sse_contains(conn, needle, attempts - 1)
+          }
+      }
+  }
+}
+
 fn load_cfg0() -> types_config.SadConfig {
   config_loader.load_from_path(
     "./test/fixtures/config/test_config.toml",

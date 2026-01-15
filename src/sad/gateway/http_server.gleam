@@ -4,7 +4,7 @@
 ////
 //// Responsibilities:
 //// - Start an HTTP server bound to `server.host`/`server.port`.
-//// - Route requests to `/health`, `/health/ready`, `/sys/*`, and `/agents/*`.
+//// - Route requests to `/health`, `/health/ready`, `/sys/*`, `/agents/*`, and `/instances/*`.
 //// - Enforce v0 API key authentication (Bearer) outside health endpoints.
 ////
 //// Non-responsibilities:
@@ -24,6 +24,7 @@ import gleam/string
 import mist
 import sad/core/artifact_registry_protocol
 import sad/core/messages
+import sad/gateway/a2a_api
 import sad/gateway/agents_api
 import sad/gateway/artifacts_api
 import sad/gateway/auth
@@ -55,6 +56,7 @@ pub fn start(
     )
 
   let agents_deps = agents_api.Deps(registry: registry)
+  let a2a_deps = a2a_api.Deps(registry: registry)
   let artifacts_deps = artifacts_api.Deps(artifact_registry: artifact_registry)
   let ui_deps = ui_proxy_api.Deps(registry: registry, profiles: profiles)
 
@@ -64,6 +66,7 @@ pub fn start(
       config,
       sys_deps,
       agents_deps,
+      a2a_deps,
       artifacts_deps,
       ui_deps,
       profiles,
@@ -82,6 +85,7 @@ fn handle_request(
   cfg: types_config.SadConfig,
   sys_deps: sys_api.Deps,
   agents_deps: agents_api.Deps,
+  a2a_deps: a2a_api.Deps,
   artifacts_deps: artifacts_api.Deps,
   ui_deps: ui_proxy_api.Deps,
   profiles: process.Subject(messages.ProfilesMsg),
@@ -109,46 +113,75 @@ fn handle_request(
           case string.starts_with(req.path, "/sys") {
             True -> sys_api.handle(req, cfg, sys_deps, trace_id)
             False ->
-              case string.starts_with(req.path, "/agents") {
-                True ->
-                  case request.path_segments(req) {
-                    ["agents", _, "ui", ..] ->
-                      ui_proxy_api.handle(req, cfg, ui_deps, trace_id)
-
-                    _ ->
-                      case string.contains(req.path, "/ui/") {
-                        True -> ui_proxy_api.handle(req, cfg, ui_deps, trace_id)
-                        False ->
-                          agents_api.handle(req, cfg, agents_deps, trace_id)
-                      }
-                  }
+              case string.starts_with(req.path, "/instances") {
+                True -> a2a_api.handle(req, cfg, a2a_deps, trace_id)
 
                 False ->
-                  case string.starts_with(req.path, "/artifacts") {
+                  case string.starts_with(req.path, "/agents") {
                     True ->
-                      artifacts_api.handle(req, cfg, artifacts_deps, trace_id)
+                      case request.path_segments(req) {
+                        ["agents", _, "ui", ..] ->
+                          ui_proxy_api.handle(req, cfg, ui_deps, trace_id)
+
+                        _ ->
+                          case string.contains(req.path, "/ui/") {
+                            True ->
+                              ui_proxy_api.handle(req, cfg, ui_deps, trace_id)
+                            False ->
+                              agents_api.handle(req, cfg, agents_deps, trace_id)
+                          }
+                      }
+
                     False ->
-                      case string.starts_with(req.path, "/ui") {
-                        True -> ui_proxy_api.handle(req, cfg, ui_deps, trace_id)
-                        False -> problem.not_found(trace_id, req.path)
+                      case string.starts_with(req.path, "/artifacts") {
+                        True ->
+                          artifacts_api.handle(
+                            req,
+                            cfg,
+                            artifacts_deps,
+                            trace_id,
+                          )
+                        False ->
+                          case string.starts_with(req.path, "/ui") {
+                            True ->
+                              ui_proxy_api.handle(req, cfg, ui_deps, trace_id)
+                            False -> problem.not_found(trace_id, req.path)
+                          }
                       }
                   }
               }
           }
 
         Error(auth.MissingAuthorization) ->
-          problem.unauthorized(trace_id, req.path, "missing authorization")
+          case string.starts_with(req.path, "/instances") {
+            True -> problem.unauthorized_a2a(trace_id, "missing authorization")
+            False ->
+              problem.unauthorized(trace_id, req.path, "missing authorization")
+          }
 
         Error(auth.InvalidToken) ->
-          problem.unauthorized(trace_id, req.path, "invalid token")
+          case string.starts_with(req.path, "/instances") {
+            True -> problem.unauthorized_a2a(trace_id, "invalid token")
+            False -> problem.unauthorized(trace_id, req.path, "invalid token")
+          }
 
         Error(auth.InvalidAuthorizationFormat) ->
-          problem.from_error_kind(
-            types_enums.BadRequest,
-            trace_id,
-            req.path,
-            "invalid authorization header",
-          )
+          case string.starts_with(req.path, "/instances") {
+            True ->
+              problem.from_error_kind_a2a(
+                types_enums.BadRequest,
+                trace_id,
+                "invalid authorization header",
+              )
+
+            False ->
+              problem.from_error_kind(
+                types_enums.BadRequest,
+                trace_id,
+                req.path,
+                "invalid authorization header",
+              )
+          }
       }
     }
   }
