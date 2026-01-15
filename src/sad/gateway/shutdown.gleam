@@ -56,7 +56,6 @@ type State {
     pidfile_path: String,
     registry: process.Subject(messages.RegistryMsg),
     root_supervisor_pid: Option(process.Pid),
-    selector: process.Selector(Msg),
     self: process.Subject(Msg),
   )
 }
@@ -86,7 +85,6 @@ pub fn start(
       pidfile_path: daemon_paths.resolve_pidfile_path(),
       registry: registry,
       root_supervisor_pid: None,
-      selector: selector,
       self: self,
     )
     |> actor.initialised

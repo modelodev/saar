@@ -33,12 +33,16 @@ pub fn main() {
   gleeunit.main()
 }
 
-pub fn shutdown_completes_inflight_request() {
+pub fn shutdown_completes_inflight_request_test() {
   let #(pid, base_url, pidfile) =
     start_external_sad("build/test-workspaces/shutdown-inflight")
 
+  let instance_id = "inst-shutdown-inflight"
+  create_agent(base_url, "echo_server", instance_id)
+  wait_phase(base_url, instance_id, "ready_continuous", 300)
+
   let reply = process.new_subject()
-  spawn_sleep_request(reply, base_url, 1500, 7000)
+  spawn_sleep_request(reply, base_url, instance_id, 1500, 7000)
 
   // Ensure the request is in-flight.
   process.sleep(50)
@@ -62,12 +66,16 @@ pub fn shutdown_completes_inflight_request() {
   should.equal(daemon_ffi.process_alive(pid), False)
 }
 
-pub fn shutdown_rejects_new_requests() {
+pub fn shutdown_rejects_new_requests_test() {
   let #(pid, base_url, pidfile) =
     start_external_sad("build/test-workspaces/shutdown-reject")
 
+  let instance_id = "inst-shutdown-reject"
+  create_agent(base_url, "echo_server", instance_id)
+  wait_phase(base_url, instance_id, "ready_continuous", 300)
+
   let reply = process.new_subject()
-  spawn_sleep_request(reply, base_url, 1500, 7000)
+  spawn_sleep_request(reply, base_url, instance_id, 1500, 7000)
   process.sleep(50)
 
   let kill_reply = process.new_subject()
@@ -87,12 +95,16 @@ pub fn shutdown_rejects_new_requests() {
   should.equal(daemon_ffi.process_alive(pid), False)
 }
 
-pub fn shutdown_force_kills_after_timeout() {
+pub fn shutdown_force_kills_after_timeout_test() {
   let #(pid, base_url, pidfile) =
     start_external_sad("build/test-workspaces/shutdown-timeout")
 
+  let instance_id = "inst-shutdown-timeout"
+  create_agent(base_url, "echo_server", instance_id)
+  wait_phase(base_url, instance_id, "ready_continuous", 300)
+
   let reply = process.new_subject()
-  spawn_sleep_request(reply, base_url, 5000, 7000)
+  spawn_sleep_request(reply, base_url, instance_id, 5000, 7000)
   process.sleep(50)
 
   let kill_reply = process.new_subject()
@@ -116,7 +128,7 @@ pub fn shutdown_force_kills_after_timeout() {
   should.equal(daemon_ffi.process_alive(pid), False)
 }
 
-pub fn shutdown_sends_terminate_to_all_agents() {
+pub fn shutdown_sends_terminate_to_all_agents_test() {
   let #(base_url, registry) = start_inprocess_sad()
 
   let id1 = "inst-shutdown-all-1"
@@ -132,22 +144,6 @@ pub fn shutdown_sends_terminate_to_all_agents() {
 
   shutdown_all.send_terminate_to_all(registry, 1000)
   wait_registry_empty(registry, 200)
-}
-
-pub fn shutdown_completes_inflight_request_test() {
-  shutdown_completes_inflight_request()
-}
-
-pub fn shutdown_rejects_new_requests_test() {
-  shutdown_rejects_new_requests()
-}
-
-pub fn shutdown_force_kills_after_timeout_test() {
-  shutdown_force_kills_after_timeout()
-}
-
-pub fn shutdown_sends_terminate_to_all_agents_test() {
-  shutdown_sends_terminate_to_all_agents()
 }
 
 fn start_external_sad(root: String) -> #(Int, String, String) {
@@ -172,7 +168,7 @@ fn start_external_sad(root: String) -> #(Int, String, String) {
       [
         "-noshell",
         "-eval",
-        "sad:main().",
+        "application:ensure_all_started(hackney), sad:main().",
         "-extra",
         "serve",
         "--port",
@@ -209,12 +205,18 @@ fn spawn_sleep_request(
     Result(http_client.HttpResponse, http_client.HttpError),
   ),
   base_url: String,
+  instance_id: String,
   sleep_ms: Int,
   timeout_ms: Int,
 ) -> Nil {
   let _ =
     process.spawn(fn() {
-      let url = base_url <> "/sys/sleep/" <> int.to_string(sleep_ms)
+      let url =
+        base_url
+        <> "/agents/"
+        <> instance_id
+        <> "/ui/sleep?ms="
+        <> int.to_string(sleep_ms)
 
       let res =
         http_client.request_sync_string(
