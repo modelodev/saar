@@ -555,10 +555,10 @@
       "branch": "sprint/s19-hardening-edge-git-robusto",
       "started_at": "2026-01-15T21:42:05Z",
       "completed_at": null,
-      "current_story": null,
+      "current_story": "S19-T02",
       "stories": {
         "S19-T01": {"status": "completed", "branch": "feat/s19-t01-expand-props", "commit": "752d940278509619ba3d281d0bc37de7f1f05b3c"},
-        "S19-T02": {"status": "pending"},
+        "S19-T02": {"status": "in_progress", "branch": "feat/s19-t02-edge-cases"},
         "S19-T03": {"status": "pending"}
       }
     }

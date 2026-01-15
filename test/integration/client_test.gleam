@@ -66,7 +66,7 @@ pub fn execute_sync_respects_max_body_test() {
   }
 }
 
-pub fn upstream_sse_requires_result_test() {
+pub fn http_streaming_close_without_result_errors() {
   port_helpers.ensure_wrapper_path()
   let #(server, port, trace_id) = start_echo_server()
 
