@@ -55,6 +55,8 @@ pub fn parse_dry_run_missing_capability() {
 pub fn parse_version() {
   cli.parse(["--version"])
   |> should.equal(Ok(cli.Version))
+
+  should.equal(cli.exit_code(cli.parse(["--version"])), 0)
 }
 
 pub fn parse_help() {
@@ -74,6 +76,8 @@ pub fn parse_unknown_command() {
 
     _ -> panic as "Expected UnknownCommand"
   }
+
+  should.equal(cli.exit_code(cli.parse(["wat"])), 1)
 }
 
 pub fn parse_conflicting_flags() {
@@ -81,6 +85,8 @@ pub fn parse_conflicting_flags() {
     Error(cli.ConflictingFlags(_)) -> Nil
     _ -> panic as "Expected ConflictingFlags"
   }
+
+  should.equal(cli.exit_code(cli.parse(["serve", "-b", "-k"])), 1)
 }
 
 pub fn parse_duplicate_flags() {

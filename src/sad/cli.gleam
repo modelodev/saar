@@ -130,6 +130,17 @@ pub fn inspect_parse_result(result: Result(Command, ParseError)) -> String {
   string.inspect(result)
 }
 
+/// Maps parsing results to CLI exit codes.
+///
+/// - `Ok(_)` -> 0
+/// - `Error(_)` -> 1 (usage)
+pub fn exit_code(result: Result(Command, ParseError)) -> Int {
+  case result {
+    Ok(_) -> 0
+    Error(_) -> 1
+  }
+}
+
 fn parse_serve(args: List(String)) -> Result(Command, ParseError) {
   case list.any(args, fn(a) { a == "--help" || a == "-h" }) {
     True -> Ok(Help(Some("serve")))

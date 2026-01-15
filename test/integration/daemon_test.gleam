@@ -42,7 +42,10 @@ pub fn serve_kill_stops_running() {
 
   should.equal(daemon.process_alive(pid), True)
 
-  case daemon_control.kill(pidfile, 500) {
+  let kill_result = daemon_control.kill(pidfile, 500)
+  should.equal(daemon_control.kill_exit_code(kill_result), 0)
+
+  case kill_result {
     Ok(_) -> Nil
     Error(_) -> panic as "Expected kill ok"
   }
@@ -61,7 +64,10 @@ pub fn serve_kill_no_server() {
   let pidfile = root <> "/sad.pid"
   let assert Ok(_) = simplifile.create_directory_all(root)
 
-  case daemon_control.kill(pidfile, 50) {
+  let kill_result = daemon_control.kill(pidfile, 50)
+  should.equal(daemon_control.kill_exit_code(kill_result), 1)
+
+  case kill_result {
     Error(daemon_control.NoServer) -> Nil
     _ -> panic as "Expected NoServer"
   }
@@ -78,6 +84,7 @@ pub fn serve_status_running() {
     |> assert_ok_pid
 
   let status = daemon_control.status(pidfile)
+  should.equal(daemon_control.status_exit_code(status), 0)
 
   case status {
     daemon_control.Running(found_pid) -> should.equal(found_pid, pid)
@@ -105,6 +112,7 @@ pub fn serve_status_not_running() {
   daemon.kill_process(pid, 500) |> assert_ok_nil
 
   let status = daemon_control.status(pidfile)
+  should.equal(daemon_control.status_exit_code(status), 1)
 
   case status {
     daemon_control.NotRunning -> Nil
