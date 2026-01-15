@@ -25,8 +25,8 @@ import gleam/option
 import mist
 
 import sad/core/artifact_registry_protocol
-import sad/otp/safe_call
 import sad/gateway/problem
+import sad/otp/safe_call
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/workspace

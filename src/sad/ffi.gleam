@@ -147,10 +147,7 @@ fn port_receive_ffi(port: Port, timeout_ms: Int) -> Result(PortMessage, Nil)
 /// Checks whether `host:port` can be bound (best effort).
 ///
 /// Returns `Ok(Nil)` if binding is possible, otherwise `Error(FfiError)`.
-pub fn check_port_available(
-  host: String,
-  port: Int,
-) -> Result(Nil, FfiError) {
+pub fn check_port_available(host: String, port: Int) -> Result(Nil, FfiError) {
   case check_port_available_ffi(host, port) {
     Ok(_) -> Ok(Nil)
     Error(reason) -> Error(CheckPortAvailableFailed(reason))

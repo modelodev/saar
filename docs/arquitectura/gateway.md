@@ -705,23 +705,25 @@ Authorization: Bearer <api_key>
 }
 ```
 
-**Respuesta:** SSE con eventos A2A:
+**Respuesta:** SSE en formato A2A `StreamResponse`.
+
+En A2A, cada `data: ...` contiene un JSON que representa un `StreamResponse`.
+Regla: un `StreamResponse` contiene exactamente uno de `{task, message, statusUpdate, artifactUpdate}`.
+
+Ejemplo:
 
 ```
-event: task_status
-data: {"taskId": "trace-abc-789", "contextId": "conv-456", "status": {"state": "working"}}
+data: {"task": {"id": "trace-abc-789", "contextId": "conv-456", "status": {"state": "working"}}}
 
-event: message
-data: {"role": "assistant", "parts": [{"text": "Generando informe..."}]}
+data: {"message": {"role": "assistant", "parts": [{"text": "Generando informe..."}]}}
 
-event: task_status
-data: {"taskId": "trace-abc-789", "contextId": "conv-456", "status": {"state": "completed"}}
+data: {"statusUpdate": {"taskId": "trace-abc-789", "contextId": "conv-456", "status": {"state": "completed"}}}
 ```
 
 **Notas:**
-- `taskId` = `trace_id` de SAD (requerido para correlación de chunks)
-- SAD simula Task lifecycle (`working` → `completed`) sin persistencia de estado
-- Para A2UI, activar la extensión con `X-A2A-Extensions: https://a2ui.org/a2a-extension/a2ui/v0.8`; los eventos `message` llevan `DataPart` A2UI en `parts` (ver `protocolos.md` §2.13).
+- `taskId` = `trace_id` de SAD (requerido para correlación)
+- El sprint S21 define el soporte de operaciones A2A de tarea (`GetTask`/`CancelTask`/`SubscribeToTask`) para que el modo asíncrono sea funcional.
+- Para A2UI, activar la extensión con `X-A2A-Extensions: https://a2ui.org/a2a-extension/a2ui/v0.8` y usar `DataPart` A2UI en `parts` (ver `protocolos.md` §2.13).
 
 ---
 

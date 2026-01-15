@@ -2,10 +2,10 @@ import gleam/erlang/process
 import gleam/otp/actor
 import gleeunit
 import gleeunit/should
-import sad/otp/safe_call
 import sad/core/messages
 import sad/core/port_pool_actor
 import sad/net/tcp_listener
+import sad/otp/safe_call
 import sad/port_pool
 import sad/types/core as types_core
 

@@ -46,30 +46,31 @@ pub fn inject_managed_port_env(
   case assigned_port {
     None -> Ok(env)
 
-    Some(port) -> case runtime {
-      types_runner.NoNetwork -> Ok(env)
+    Some(port) ->
+      case runtime {
+        types_runner.NoNetwork -> Ok(env)
 
-      types_runner.ManagedPort(host_env_var, port_env_var) -> {
-        let host = managed_port_host(config)
+        types_runner.ManagedPort(host_env_var, port_env_var) -> {
+          let host = managed_port_host(config)
 
-        let base_env =
-          list.append(env, [
-            #("SAD_HOST", host),
-            #("SAD_PORT", int.to_string(port)),
-          ])
+          let base_env =
+            list.append(env, [
+              #("SAD_HOST", host),
+              #("SAD_PORT", int.to_string(port)),
+            ])
 
-        let base_env = case host_env_var {
-          None -> base_env
-          Some(name) -> list.append(base_env, [#(name, host)])
+          let base_env = case host_env_var {
+            None -> base_env
+            Some(name) -> list.append(base_env, [#(name, host)])
+          }
+
+          let base_env = case port_env_var {
+            None -> base_env
+            Some(name) -> list.append(base_env, [#(name, int.to_string(port))])
+          }
+
+          Ok(base_env)
         }
-
-        let base_env = case port_env_var {
-          None -> base_env
-          Some(name) -> list.append(base_env, [#(name, int.to_string(port))])
-        }
-
-        Ok(base_env)
       }
-    }
   }
 }

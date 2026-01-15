@@ -21,6 +21,16 @@ pub fn main() {
   gleeunit.main()
 }
 
+pub fn phase_failure_reason_exposes_failed_reason() {
+  types_agent.failure_reason_from_phase(types_agent.Failed(
+    types_agent.NoNetwork,
+  ))
+  |> should.equal(option.Some(types_agent.NoNetwork))
+
+  types_agent.failure_reason_from_phase(types_agent.ReadyTransient)
+  |> should.equal(option.None)
+}
+
 pub fn status_view_uses_phase_and_mode() {
   let config = types_config.default_sad_config()
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())

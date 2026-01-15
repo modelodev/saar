@@ -16,6 +16,28 @@ pub fn main() {
   gleeunit.main()
 }
 
+pub fn describe_dynamic_type_shapes_test() {
+  decoders.describe_dynamic_type(dynamic.string("x"))
+  |> should.equal("string")
+
+  decoders.describe_dynamic_type(dynamic.bool(True))
+  |> should.equal("bool")
+
+  decoders.describe_dynamic_type(dynamic.int(1))
+  |> should.equal("number")
+
+  decoders.describe_dynamic_type(dynamic.float(1.0))
+  |> should.equal("number")
+
+  decoders.describe_dynamic_type(dynamic.list([dynamic.int(1)]))
+  |> should.equal("array")
+
+  decoders.describe_dynamic_type(
+    dynamic.properties([#(dynamic.string("k"), dynamic.int(1))]),
+  )
+  |> should.equal("object")
+}
+
 pub fn decode_profile_ok_test() {
   let assert Ok(contents) =
     simplifile.read(from: "test/fixtures/source_local/profiles/echo_cli.json")

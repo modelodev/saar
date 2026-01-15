@@ -8,10 +8,10 @@ import gleeunit
 import gleeunit/should
 import sad/app_state
 import sad/core/agent
-import sad/otp/safe_call
 import sad/core/messages
 import sad/core/root_supervisor
 import sad/core/supervisor_names
+import sad/otp/safe_call
 import sad/types/agent as types_agent
 import sad/types/core as types_core
 import sad/types/enums as types_enums
@@ -81,9 +81,7 @@ pub fn start_agent_same_key_one_wins_test() {
   assert_one_ok_one_already_exists(r1, r2)
 
   let assert Ok(items) =
-    safe_call.call(registry, 1000, fn(reply_to) {
-      messages.ListAll(reply_to)
-    })
+    safe_call.call(registry, 1000, fn(reply_to) { messages.ListAll(reply_to) })
 
   list.length(items) |> should.equal(1)
 }
@@ -104,14 +102,12 @@ pub fn create_agent_profile_not_found_test() {
   let assert Ok(instance_id) = types_core.instance_id("inst-missing-profile")
 
   safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-    messages.Cmd(
-      messages.CreateAgent(
-        types_core.profile_id("missing"),
-        instance_id,
-        dict.new(),
-        reply_to,
-      ),
-    )
+    messages.Cmd(messages.CreateAgent(
+      types_core.profile_id("missing"),
+      instance_id,
+      dict.new(),
+      reply_to,
+    ))
   })
   |> should.equal(
     Error(
@@ -187,14 +183,17 @@ pub fn create_agent_uses_profiles_actor_test() {
 
   let _ =
     safe_call.call_unwrap_result(manager, 5000, fn(reply_to) {
-      messages.Cmd(messages.CreateAgent(profile.meta.id, instance_id, dict.new(), reply_to))
+      messages.Cmd(messages.CreateAgent(
+        profile.meta.id,
+        instance_id,
+        dict.new(),
+        reply_to,
+      ))
     })
     |> test_assertions.assert_ok
 
   let assert Ok(items) =
-    safe_call.call(registry, 1000, fn(reply_to) {
-      messages.ListAll(reply_to)
-    })
+    safe_call.call(registry, 1000, fn(reply_to) { messages.ListAll(reply_to) })
 
   list.length(items) |> should.equal(1)
 }
@@ -262,16 +261,12 @@ pub fn start_agent_registration_failed_rolls_back_test() {
   })
   |> should.equal(
     Error(
-      safe_call.ActorError(messages.RegistrationFailed(
-        messages.AlreadyExists,
-      )),
+      safe_call.ActorError(messages.RegistrationFailed(messages.AlreadyExists)),
     ),
   )
 
   let assert Ok(items) =
-    safe_call.call(registry, 1000, fn(reply_to) {
-      messages.ListAll(reply_to)
-    })
+    safe_call.call(registry, 1000, fn(reply_to) { messages.ListAll(reply_to) })
 
   list.length(items) |> should.equal(1)
 }

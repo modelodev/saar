@@ -298,12 +298,7 @@ fn interact_streaming(
   let _pid =
     process.spawn(fn() {
       let out =
-        agent.interact(
-          agent_ref,
-          req0,
-          sink.Streaming(stream_sink),
-          timeout_ms,
-        )
+        agent.interact(agent_ref, req0, sink.Streaming(stream_sink), timeout_ms)
 
       // If the interaction errors before any streaming can happen (e.g. Busy),
       // emit a terminal payload best-effort for AG-UI.

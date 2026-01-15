@@ -6,9 +6,9 @@ import gleam/otp/actor
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/otp/safe_call
 import sad/core/messages
 import sad/core/profiles
+import sad/otp/safe_call
 import sad/profiles_sources
 import sad/types/config as types_config
 import sad/types/core as types_core

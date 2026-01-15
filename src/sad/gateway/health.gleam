@@ -19,8 +19,8 @@ import gleam/erlang/process
 import gleam/http/response
 import gleam/json
 import mist
-import sad/otp/safe_call
 import sad/core/messages
+import sad/otp/safe_call
 
 /// Returns a liveness response.
 pub fn health() -> response.Response(mist.ResponseData) {

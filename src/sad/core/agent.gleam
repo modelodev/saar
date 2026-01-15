@@ -24,8 +24,8 @@ import gleam/otp/actor
 import gleam/string
 import sad/bridge/interaction
 import sad/bridge/port_owner
-import sad/core/artifact_registry_protocol
 import sad/core/agent_lifecycle as lifecycle
+import sad/core/artifact_registry_protocol
 import sad/ffi
 import sad/otp/safe_call
 import sad/streams/sink
@@ -349,12 +349,7 @@ fn subject(agent: AgentRef) -> process.Subject(AgentMsg) {
 
 pub type AgentDeps {
   AgentDeps(
-    start_interaction: fn(
-      AgentRef,
-      AgentRequest,
-      Int,
-      sink.StreamMode,
-    ) ->
+    start_interaction: fn(AgentRef, AgentRequest, Int, sink.StreamMode) ->
       process.Pid,
     cancel_interaction: fn(process.Pid) -> Nil,
     stop_server: fn(AgentResource) -> Nil,
@@ -623,7 +618,8 @@ fn handle_interact(
           actor.continue(state)
         }
 
-        lifecycle.Allow(_) -> start_interaction(state, req, stream_mode, reply_to)
+        lifecycle.Allow(_) ->
+          start_interaction(state, req, stream_mode, reply_to)
       }
   }
 }
@@ -878,11 +874,7 @@ fn handle_stop_instance(
   }
 
   actor.continue(
-    AgentRuntimeState(
-      ..state,
-      state: next_state,
-      assigned_port: option.None,
-    ),
+    AgentRuntimeState(..state, state: next_state, assigned_port: option.None),
   )
 }
 
@@ -917,9 +909,7 @@ fn handle_server_died(
   _exit_code: Int,
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
   let state = cancel_if_busy(state, "cancelled")
-  actor.continue(
-    AgentRuntimeState(..state, state: lifecycle.on_server_died()),
-  )
+  actor.continue(AgentRuntimeState(..state, state: lifecycle.on_server_died()))
 }
 
 fn handle_terminate(

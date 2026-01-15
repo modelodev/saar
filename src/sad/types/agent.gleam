@@ -73,6 +73,23 @@ pub fn failure_reason_to_string(reason: FailureReason) -> String {
   }
 }
 
+/// Extracts the failure reason from an agent phase, if any.
+///
+/// Example:
+/// ```gleam
+/// import gleam/option
+/// import sad/types/agent as types_agent
+///
+/// types_agent.failure_reason_from_phase(types_agent.Failed(types_agent.NoNetwork))
+/// // -> option.Some(types_agent.NoNetwork)
+/// ```
+pub fn failure_reason_from_phase(phase: AgentPhase) -> Option(FailureReason) {
+  case phase {
+    Failed(reason) -> option.Some(reason)
+    _ -> option.None
+  }
+}
+
 /// Public, serializable view of an agent instance state.
 ///
 /// This value is safe to log and to expose via HTTP.

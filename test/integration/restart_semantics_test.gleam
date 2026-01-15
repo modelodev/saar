@@ -10,12 +10,12 @@ import gleeunit/should
 import port_helpers
 import sad/app_state
 import sad/core/agent
-import sad/otp/safe_call
 import sad/core/messages
 import sad/core/root_supervisor
 import sad/core/supervisor_names
 import sad/decoders
 import sad/net/tcp_listener
+import sad/otp/safe_call
 import sad/types/agent as types_agent
 import sad/types/config as types_config
 import sad/types/core as types_core
@@ -118,7 +118,10 @@ fn echo_server_profile_managed_port() -> types_profile.Profile {
   let types_profile.Profile(runner: runner0, ..) = profile0
 
   let runtime =
-    types_runner.ManagedPort(host_env_var: option.None, port_env_var: option.None)
+    types_runner.ManagedPort(
+      host_env_var: option.None,
+      port_env_var: option.None,
+    )
 
   let runner1 =
     types_runner.Runner(
@@ -177,7 +180,7 @@ fn wait_for_ready_or_failure(
   case attempts {
     0 ->
       case agent.status(agent_ref, 1000) {
-        Ok(status) -> Error(failure_reason_from_phase(status.phase))
+        Ok(status) -> Error(types_agent.failure_reason_from_phase(status.phase))
         Error(_) -> Error(option.None)
       }
 
@@ -206,15 +209,6 @@ fn wait_for_ready_or_failure(
           wait_for_ready_or_failure(agent_ref, expected_phase, attempts - 1)
         }
       }
-  }
-}
-
-fn failure_reason_from_phase(
-  phase: types_agent.AgentPhase,
-) -> option.Option(types_agent.FailureReason) {
-  case phase {
-    types_agent.Failed(reason) -> option.Some(reason)
-    _ -> option.None
   }
 }
 

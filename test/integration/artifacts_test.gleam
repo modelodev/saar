@@ -15,10 +15,10 @@ import sad/app_state
 import sad/bridge/http_client
 import sad/config_loader
 import sad/core/artifact_registry_protocol
-import sad/otp/safe_call
 import sad/core/root_supervisor
 import sad/core/supervisor_names
 import sad/net/tcp_listener
+import sad/otp/safe_call
 import sad/profiles_sources
 import sad/types/config as types_config
 import sad/types/core as types_core

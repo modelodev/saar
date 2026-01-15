@@ -29,10 +29,10 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
-import sad/otp/safe_call
 import sad/core/messages
 import sad/decoders
 import sad/ffi
+import sad/otp/safe_call
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/profile as types_profile

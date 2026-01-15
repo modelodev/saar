@@ -6,10 +6,10 @@ import gleeunit
 import gleeunit/should
 import sad/app_state
 import sad/core/agent
-import sad/otp/safe_call
 import sad/core/messages
 import sad/core/root_supervisor
 import sad/core/supervisor_names
+import sad/otp/safe_call
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/enums as types_enums

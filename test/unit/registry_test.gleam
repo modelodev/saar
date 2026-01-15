@@ -7,9 +7,9 @@ import gleam/otp/actor
 import gleeunit
 import gleeunit/should
 import sad/core/agent
-import sad/otp/safe_call
 import sad/core/messages
 import sad/core/registry
+import sad/otp/safe_call
 import sad/types/agent as types_agent
 import sad/types/core as types_core
 import sad/types/enums as types_enums

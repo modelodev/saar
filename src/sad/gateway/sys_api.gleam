@@ -33,12 +33,12 @@ import gleam/string
 import gleam/yielder
 import mist
 import sad/core/agent
-import sad/otp/safe_call
 import sad/core/messages
 import sad/decoders
 import sad/gateway/lookup
 import sad/gateway/lookup_http
 import sad/gateway/problem
+import sad/otp/safe_call
 import sad/profiles_sources
 import sad/types/agent as types_agent
 import sad/types/config as types_config
@@ -149,14 +149,12 @@ fn create_agent(
               manager,
               call_timeout_ms(cfg),
               fn(reply_to) {
-                messages.Cmd(
-                  messages.CreateAgent(
-                    types_core.profile_id(profile_id),
-                    instance_id,
-                    init_params,
-                    reply_to,
-                  ),
-                )
+                messages.Cmd(messages.CreateAgent(
+                  types_core.profile_id(profile_id),
+                  instance_id,
+                  init_params,
+                  reply_to,
+                ))
               },
             )
 
@@ -666,7 +664,7 @@ fn encode_status(status: types_agent.AgentStatusView) -> json.Json {
     }),
     #(
       "failure_reason",
-      case failure_reason_from_phase(status.phase) {
+      case types_agent.failure_reason_from_phase(status.phase) {
         Some(r) -> json.string(types_agent.failure_reason_to_string(r))
         None -> json.null()
       },
@@ -706,7 +704,7 @@ fn encode_instance_summary(
     }),
     #(
       "failure_reason",
-      case failure_reason_from_phase(status.phase) {
+      case types_agent.failure_reason_from_phase(status.phase) {
         Some(r) -> json.string(types_agent.failure_reason_to_string(r))
         None -> json.null()
       },
@@ -724,15 +722,6 @@ fn agent_phase_to_string(phase: types_agent.AgentPhase) -> String {
     types_agent.ReadyContinuous -> "ready_continuous"
     types_agent.Stopped -> "stopped"
     types_agent.Failed(_) -> "failed"
-  }
-}
-
-fn failure_reason_from_phase(
-  phase: types_agent.AgentPhase,
-) -> Option(types_agent.FailureReason) {
-  case phase {
-    types_agent.Failed(reason) -> Some(reason)
-    _ -> None
   }
 }
 

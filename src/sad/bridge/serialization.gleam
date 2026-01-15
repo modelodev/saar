@@ -48,19 +48,24 @@ pub fn sad_input_to_string(input: types_input.SadInput) -> String {
 
 fn sad_input_meta_to_json(meta: types_input.SadInputMeta) -> Json {
   let #(spec_version, profile_id, instance_id, mode) = case meta {
-    types_input.TransientMeta(spec_version, profile_id, instance_id) ->
-      #(spec_version, profile_id, instance_id, types_enums.Transient)
+    types_input.TransientMeta(spec_version, profile_id, instance_id) -> #(
+      spec_version,
+      profile_id,
+      instance_id,
+      types_enums.Transient,
+    )
 
-    types_input.ContinuousMeta(spec_version, profile_id, instance_id) ->
-      #(spec_version, profile_id, instance_id, types_enums.Continuous)
+    types_input.ContinuousMeta(spec_version, profile_id, instance_id) -> #(
+      spec_version,
+      profile_id,
+      instance_id,
+      types_enums.Continuous,
+    )
   }
 
   json.object([
     #("spec_version", json.string(spec_version)),
-    #(
-      "profile_id",
-      json.string(types_core.profile_id_to_string(profile_id)),
-    ),
+    #("profile_id", json.string(types_core.profile_id_to_string(profile_id))),
     #("instance_id", json.string(types_core.instance_id_to_string(instance_id))),
     #("mode", json.string(types_enums.lifecycle_to_string(mode))),
   ])

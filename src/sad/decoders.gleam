@@ -29,6 +29,14 @@ import sad/types/profile as types_profile
 import sad/types/runner as types_runner
 import sad/validation/params as param_validation
 
+/// Attempts to run a decoder and returns whether it succeeded.
+fn can_decode(value: Dynamic, decoder: decode.Decoder(a)) -> Bool {
+  case decode.run(value, decoder) {
+    Ok(_) -> True
+    Error(_) -> False
+  }
+}
+
 /// Describes the "shape" of a dynamic value.
 ///
 /// This is intended for error messages at decoding boundaries.
@@ -42,34 +50,21 @@ import sad/validation/params as param_validation
 /// // -> "number"
 /// ```
 pub fn describe_dynamic_type(value: Dynamic) -> String {
-  case decode.run(value, decode.string) {
-    Ok(_) -> "string"
-    Error(_) ->
-      case decode.run(value, decode.bool) {
-        Ok(_) -> "bool"
-        Error(_) ->
-          case decode.run(value, decode.int) {
-            Ok(_) -> "number"
-            Error(_) ->
-              case decode.run(value, decode.float) {
-                Ok(_) -> "number"
-                Error(_) ->
-                  case decode.run(value, decode.list(of: decode.dynamic)) {
-                    Ok(_) -> "array"
-                    Error(_) ->
-                      case
-                        decode.run(
-                          value,
-                          decode.dict(decode.string, decode.dynamic),
-                        )
-                      {
-                        Ok(_) -> "object"
-                        Error(_) -> "unknown"
-                      }
-                  }
-              }
-          }
-      }
+  case
+    can_decode(value, decode.string),
+    can_decode(value, decode.bool),
+    can_decode(value, decode.int),
+    can_decode(value, decode.float),
+    can_decode(value, decode.list(of: decode.dynamic)),
+    can_decode(value, decode.dict(decode.string, decode.dynamic))
+  {
+    True, _, _, _, _, _ -> "string"
+    _, True, _, _, _, _ -> "bool"
+    _, _, True, _, _, _ -> "number"
+    _, _, _, True, _, _ -> "number"
+    _, _, _, _, True, _ -> "array"
+    _, _, _, _, _, True -> "object"
+    _, _, _, _, _, _ -> "unknown"
   }
 }
 
@@ -77,21 +72,33 @@ pub fn describe_dynamic_type(value: Dynamic) -> String {
 ///
 /// Supported shapes: string, int, float, bool.
 pub fn decode_scalar_value(value: Dynamic) -> Result(types_core.Value, Nil) {
-  case decode.run(value, decode.string) {
-    Ok(s) -> Ok(types_core.StringVal(s))
-    Error(_) ->
-      case decode.run(value, decode.int) {
-        Ok(i) -> Ok(types_core.IntVal(i))
-        Error(_) ->
-          case decode.run(value, decode.float) {
-            Ok(f) -> Ok(types_core.FloatVal(f))
-            Error(_) ->
-              case decode.run(value, decode.bool) {
-                Ok(b) -> Ok(types_core.BoolVal(b))
-                Error(_) -> Error(Nil)
-              }
-          }
-      }
+  case
+    can_decode(value, decode.string),
+    can_decode(value, decode.int),
+    can_decode(value, decode.float),
+    can_decode(value, decode.bool)
+  {
+    True, _, _, _ ->
+      decode.run(value, decode.string)
+      |> result.map(types_core.StringVal)
+      |> result.map_error(fn(_) { Nil })
+
+    _, True, _, _ ->
+      decode.run(value, decode.int)
+      |> result.map(types_core.IntVal)
+      |> result.map_error(fn(_) { Nil })
+
+    _, _, True, _ ->
+      decode.run(value, decode.float)
+      |> result.map(types_core.FloatVal)
+      |> result.map_error(fn(_) { Nil })
+
+    _, _, _, True ->
+      decode.run(value, decode.bool)
+      |> result.map(types_core.BoolVal)
+      |> result.map_error(fn(_) { Nil })
+
+    _, _, _, _ -> Error(Nil)
   }
 }
 
@@ -444,7 +451,10 @@ fn instance_id_decoder() -> decode.Decoder(types_core.InstanceId) {
 fn fixed_param_decoder() -> decode.Decoder(types_profile.Parameter) {
   let decoder = {
     use expected <- decode.field("type", param_validation.param_type_decoder())
-    use value <- decode.field("value", param_validation.param_value_decoder(expected))
+    use value <- decode.field(
+      "value",
+      param_validation.param_value_decoder(expected),
+    )
     decode.success(types_profile.FixedParam(value))
   }
   decoder

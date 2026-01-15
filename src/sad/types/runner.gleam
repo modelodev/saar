@@ -141,10 +141,7 @@ pub fn network_mode_to_string(mode: NetworkMode) -> String {
 /// `port_env_var` and `host_env_var` name env vars exported when using
 /// `ManagedPort`.
 pub type RuntimeConfig {
-  ManagedPort(
-    host_env_var: Option(String),
-    port_env_var: Option(String),
-  )
+  ManagedPort(host_env_var: Option(String), port_env_var: Option(String))
   NoNetwork
 }
 

@@ -14,12 +14,12 @@ import sad/app_state
 import sad/bridge/http_client
 import sad/bridge/runner
 import sad/core/agent
-import sad/otp/safe_call
 import sad/core/messages
 import sad/core/root_supervisor
 import sad/core/supervisor_names
 import sad/decoders
 import sad/net/tcp_listener
+import sad/otp/safe_call
 import sad/types/agent as types_agent
 import sad/types/config as types_config
 import sad/types/core as types_core
@@ -411,8 +411,7 @@ fn echo_server_profile_managed_port() -> types_profile.Profile {
 
   let types_profile.Profile(runner: runner0, ..) = profile0
 
-  let runtime =
-    types_runner.ManagedPort(host_env_var: None, port_env_var: None)
+  let runtime = types_runner.ManagedPort(host_env_var: None, port_env_var: None)
 
   let runner1 =
     types_runner.Runner(

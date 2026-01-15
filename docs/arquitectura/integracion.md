@@ -67,7 +67,37 @@ Contrato v0:
 
 Si el cliente no tiene una URL pública, debe subir el fichero a un storage accesible (S3/GCS/HTTP) y enviar su URL.
 
-## 4. Ejemplos
+## 6. Ejemplos
 
 - Perfil continuous con runner genérico: `arquitectura/examples/profiles/lightrag/lightrag.json`
+- Perfil transient (CLI) con runner genérico: `arquitectura/examples/profiles/aider/aider.json`
 - Runners genéricos: `arquitectura/examples/runners/README.md`
+
+## 7. Capacidades
+
+Una capacidad (capability) es una operación visible para el cliente expuesta por una instancia.
+
+- Las capacidades se definen en el perfil bajo `interface.capabilities`.
+- El campo `capability` que envía un cliente (API nativa `/agents/:instance_id/interact` o metadata A2A) es una clave de búsqueda dentro de ese diccionario.
+
+Las capacidades son parte del contrato de SAD, no necesariamente del producto agente subyacente.
+
+- **Interfaz runner (`protocol: runner`)**
+  - Las capacidades son operaciones “virtuales” implementadas por la invocación del runner descrita en el perfil (args/env/helpers).
+  - El binario envuelto (p.ej. Aider) no necesita implementar un sistema de capacidades.
+  - Si quieres múltiples operaciones (p.ej. `chat` vs `train`), las modelas como capacidades distintas y las mapeas a distintos argumentos o incluso a distintos runners.
+- **Interfaz HTTP (`protocol: http`)**
+  - Las capacidades suelen mapear a endpoints HTTP upstream distintos (`path` + `method`) y pueden tener plantillas y mapeos de respuesta distintos.
+
+## 8. Modos de entrega de respuesta
+
+Una capacidad también determina cómo el cliente debe consumir el resultado.
+
+- **Respuesta inmediata (JSON)**: SAD devuelve la respuesta final en la misma llamada.
+- **Respuesta por SSE**: SAD mantiene la conexión abierta y emite eventos incrementales hasta el evento terminal.
+- **Respuesta diferida (tarea + sondeo/suscripción)**: SAD devuelve un id de tarea y el cliente lo resuelve después consultando un endpoint de tareas.
+
+Detalles y ejemplos completos:
+
+- `INTEGRATION.md` (guía para clientes)
+- `runners_and_agents.md` (guía para autores de perfiles y runners)

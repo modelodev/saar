@@ -17,8 +17,7 @@ pub fn inject_managed_port_env_does_not_validate_availability_test() {
 
   let assert Ok(#(listener, port)) = tcp_listener.listen("127.0.0.1", 0)
 
-  let runtime =
-    types_runner.ManagedPort(host_env_var: None, port_env_var: None)
+  let runtime = types_runner.ManagedPort(host_env_var: None, port_env_var: None)
 
   let result =
     managed_port_env.inject_managed_port_env(

@@ -5,9 +5,9 @@ import gleam/option
 import gleam/otp/actor
 import gleeunit
 import gleeunit/should
-import sad/otp/safe_call
 import sad/core/messages
 import sad/core/profiles
+import sad/otp/safe_call
 import sad/types/core as types_core
 import sad/types/enums as types_enums
 import sad/types/profile as types_profile
@@ -96,9 +96,7 @@ pub fn list_profiles_returns_all_ids() {
     )
 
   let assert Ok(ids) =
-    safe_call.call(actor, 1000, fn(reply_to) {
-      messages.ListProfiles(reply_to)
-    })
+    safe_call.call(actor, 1000, fn(reply_to) { messages.ListProfiles(reply_to) })
 
   ids
   |> list.map(types_core.profile_id_to_string)

@@ -83,3 +83,7 @@ Eventos mínimos:
 
 ### Ejemplos
 - Ver `arquitectura/examples/runners/` para `generic_uvx` (CLI) y `generic_uvx_server` (server) ya listos para usarse con el wrapper.
+
+### Guías relacionadas
+- `runners_and_agents.md`: cómo los perfiles definen capacidades, cómo los runners las mapean a invocaciones reales y cómo los modos de respuesta afectan al cliente.
+- `INTEGRATION.md`: guía para clientes sobre selección de capacidades y consumo de respuesta inmediata/SSE/diferida.

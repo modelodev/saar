@@ -18,8 +18,8 @@
 import gleam/erlang/process
 import gleam/option
 import sad/core/agent
-import sad/otp/safe_call
 import sad/core/messages
+import sad/otp/safe_call
 import sad/types/core as types_core
 import sad/types/profile as types_profile
 
