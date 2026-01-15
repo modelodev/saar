@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": "S17",
+  "current_sprint": null,
   "sprints": {
     "S01": {
       "status": "completed",
@@ -537,16 +537,16 @@
       }
     },
     "S17": {
-      "status": "in_progress",
-      "branch": null,
+      "status": "completed",
+      "branch": "sprint/s17-cli-operativa-daemonizacion",
       "started_at": "2026-01-15T14:59:02Z",
-      "completed_at": null,
+      "completed_at": "2026-01-15T15:51:24Z",
       "current_story": null,
       "stories": {
-        "S17-T01": {"status": "pending", "branch": null},
-        "S17-T02": {"status": "pending", "branch": null},
-        "S17-T03": {"status": "pending", "branch": null},
-        "S17-T04": {"status": "pending", "branch": null}
+        "S17-T01": {"status": "completed", "branch": "feat/s17-t01-cli-parser", "commit": "a7c3980"},
+        "S17-T02": {"status": "completed", "branch": "feat/s17-t02-ffi-daemon", "commit": "0007190"},
+        "S17-T03": {"status": "completed", "branch": "feat/s17-t03-serve-daemon-paths", "commit": "3b7f4de"},
+        "S17-T04": {"status": "completed", "branch": "feat/s17-t04-tests-cli-daemon", "commit": "2b3e281"}
       }
     }
   }
