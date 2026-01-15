@@ -1,19 +1,93 @@
 import ffi_inspect
 import gleam/dict
 import gleam/erlang/process
+import gleam/list
 import gleam/option.{None, Some}
+import gleam/string
 import gleeunit
 import gleeunit/should
+import sad/core/agent
 import sad/otp/safe_call
 import sad/streams/sink
 import sad/streams/stream_pump
 import sad/types/config as types_config
 import sad/types/core
+import sad/types/log as types_log
 import sad/types/output
 import sad/types/stream
 
 pub fn main() {
   gleeunit.main()
+}
+
+pub fn logs_drop_under_pressure() {
+  let assert Ok(instance_id) = core.instance_id("inst-logs")
+  let trace_id = core.trace_id("trace-logs")
+
+  let max_bytes = 130
+  let line = string.repeat("x", times: 60)
+
+  let buffer = agent.empty_log_buffer()
+
+  let buffer =
+    agent.add_log_event(
+      buffer,
+      types_log.log_event(
+        types_log.AppLog,
+        "1-" <> line,
+        Some(trace_id),
+        instance_id,
+      ),
+      max_bytes,
+    )
+
+  let buffer =
+    agent.add_log_event(
+      buffer,
+      types_log.log_event(
+        types_log.AppLog,
+        "2-" <> line,
+        Some(trace_id),
+        instance_id,
+      ),
+      max_bytes,
+    )
+
+  let buffer =
+    agent.add_log_event(
+      buffer,
+      types_log.log_event(
+        types_log.AppLog,
+        "3-" <> line,
+        Some(trace_id),
+        instance_id,
+      ),
+      max_bytes,
+    )
+
+  let agent.LogBuffer(lines: lines, total_bytes: total_bytes) = buffer
+  should.equal(total_bytes <= max_bytes, True)
+  list.length(lines) |> should.equal(2)
+
+  let huge = string.repeat("y", times: 500)
+
+  let huge_buffer =
+    agent.add_log_event(
+      agent.empty_log_buffer(),
+      types_log.log_event(types_log.AppLog, huge, Some(trace_id), instance_id),
+      100,
+    )
+
+  let agent.LogBuffer(lines: huge_lines, total_bytes: huge_bytes) = huge_buffer
+  should.equal(huge_bytes <= 100, True)
+
+  case huge_lines {
+    [only] -> {
+      let types_log.LogEvent(line: text, ..) = only
+      text |> should.equal("[log dropped: too large]")
+    }
+    _ -> should.fail()
+  }
 }
 
 pub fn interaction_backpressure_or_discard_under_pressure() {

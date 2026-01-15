@@ -100,6 +100,76 @@ pub fn transient_invalid_json_fails_test() {
   kind |> should.equal(types_enums.InfraError)
 }
 
+pub fn jsonl_invalid_line_is_infra_error() {
+  port_helpers.ensure_wrapper_path()
+  let input =
+    runner_fixtures.base_input(
+      runner_fixtures.default_chat_payload(),
+      types_runner.ArtifactConfig(include: [], exclude: []),
+    )
+  let config = default_config()
+
+  let script =
+    "import json; print(json.dumps({'t':'log','level':'info','message':'ok'})); print('{bad json')"
+
+  let assert Ok(actor.Started(data: registry, ..)) =
+    artifact_registry.start_unnamed()
+
+  let result =
+    runner.execute_transient(
+      "python3",
+      ["-c", script],
+      port_helpers.base_env(500, []),
+      ".",
+      input,
+      config,
+      registry,
+      False,
+      config.timeouts.call_timeout_ms,
+    )
+
+  let assert Error(err) = result
+  let types_output.InteractionError(kind: kind, ..) = err
+  kind |> should.equal(types_enums.InfraError)
+}
+
+pub fn greedy_logger_hits_limits_and_fails_cleanly() {
+  port_helpers.ensure_wrapper_path()
+
+  let input =
+    runner_fixtures.base_input(
+      runner_fixtures.default_chat_payload(),
+      types_runner.ArtifactConfig(include: [], exclude: []),
+    )
+
+  let base = default_config()
+  let config =
+    types_config.SadConfig(
+      ..base,
+      limits: types_config.SadLimits(..base.limits, max_stdout_bytes: 5000),
+    )
+
+  let assert Ok(actor.Started(data: registry, ..)) =
+    artifact_registry.start_unnamed()
+
+  let result =
+    runner.execute_transient(
+      "python3",
+      ["./test/fixtures/source_local/runners/greedy_logger.py"],
+      port_helpers.base_env(500, []),
+      ".",
+      input,
+      config,
+      registry,
+      False,
+      config.timeouts.call_timeout_ms,
+    )
+
+  let assert Error(err) = result
+  let types_output.InteractionError(kind: kind, ..) = err
+  kind |> should.equal(types_enums.InfraError)
+}
+
 pub fn provision_requires_single_result_test() {
   port_helpers.ensure_wrapper_path()
   let input =
