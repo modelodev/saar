@@ -24,6 +24,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/result
 import sad/core/messages
+import sad/core/shutdown_all
 import sad/daemon_paths
 import sad/ffi
 import sad/otp/safe_call
@@ -177,6 +178,8 @@ fn run_shutdown_worker(
   pidfile_path: String,
 ) -> Nil {
   // Drain new requests first.
+  shutdown_all.send_terminate_to_all(registry, 250)
+
   let deadline_ms = ffi.now_ms() + int.max(1, shutdown_timeout_ms)
 
   wait_for_shutdown(deadline_ms, shutdown, registry, root_supervisor_pid)
