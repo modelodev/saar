@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": "S15",
+  "current_sprint": "S16",
   "sprints": {
     "S01": {
       "status": "completed",
@@ -520,6 +520,20 @@
           "branch": "sprint/s15-artefactos-ui-proxy-regresiones",
           "commit": "649c83c178a43949edfac925b9b0161d31fae8d4"
         }
+      }
+    },
+    "S16": {
+      "status": "in_progress",
+      "branch": "sprint/s16-protocolos-ag-ui-a2ui-a2a",
+      "started_at": "2026-01-15T12:07:50Z",
+      "completed_at": null,
+      "current_story": null,
+      "stories": {
+        "S16-T01": {"status": "pending", "branch": null},
+        "S16-T02": {"status": "pending", "branch": null},
+        "S16-T03": {"status": "pending", "branch": null},
+        "S16-T04": {"status": "pending", "branch": null},
+        "S16-T05": {"status": "pending", "branch": null}
       }
     }
   }
