@@ -20,6 +20,11 @@ fn silence_otp_supervisor_reports() -> Nil {
   let _ =
     logger_set_module_level(atom.create("supervisor"), atom.create("critical"))
 
+  // Mist uses a legacy logger and may emit `=ERROR REPORT=` noise
+  // (e.g. `MalformedRequest`) when a client closes early.
+  // Silence it for the test suite; failures still fail the tests.
+  let _ = error_logger_tty(False)
+
   Nil
 }
 
@@ -34,3 +39,6 @@ fn logger_set_module_level(
   module: atom.Atom,
   level: atom.Atom,
 ) -> dynamic.Dynamic
+
+@external(erlang, "error_logger", "tty")
+fn error_logger_tty(enabled: Bool) -> dynamic.Dynamic
