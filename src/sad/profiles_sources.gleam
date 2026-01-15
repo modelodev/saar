@@ -432,6 +432,8 @@ fn is_local_git_url(url: String) -> Bool {
   string.starts_with(url, ".") || string.starts_with(url, "/")
 }
 
+const git_lock_timeout_ms: Int = 30_000
+
 fn ensure_git_checkout(
   git_cache_dir: String,
   url: String,
@@ -450,31 +452,138 @@ fn ensure_git_checkout(
   )
 
   let repo_dir = git_cache_dir <> "/" <> sanitize_repo_dir(url)
+  let lock_dir = repo_dir <> ".lock"
 
-  let should_clone = case simplifile.is_directory(repo_dir) {
-    Ok(True) -> False
-    _ -> True
+  use _ <- result.try(acquire_git_lock(lock_dir, git_lock_timeout_ms))
+  let out = ensure_git_checkout_locked(repo_dir, url, ref)
+  release_git_lock(lock_dir)
+  out
+}
+
+fn ensure_git_checkout_locked(
+  repo_dir: String,
+  url: String,
+  ref: Option(String),
+) -> Result(String, ProfilesSourceError) {
+  case simplifile.is_directory(repo_dir) {
+    Ok(True) -> update_git_repo(repo_dir, url, ref)
+    _ -> clone_git_repo_atomic(repo_dir, url, ref)
   }
+}
 
-  case should_clone {
-    True -> {
-      use _ <- result.try(validate_local_git_url_exists(url))
+fn update_git_repo(
+  repo_dir: String,
+  url: String,
+  ref: Option(String),
+) -> Result(String, ProfilesSourceError) {
+  case
+    run_git(["-C", repo_dir, "fetch", "--all", "--prune"], ".", "git fetch")
+  {
+    Ok(_) ->
+      case checkout_ref_if_needed(repo_dir, ref) {
+        Ok(_) -> Ok(repo_dir)
+        Error(err) -> reclone_corrupt_repo(repo_dir, url, ref, err)
+      }
 
-      run_git(["clone", url, repo_dir], ".", "git clone")
-      |> result.map(fn(_) { repo_dir })
-    }
+    Error(err) -> reclone_corrupt_repo(repo_dir, url, ref, err)
+  }
+}
 
-    False ->
-      run_git(["-C", repo_dir, "fetch", "--all", "--prune"], ".", "git fetch")
-      |> result.try(fn(_) {
-        case ref {
-          None -> Ok(repo_dir)
-          Some(r) ->
-            run_git(["-C", repo_dir, "checkout", r], ".", "git checkout")
-            |> result.map(fn(_) { repo_dir })
+fn reclone_corrupt_repo(
+  repo_dir: String,
+  url: String,
+  ref: Option(String),
+  _original_error: ProfilesSourceError,
+) -> Result(String, ProfilesSourceError) {
+  let broken_dir = repo_dir <> ".broken-" <> int.to_string(ffi.now_ms())
+
+  use _ <- result.try(
+    simplifile.rename(at: repo_dir, to: broken_dir)
+    |> result.map_error(fn(err) {
+      SourceIoError(
+        message: "failed to quarantine corrupt git repo '"
+        <> repo_dir
+        <> "': "
+        <> simplifile.describe_error(err),
+      )
+    }),
+  )
+
+  clone_git_repo_atomic(repo_dir, url, ref)
+}
+
+fn clone_git_repo_atomic(
+  repo_dir: String,
+  url: String,
+  ref: Option(String),
+) -> Result(String, ProfilesSourceError) {
+  use _ <- result.try(validate_local_git_url_exists(url))
+
+  let tmp_dir = repo_dir <> ".tmp-" <> int.to_string(ffi.now_ms())
+  let _ = simplifile.delete(file_or_dir_at: tmp_dir)
+
+  use _ <- result.try(run_git(["clone", url, tmp_dir], ".", "git clone"))
+  use _ <- result.try(checkout_ref_if_needed(tmp_dir, ref))
+
+  use _ <- result.try(
+    simplifile.rename(at: tmp_dir, to: repo_dir)
+    |> result.map_error(fn(err) {
+      SourceIoError(
+        message: "failed to move git checkout into place '"
+        <> repo_dir
+        <> "': "
+        <> simplifile.describe_error(err),
+      )
+    }),
+  )
+
+  Ok(repo_dir)
+}
+
+fn checkout_ref_if_needed(
+  repo_dir: String,
+  ref: Option(String),
+) -> Result(Nil, ProfilesSourceError) {
+  case ref {
+    None -> Ok(Nil)
+    Some(r) -> run_git(["-C", repo_dir, "checkout", r], ".", "git checkout")
+  }
+}
+
+fn acquire_git_lock(
+  lock_dir: String,
+  timeout_ms: Int,
+) -> Result(Nil, ProfilesSourceError) {
+  acquire_git_lock_loop(lock_dir, timeout_ms, ffi.now_ms())
+}
+
+fn acquire_git_lock_loop(
+  lock_dir: String,
+  timeout_ms: Int,
+  started_at_ms: Int,
+) -> Result(Nil, ProfilesSourceError) {
+  case simplifile.create_directory(lock_dir) {
+    Ok(_) -> Ok(Nil)
+
+    Error(_) -> {
+      case ffi.now_ms() - started_at_ms >= timeout_ms {
+        True ->
+          Error(SourceIoError(
+            message: "timed out waiting for git lock '" <> lock_dir <> "'",
+          ))
+
+        False -> {
+          process.sleep(25)
+          acquire_git_lock_loop(lock_dir, timeout_ms, started_at_ms)
         }
-      })
+      }
+    }
   }
+}
+
+fn release_git_lock(lock_dir: String) -> Nil {
+  let _ = simplifile.delete(file_or_dir_at: lock_dir)
+  Nil
 }
 
 fn run_git(

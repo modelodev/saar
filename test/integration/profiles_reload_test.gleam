@@ -1,5 +1,6 @@
 import gleam/dict
 import gleam/erlang/process
+import gleam/int
 import gleam/list
 import gleam/option
 import gleam/otp/actor
@@ -8,6 +9,7 @@ import gleeunit
 import gleeunit/should
 import sad/core/messages
 import sad/core/profiles
+import sad/ffi
 import sad/otp/safe_call
 import sad/profiles_sources
 import sad/types/config as types_config
@@ -245,7 +247,7 @@ pub fn reload_missing_runner_fails_test() {
   }
 }
 
-pub fn reload_git_source_failure_keeps_previous_test() {
+pub fn reload_git_source_failure_keeps_previous() {
   let profiles_actor = start_profiles(dict.new())
 
   // First: load from a valid dir source.
@@ -277,6 +279,79 @@ pub fn reload_git_source_failure_keeps_previous_test() {
       messages.ListProfiles(reply_to)
     })
   list.length(after_ids) |> should.equal(9)
+}
+
+fn init_git_repo(path: String) -> Nil {
+  run_git(["init"], path)
+  run_git(["add", "."], path)
+
+  run_git(
+    [
+      "-c",
+      "user.email=test@example.com",
+      "-c",
+      "user.name=test",
+      "commit",
+      "-m",
+      "init",
+    ],
+    path,
+  )
+}
+
+fn run_git(args: List(String), cwd: String) -> Nil {
+  let port = ffi.open_port("git", args, [], cwd) |> test_assertions.assert_ok
+  wait_git_exit(port)
+}
+
+fn wait_git_exit(port) -> Nil {
+  case ffi.port_receive(port, 30_000) {
+    Ok(ffi.PortDataChunk(_)) -> wait_git_exit(port)
+    Ok(ffi.PortExit(0)) -> Nil
+    Ok(ffi.PortExit(code)) -> panic as { "git exit " <> int.to_string(code) }
+    Error(_) -> panic as "git timeout"
+  }
+}
+
+pub fn reload_git_source_corrupt_reclone() {
+  let origin = "build/test-workspaces/git-origin-corrupt"
+  let cache = "build/test-workspaces/git-cache-corrupt"
+
+  let _ = simplifile.delete(file_or_dir_at: origin)
+  let _ = simplifile.delete(file_or_dir_at: cache)
+
+  simplifile.copy_directory(at: "test/fixtures/source_local", to: origin)
+  |> test_assertions.assert_ok
+
+  init_git_repo(origin)
+
+  let profiles_actor = start_profiles(dict.new())
+  let cfg = config_with_git_source(origin, cache)
+
+  profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
+  |> should.be_ok
+
+  let entries_1 =
+    simplifile.read_directory(at: cache)
+    |> test_assertions.assert_ok
+
+  let assert [repo_dir_name] = entries_1
+  let repo_dir = cache <> "/" <> repo_dir_name
+
+  // Corrupt the cached checkout by removing its .git metadata.
+  simplifile.delete(file_or_dir_at: repo_dir <> "/.git")
+  |> test_assertions.assert_ok
+
+  profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
+  |> should.be_ok
+
+  let entries_2 =
+    simplifile.read_directory(at: cache)
+    |> test_assertions.assert_ok
+
+  entries_2
+  |> list.any(fn(name) { string.starts_with(name, repo_dir_name <> ".broken-") })
+  |> should.equal(True)
 }
 
 fn config_with_dir_source(path: String) -> types_config.SadConfig {
