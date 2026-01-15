@@ -8,6 +8,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
 class Handler(BaseHTTPRequestHandler):
+    # Silence default access logs to keep test output clean.
+    def log_message(self, format, *args):
+        return
     def do_GET(self):
         if self.path == "/health":
             time.sleep(10)

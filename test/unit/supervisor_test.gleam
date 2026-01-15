@@ -214,9 +214,19 @@ fn kill_child(
   let assert Ok(actor.Started(data: agent_ref, ..)) =
     factory_supervisor.start_child(supervisor, args)
 
-  // Note: This uses `process.kill`, so OTP may print supervisor reports (expected).
-  process.kill(agent.pid(agent_ref))
-  process.sleep(20)
+  let pid = agent.pid(agent_ref)
+  let monitor = process.monitor(pid)
+
+  // Terminate gracefully to avoid noisy supervisor reports in tests.
+  agent.terminate(agent_ref, agent.SupervisorCleanup)
+
+  let selector =
+    process.new_selector()
+    |> process.select_specific_monitor(monitor, fn(down) { down })
+
+  let assert Ok(process.ProcessDown(..)) =
+    process.selector_receive(selector, 1000)
+  Nil
 }
 
 pub fn agent_factory_restart_strategy_temporary() {

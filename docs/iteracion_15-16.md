@@ -296,6 +296,7 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 - El estado ilegal no se puede representar.
 
 #### PR 7: ADT AgentPhase con FailureReason embebido (tamano M, riesgo medio)
+**Estado:** completado.
 **Objetivo:** eliminar combinaciones invalidas de `phase` y `failure_reason`.
 
 **Alcance (modulos):**

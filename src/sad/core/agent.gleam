@@ -927,8 +927,7 @@ fn handle_terminate(
     _ -> Nil
   }
 
-  process.kill(process.self())
-  actor.continue(state)
+  actor.stop()
 }
 
 /// Returns the configured status timeout.

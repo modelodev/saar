@@ -7,6 +7,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
 class Handler(BaseHTTPRequestHandler):
+    # Silence default access logs to keep test output clean.
+    def log_message(self, format, *args):
+        return
     crashed = False
 
     def do_GET(self):

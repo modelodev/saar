@@ -17,6 +17,7 @@
 //// - Produces `Dict(ProfileId, Profile)` used by `/sys/reload-profiles`.
 //// - Uses `sad/core/messages.ProfilesMsg.SetProfiles` to swap the full set.
 
+import envoy
 import filepath
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
@@ -127,14 +128,19 @@ fn log_profile_override_ignored(
   kept_from: String,
   ignored_from: String,
 ) -> Nil {
-  io.println(
-    "profiles.reload perfil_duplicado id="
-    <> types_core.profile_id_to_string(id)
-    <> " ignorado="
-    <> ignored_from
-    <> " conservado="
-    <> kept_from,
-  )
+  case envoy.get("SAD_LOG_PROFILE_DUPLICATES") {
+    Ok(_) ->
+      io.println(
+        "profiles.reload perfil_duplicado id="
+        <> types_core.profile_id_to_string(id)
+        <> " ignorado="
+        <> ignored_from
+        <> " conservado="
+        <> kept_from,
+      )
+
+    Error(_) -> Nil
+  }
 }
 
 /// Reloads the `ProfilesActor` atomically.

@@ -9,6 +9,11 @@ import time
 
 
 class Handler(BaseHTTPRequestHandler):
+    # Silence default access logs to keep test output clean.
+    # Set SAD_ECHO_SERVER_VERBOSE=1 to re-enable.
+    def log_message(self, format, *args):
+        if os.environ.get("SAD_ECHO_SERVER_VERBOSE"):
+            super().log_message(format, *args)
     def _send_json(self, payload: dict, status: int = 200):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
@@ -135,7 +140,19 @@ def main():
 
     host = os.environ.get("SAD_HOST", "127.0.0.1")
     port = int(os.environ.get("SAD_PORT", os.environ.get("PORT", "8080")))
-    ThreadingHTTPServer((host, port), Handler).serve_forever()
+
+    try:
+        server = ThreadingHTTPServer((host, port), Handler)
+    except OSError as exc:
+        # Tests may intentionally trigger binding errors.
+        if os.environ.get("SAD_ECHO_SERVER_VERBOSE"):
+            print(
+                f"echo_server failed to bind {host}:{port}: {exc}",
+                file=sys.stderr,
+            )
+        return 1
+
+    server.serve_forever()
 
 
 if __name__ == "__main__":

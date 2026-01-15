@@ -6,8 +6,16 @@ import time
 
 
 def emit(event):
-    sys.stdout.write(json.dumps(event) + "\n")
-    sys.stdout.flush()
+    try:
+        sys.stdout.write(json.dumps(event) + "\n")
+        sys.stdout.flush()
+    except BrokenPipeError:
+        # The consumer closed stdout early (expected in some tests).
+        # Exit quietly without a Python traceback.
+        try:
+            sys.stdout.close()
+        except Exception:
+            pass
 
 
 def main():
