@@ -61,6 +61,30 @@ pub fn status_message(status: Status, port: Int) -> String {
   }
 }
 
+/// Exit code for `serve --status`.
+///
+/// - Running -> 0
+/// - Not running -> 1
+pub fn status_exit_code(status: Status) -> Int {
+  case status {
+    Running(_) -> 0
+    NotRunning -> 1
+  }
+}
+
+/// Exit code for `serve -k/--kill`.
+///
+/// - Ok -> 0
+/// - No server -> 1
+/// - Operational error -> 2
+pub fn kill_exit_code(result: Result(Nil, KillError)) -> Int {
+  case result {
+    Ok(_) -> 0
+    Error(NoServer) -> 1
+    Error(_) -> 2
+  }
+}
+
 pub fn kill(pidfile_path: String, timeout_ms: Int) -> Result(Nil, KillError) {
   use pid <- result.try(
     read_pidfile(pidfile_path)
