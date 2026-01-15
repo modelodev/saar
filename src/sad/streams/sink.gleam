@@ -177,7 +177,7 @@ fn write_batch(
   events
   |> list.fold(Ok(Nil), fn(acc, event) {
     case acc {
-      Ok(_) -> writer_write(writer, data_frame(stream.payload(event)))
+      Ok(_) -> writer_write(writer, stream.payload(event))
       Error(err) -> Error(err)
     }
   })
@@ -185,10 +185,6 @@ fn write_batch(
 
 fn keep_alive_frame() -> String {
   ": keep-alive\n\n"
-}
-
-fn data_frame(payload: String) -> String {
-  "data: " <> payload <> "\n\n"
 }
 
 fn writer_write(writer: SseWriter, data: String) -> Result(Nil, CallError) {

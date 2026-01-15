@@ -16,7 +16,7 @@ import gleam/string
 
 /// A single streaming event payload.
 ///
-/// `payload` is the exact string written after `data: ` in SSE frames.
+/// `payload` is a fully formatted SSE frame (including the trailing blank line).
 pub opaque type StreamEvent {
   StreamEvent(payload: String)
 }
@@ -25,7 +25,7 @@ pub opaque type StreamEvent {
 ///
 /// Example:
 /// ```gleam
-/// stream.event("{\"type\":\"RUN_STARTED\"}")
+/// stream.event("data: {\"type\":\"RUN_STARTED\"}\n\n")
 /// ```
 pub fn event(payload: String) -> StreamEvent {
   StreamEvent(payload: payload)
