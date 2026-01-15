@@ -618,7 +618,7 @@ pub fn post_agents_interact_timeout_then_next_request_ok() {
   should.equal(string.contains(resp2.body, "\"trace_id\""), True)
 }
 
-pub fn post_agents_interact_streaming_a2ui_header_switches_wire() {
+pub fn post_agents_interact_streaming_a2ui_message_shape() {
   let base_url = start_sad()
 
   let instance_id = "inst-a2ui-1"
@@ -730,7 +730,7 @@ pub fn get_agent_card_auth_required() {
   resp.status |> should.equal(401)
 }
 
-pub fn post_a2a_message_send_auth_required() {
+pub fn post_a2a_send_auth_required() {
   let base_url = start_sad()
 
   let url = base_url <> "/instances/inst-a2a-send-auth-1/a2a/message:send"
@@ -749,7 +749,7 @@ pub fn post_a2a_message_send_auth_required() {
   resp.status |> should.equal(401)
 }
 
-pub fn post_a2a_message_stream_auth_required() {
+pub fn post_a2a_stream_auth_required() {
   let base_url = start_sad()
 
   let url = base_url <> "/instances/inst-a2a-stream-auth-1/a2a/message:stream"
@@ -766,6 +766,40 @@ pub fn post_a2a_message_stream_auth_required() {
     |> assert_ok
 
   resp.status |> should.equal(401)
+}
+
+pub fn post_a2a_message_send_unknown_instance_404() {
+  let base_url = start_sad()
+
+  let instance_id = "inst-a2a-send-missing-1"
+
+  let url = base_url <> "/instances/" <> instance_id <> "/a2a/message:send"
+
+  let body =
+    "{"
+    <> "\"message\":{"
+    <> "\"messageId\":\"msg-a2a-missing-1\","
+    <> "\"role\":\"user\","
+    <> "\"parts\":[{\"text\":\"hi\"}]"
+    <> "}"
+    <> "}"
+
+  let resp =
+    http_client.request_sync_string(
+      http.Post,
+      url,
+      dict.insert(auth_headers(), "content-type", "application/json"),
+      Some(body),
+      5000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp.status |> should.equal(404)
+
+  // A2A endpoints return RFC7807-like payloads.
+  should.equal(string.contains(resp.body, "\"type\""), True)
+  should.equal(string.contains(resp.body, "\"status\":404"), True)
 }
 
 pub fn post_a2a_message_send_ok() {
