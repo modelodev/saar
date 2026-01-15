@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": null,
+  "current_sprint": "S19",
   "sprints": {
     "S01": {
       "status": "completed",
@@ -548,6 +548,18 @@
         "S17-T03": {"status": "completed", "branch": "feat/s17-t03-serve-daemon-paths", "commit": "3b7f4de"},
         "S17-T04": {"status": "completed", "branch": "feat/s17-t04-tests-cli-daemon", "commit": "2b3e281"},
         "S17-T05": {"status": "completed", "branch": "feat/s17-t05-cli-entrypoint", "commit": "2c71b36"}
+      }
+    },
+    "S19": {
+      "status": "in_progress",
+      "branch": "sprint/s19-hardening-edge-git-robusto",
+      "started_at": "2026-01-15T21:42:05Z",
+      "completed_at": null,
+      "current_story": "S19-T01",
+      "stories": {
+        "S19-T01": {"status": "in_progress", "branch": "feat/s19-t01-expand-props"},
+        "S19-T02": {"status": "pending"},
+        "S19-T03": {"status": "pending"}
       }
     }
   }
