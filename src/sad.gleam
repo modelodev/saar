@@ -64,7 +64,6 @@ type BackgroundPlan {
     args: List(String),
     pidfile: String,
     logfile: String,
-    timeout_ms: Int,
   )
 }
 
@@ -199,17 +198,29 @@ fn server_host(cfg: types_config.SadConfig) -> String {
   host
 }
 
-fn serve_background(plan: BackgroundPlan) -> Result(Int, Nil) {
+fn effective_config_banner(
+  host: String,
+  port: Int,
+  config_path: String,
+) -> String {
+  "effective_config host="
+  <> host
+  <> " port="
+  <> int.to_string(port)
+  <> " config_path="
+  <> config_path
+}
+
+fn serve_background(plan: BackgroundPlan) -> Result(Nil, Nil) {
   let BackgroundPlan(
     program: program,
     args: args,
     pidfile: pidfile,
     logfile: logfile,
-    timeout_ms: _timeout_ms,
   ) = plan
 
   case daemon.daemonize(program, args, pidfile, logfile) {
-    Ok(_pid) -> Ok(exit_ok)
+    Ok(_pid) -> Ok(Nil)
     Error(_) -> Error(Nil)
   }
 }
@@ -269,16 +280,7 @@ fn plan_serve(
     Error(_) -> apply_port_override(types_config.default_sad_config(), cli_port)
   }
 
-  let host = server_host(cfg)
   let port = server_port(cfg)
-
-  let banner =
-    "effective_config host="
-    <> host
-    <> " port="
-    <> int.to_string(port)
-    <> " config_path="
-    <> resolved_config_path
 
   case mode {
     cli.Status -> {
@@ -302,9 +304,11 @@ fn plan_serve(
     }
 
     cli.Background -> {
+      let host = server_host(cfg)
+      let banner = effective_config_banner(host, port, resolved_config_path)
+
       let pidfile = daemon_paths.resolve_pidfile_path()
       let logfile = daemon_paths.resolve_logfile_path()
-      let timeout_ms = shutdown_timeout_ms(cfg)
       let args = background_args(port, resolved_config_path, cli_config)
 
       RunPlan(
@@ -316,12 +320,14 @@ fn plan_serve(
           args: args,
           pidfile: pidfile,
           logfile: logfile,
-          timeout_ms: timeout_ms,
         )),
       )
     }
 
-    cli.Foreground ->
+    cli.Foreground -> {
+      let host = server_host(cfg)
+      let banner = effective_config_banner(host, port, resolved_config_path)
+
       RunPlan(
         exit_ok,
         [banner],
@@ -331,6 +337,7 @@ fn plan_serve(
           config_path: resolved_config_path,
         )),
       )
+    }
   }
 }
 
