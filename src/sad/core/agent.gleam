@@ -13,6 +13,7 @@
 //// Relationships:
 //// - `sad/core/registry` stores and monitors `AgentRef` via `pid`.
 //// - Internal event injection uses the `internal_*` functions below.
+//// - Delegates pure lifecycle transitions to `sad/core/agent_lifecycle`.
 
 import gleam/dict
 import gleam/erlang/process
@@ -24,6 +25,7 @@ import gleam/string
 import sad/bridge/interaction
 import sad/bridge/port_owner
 import sad/core/artifact_registry_protocol
+import sad/core/agent_lifecycle as lifecycle
 import sad/ffi
 import sad/otp/safe_call
 import sad/streams/sink
@@ -38,133 +40,101 @@ import sad/types/profile as types_profile
 import sad/types/resolved_params.{type ResolvedParams}
 
 /// Opaque resource associated with a continuous agent.
-///
-/// In v0 this is a dedicated port owner process so stop/delete can reliably
-/// close the underlying wrapper port.
-pub opaque type AgentResource {
-  ContinuousServer(owner: port_owner.PortOwnerRef)
-}
-
-pub fn port_owner_resource(owner: port_owner.PortOwnerRef) -> AgentResource {
-  ContinuousServer(owner)
-}
+pub type AgentResource =
+  lifecycle.AgentResource
 
 /// Unified internal agent state.
-///
-/// This ADT makes illegal states unrepresentable.
-pub type AgentState {
-  Created(params: ResolvedParams)
-  Provisioning(params: ResolvedParams)
-  ReadyTransient(params: ResolvedParams)
-  ReadyContinuous(params: ResolvedParams, resource: AgentResource)
-  Stopped(params: ResolvedParams)
-  Failed(reason: types_agent.FailureReason)
+pub type AgentState =
+  lifecycle.AgentState
+
+/// Builds an agent resource from a port owner.
+pub fn port_owner_resource(owner: port_owner.PortOwnerRef) -> AgentResource {
+  lifecycle.port_owner_resource(owner)
 }
 
+/// Returns the Created state.
 pub fn agent_created(params: ResolvedParams) -> AgentState {
-  Created(params)
+  lifecycle.agent_created(params)
 }
 
+/// Returns the Provisioning state.
 pub fn agent_provisioning(params: ResolvedParams) -> AgentState {
-  Provisioning(params)
+  lifecycle.agent_provisioning(params)
 }
 
+/// Returns the ReadyTransient state.
 pub fn agent_ready_transient(params: ResolvedParams) -> AgentState {
-  ReadyTransient(params)
+  lifecycle.agent_ready_transient(params)
 }
 
+/// Returns the ReadyContinuous state.
 pub fn agent_ready_continuous(
   params: ResolvedParams,
   resource: AgentResource,
 ) -> AgentState {
-  ReadyContinuous(params, resource)
+  lifecycle.agent_ready_continuous(params, resource)
 }
 
+/// Returns the Stopped state.
 pub fn agent_stopped(params: ResolvedParams) -> AgentState {
-  Stopped(params)
+  lifecycle.agent_stopped(params)
 }
 
+/// Returns the Failed state.
 pub fn agent_failed(reason: types_agent.FailureReason) -> AgentState {
-  Failed(reason)
+  lifecycle.agent_failed(reason)
 }
 
+/// Returns True when the state is Created.
 pub fn is_created(state: AgentState) -> Bool {
-  case state {
-    Created(_) -> True
-    _ -> False
-  }
+  lifecycle.is_created(state)
 }
 
+/// Returns True when the state is Provisioning.
 pub fn is_provisioning(state: AgentState) -> Bool {
-  case state {
-    Provisioning(_) -> True
-    _ -> False
-  }
+  lifecycle.is_provisioning(state)
 }
 
+/// Returns True when the state is ready.
 pub fn is_ready(state: AgentState) -> Bool {
-  case state {
-    ReadyTransient(_) -> True
-    ReadyContinuous(_, _) -> True
-    _ -> False
-  }
+  lifecycle.is_ready(state)
 }
 
+/// Returns True when the state is ReadyTransient.
 pub fn is_ready_transient(state: AgentState) -> Bool {
-  case state {
-    ReadyTransient(_) -> True
-    _ -> False
-  }
+  lifecycle.is_ready_transient(state)
 }
 
+/// Returns True when the state is ReadyContinuous.
 pub fn is_ready_continuous(state: AgentState) -> Bool {
-  case state {
-    ReadyContinuous(_, _) -> True
-    _ -> False
-  }
+  lifecycle.is_ready_continuous(state)
 }
 
+/// Returns True when the state is Stopped.
 pub fn is_stopped(state: AgentState) -> Bool {
-  case state {
-    Stopped(_) -> True
-    _ -> False
-  }
+  lifecycle.is_stopped(state)
 }
 
+/// Returns True when the state is Failed.
 pub fn is_failed(state: AgentState) -> Bool {
-  case state {
-    Failed(_) -> True
-    _ -> False
-  }
+  lifecycle.is_failed(state)
 }
 
+/// Returns the failure reason if present.
 pub fn get_failure_reason(
   state: AgentState,
 ) -> option.Option(types_agent.FailureReason) {
-  case state {
-    Failed(reason) -> option.Some(reason)
-    _ -> option.None
-  }
+  lifecycle.get_failure_reason(state)
 }
 
+/// Returns the continuous resource if present.
 pub fn get_resource(state: AgentState) -> option.Option(AgentResource) {
-  case state {
-    ReadyContinuous(_, resource) -> option.Some(resource)
-    _ -> option.None
-  }
+  lifecycle.get_resource(state)
 }
 
+/// Returns the parameters for states that carry them.
 pub fn get_params(state: AgentState) -> option.Option(ResolvedParams) {
-  case state {
-    Created(params)
-    | Provisioning(params)
-    | ReadyTransient(params)
-    | Stopped(params) -> option.Some(params)
-
-    ReadyContinuous(params, _) -> option.Some(params)
-
-    Failed(_) -> option.None
-  }
+  lifecycle.get_params(state)
 }
 
 /// Publicly safe request representation used by the AgentActor.
@@ -394,8 +364,7 @@ pub fn default_deps() -> AgentDeps {
     },
     cancel_interaction: fn(pid) { process.kill(pid) },
     stop_server: fn(resource) {
-      let ContinuousServer(owner: owner) = resource
-      port_owner.stop_async(owner)
+      port_owner.stop_async(lifecycle.port_owner_ref(resource))
     },
   )
 }
@@ -522,12 +491,12 @@ fn handle_message(
 
 fn to_status_view(state: AgentRuntimeState) -> types_agent.AgentStatusView {
   let phase = case state.state {
-    Created(_) -> types_agent.Created
-    Provisioning(_) -> types_agent.Provisioning
-    ReadyTransient(_) -> types_agent.ReadyTransient
-    ReadyContinuous(_, _) -> types_agent.ReadyContinuous
-    Stopped(_) -> types_agent.Stopped
-    Failed(reason) -> types_agent.Failed(reason)
+    lifecycle.Created(_) -> types_agent.Created
+    lifecycle.Provisioning(_) -> types_agent.Provisioning
+    lifecycle.ReadyTransient(_) -> types_agent.ReadyTransient
+    lifecycle.ReadyContinuous(_, _) -> types_agent.ReadyContinuous
+    lifecycle.Stopped(_) -> types_agent.Stopped
+    lifecycle.Failed(reason) -> types_agent.Failed(reason)
   }
 
   let mode = case state.mode {
@@ -603,10 +572,7 @@ fn handle_provisioning_done(
   state: AgentRuntimeState,
   outcome: Result(#(AgentState, option.Option(Int)), types_agent.FailureReason),
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
-  let #(next_state, assigned_port) = case outcome {
-    Ok(#(state, port)) -> #(state, port)
-    Error(reason) -> #(agent_failed(reason), option.None)
-  }
+  let #(next_state, assigned_port) = lifecycle.on_provisioning_done(outcome)
 
   actor.continue(
     AgentRuntimeState(..state, state: next_state, assigned_port: assigned_port),
@@ -636,8 +602,8 @@ fn handle_interact(
     }
 
     Idle ->
-      case is_ready(state.state) {
-        False -> {
+      case lifecycle.can_interact(state.state) {
+        lifecycle.RejectNotReady -> {
           let err =
             types_output.sad_error(
               context.trace_id,
@@ -648,7 +614,7 @@ fn handle_interact(
           actor.continue(state)
         }
 
-        True -> start_interaction(state, req, stream_mode, reply_to)
+        lifecycle.Allow(_) -> start_interaction(state, req, stream_mode, reply_to)
       }
   }
 }
@@ -889,10 +855,10 @@ fn handle_stop_instance(
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
   let state = cancel_if_busy(state, "cancelled")
 
-  let #(params, maybe_resource) = case state.state {
-    ReadyContinuous(params, resource) -> #(params, option.Some(resource))
-    _ -> #(get_params(state.state) |> option.unwrap(dict.new()), option.None)
-  }
+  let lifecycle.StopDecision(
+    next_state: next_state,
+    resource_to_stop: maybe_resource,
+  ) = lifecycle.on_stop_instance(state.state)
 
   case maybe_resource {
     option.Some(resource) -> {
@@ -905,7 +871,7 @@ fn handle_stop_instance(
   actor.continue(
     AgentRuntimeState(
       ..state,
-      state: agent_stopped(params),
+      state: next_state,
       assigned_port: option.None,
     ),
   )
@@ -932,11 +898,7 @@ fn cancel_if_busy(state: AgentRuntimeState, code: String) -> AgentRuntimeState {
 fn handle_start_instance(
   state: AgentRuntimeState,
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
-  let next_state = case state.state {
-    Created(params) -> agent_provisioning(params)
-    Stopped(params) -> agent_provisioning(params)
-    _ -> state.state
-  }
+  let next_state = lifecycle.on_start_instance(state.state)
 
   actor.continue(AgentRuntimeState(..state, state: next_state))
 }
@@ -947,7 +909,7 @@ fn handle_server_died(
 ) -> actor.Next(AgentRuntimeState, AgentMsg) {
   let state = cancel_if_busy(state, "cancelled")
   actor.continue(
-    AgentRuntimeState(..state, state: agent_failed(types_agent.ServerDied)),
+    AgentRuntimeState(..state, state: lifecycle.on_server_died()),
   )
 }
 
@@ -958,7 +920,7 @@ fn handle_terminate(
   let state = cancel_if_busy(state, "cancelled")
 
   case state.state {
-    ReadyContinuous(_, resource) -> {
+    lifecycle.ReadyContinuous(_, resource) -> {
       let AgentDeps(stop_server: stop_server, ..) = state.deps
       stop_server(resource)
     }
