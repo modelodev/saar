@@ -128,6 +128,11 @@ pub fn start(
 
   supervisor.start(spec)
   |> result.map(fn(started) {
+    process.send(
+      gateway_shutdown_subject,
+      gateway_shutdown.SetRootSupervisorPid(started.pid),
+    )
+
     actor.Started(
       pid: started.pid,
       data: SupervisorRef(

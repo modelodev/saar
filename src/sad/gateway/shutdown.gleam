@@ -29,6 +29,7 @@ import sad/daemon_paths
 import sad/ffi
 import sad/otp/safe_call
 import sad/types/config as types_config
+import simplifile
 
 pub type Msg {
   /// Internal: configured at startup so the shutdown worker can force-stop.
@@ -184,6 +185,9 @@ fn run_shutdown_worker(
 
   wait_for_shutdown(deadline_ms, shutdown, registry, root_supervisor_pid)
 
+  // PID file cleanup is best-effort.
+  let _ = simplifile.delete(file_or_dir_at: pidfile_path)
+
   let _ = init_stop()
   Nil
 }
@@ -194,14 +198,31 @@ fn wait_for_shutdown(
   registry: process.Subject(messages.RegistryMsg),
   root_supervisor_pid: Option(process.Pid),
 ) -> Nil {
-  let inflight = current_inflight(shutdown)
+  let remaining_ms = deadline_ms - ffi.now_ms()
 
-  case inflight == 0 {
-    True -> Nil
+  case remaining_ms <= 0 {
+    True -> {
+      force_kill(root_supervisor_pid)
+      Nil
+    }
 
     False -> {
-      process.sleep(50)
-      wait_for_shutdown(deadline_ms, shutdown, registry, root_supervisor_pid)
+      let inflight = current_inflight(shutdown)
+      let agents_done = shutdown_all.all_instances_stopped(registry, 250)
+
+      case inflight == 0 && agents_done {
+        True -> Nil
+
+        False -> {
+          process.sleep(50)
+          wait_for_shutdown(
+            deadline_ms,
+            shutdown,
+            registry,
+            root_supervisor_pid,
+          )
+        }
+      }
     }
   }
 }
@@ -209,6 +230,13 @@ fn wait_for_shutdown(
 fn current_inflight(shutdown: process.Subject(Msg)) -> Int {
   safe_call.call_within(shutdown, 100, fn(reply_to) { GetInFlight(reply_to) })
   |> result.unwrap(0)
+}
+
+fn force_kill(root_supervisor_pid: Option(process.Pid)) -> Nil {
+  case root_supervisor_pid {
+    Some(pid) -> process.kill(pid)
+    None -> Nil
+  }
 }
 
 @external(erlang, "init", "stop")

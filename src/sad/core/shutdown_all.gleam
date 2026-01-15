@@ -45,6 +45,27 @@ pub fn send_terminate_to_all(
   Nil
 }
 
+/// Returns `True` if all registry entries are stopped.
+///
+/// The registry keeps stopped instances for diagnostics; during shutdown we
+/// consider the system drained once every instance phase is `Stopped` or `Failed`.
+/// Listing failures are treated as drained (best-effort shutdown).
+pub fn all_instances_stopped(
+  registry: process.Subject(messages.RegistryMsg),
+  timeout_ms: Int,
+) -> Bool {
+  list_instances(registry, timeout_ms)
+  |> list.all(fn(summary) {
+    let types_agent.InstanceSummary(status: status, ..) = summary
+    let types_agent.AgentStatusView(phase: phase, ..) = status
+
+    case phase {
+      types_agent.Stopped | types_agent.Failed(_) -> True
+      _ -> False
+    }
+  })
+}
+
 fn list_instances(
   registry: process.Subject(messages.RegistryMsg),
   timeout_ms: Int,
