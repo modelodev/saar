@@ -25,6 +25,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import sad/adapters/a2a
 import sad/adapters/a2ui
 import sad/adapters/agui
 import sad/artifacts
@@ -192,7 +193,32 @@ fn execute_runner_sync(
 }
 
 type StreamFlags {
-  StreamFlags(agui_state: agui.AgUiState, a2ui_started: Bool)
+  AguiFlags(agui.AgUiState)
+  A2uiFlags(started: Bool)
+  A2aFlags(a2a.A2aStreamState)
+}
+
+fn init_a2a_flags(
+  pump: stream_pump.StreamPump,
+  input: types_input.SadInput,
+  extensions: a2a.Extensions,
+) -> StreamFlags {
+  let context_id = case dict.get(input.context.extra, "context_id") {
+    Ok(value) -> value
+    Error(_) -> types_core.trace_id_to_string(input.context.trace_id)
+  }
+
+  let state0 = a2a.new_stream(input.context.trace_id, context_id, extensions)
+
+  let #(state, events) =
+    a2a.convert_stream(
+      state0,
+      a2a.StreamStarted(task_id: input.context.trace_id, context_id: context_id),
+    )
+
+  events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
+
+  A2aFlags(state)
 }
 
 fn execute_runner_streaming(
@@ -215,22 +241,22 @@ fn execute_runner_streaming(
   let done = process.new_subject()
   let pump = stream_pump.start(done, Some(stream_sink), pump_cfg)
 
-  let flags0 = StreamFlags(agui_state: agui.new(), a2ui_started: False)
-
-  // Emit protocol start eagerly.
+  // Emit protocol start eagerly and initialize protocol state.
   let flags = case sink.protocol(stream_sink) {
     sink.AgUi -> {
       let #(agui_state, events) =
-        agui.convert(
-          flags0.agui_state,
-          agui.StreamStarted(input.context.trace_id),
-        )
+        agui.convert(agui.new(), agui.StreamStarted(input.context.trace_id))
 
       events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
 
-      StreamFlags(agui_state: agui_state, a2ui_started: False)
+      AguiFlags(agui_state)
     }
-    sink.A2uiV08 -> flags0
+
+    sink.A2uiV08 -> A2uiFlags(started: False)
+
+    sink.A2a -> init_a2a_flags(pump, input, a2a.NoExtensions)
+
+    sink.A2aA2uiV08 -> init_a2a_flags(pump, input, a2a.A2uiV08)
   }
 
   let #(runner_path, runner_args) = runner_command(input.runner_def, config)
@@ -293,7 +319,6 @@ fn execute_runner_streaming(
     proc,
     read_timeout_ms,
     input,
-    stream_sink,
     pump,
     flags,
     config,
@@ -306,7 +331,6 @@ fn read_runner_stream(
   proc: port_process.PortProcess,
   read_timeout_ms: Int,
   input: types_input.SadInput,
-  stream_sink: sink.StreamSink,
   pump: stream_pump.StreamPump,
   flags: StreamFlags,
   config: types_config.SadConfig,
@@ -323,7 +347,6 @@ fn read_runner_stream(
         proc,
         read_timeout_ms,
         input,
-        stream_sink,
         pump,
         flags,
         config,
@@ -368,7 +391,6 @@ fn read_runner_stream(
               proc,
               read_timeout_ms,
               input,
-              stream_sink,
               pump,
               flags,
               config,
@@ -377,19 +399,11 @@ fn read_runner_stream(
             )
 
           types_runner.RunnerEventChunk(delta) -> {
-            let flags =
-              emit_chunk(
-                pump,
-                stream_sink,
-                input.context.trace_id,
-                delta,
-                flags,
-              )
+            let flags = emit_chunk(pump, input.context.trace_id, delta, flags)
             read_runner_stream(
               proc,
               read_timeout_ms,
               input,
-              stream_sink,
               pump,
               flags,
               config,
@@ -409,13 +423,7 @@ fn read_runner_stream(
                 instance_id,
               )
 
-            emit_terminal(
-              pump,
-              stream_sink,
-              input.context.trace_id,
-              final,
-              flags,
-            )
+            emit_terminal(pump, input.context.trace_id, final, flags)
             stream_pump.finish(pump, final)
             final
           }
@@ -433,47 +441,48 @@ fn read_runner_stream(
 
 fn emit_chunk(
   pump: stream_pump.StreamPump,
-  stream_sink: sink.StreamSink,
   trace_id: types_core.TraceId,
   delta: String,
   flags: StreamFlags,
 ) -> StreamFlags {
-  let StreamFlags(agui_state: agui_state, a2ui_started: a2ui_started) = flags
-
-  case sink.protocol(stream_sink) {
-    sink.AgUi -> {
+  case flags {
+    AguiFlags(agui_state) -> {
       let #(agui_state, events) =
         agui.convert(agui_state, agui.ContentChunk(delta))
       events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
-      StreamFlags(agui_state: agui_state, a2ui_started: a2ui_started)
+      AguiFlags(agui_state)
     }
 
-    sink.A2uiV08 -> {
-      case a2ui_started {
+    A2uiFlags(started) -> {
+      case started {
         False -> stream_pump.push(pump, a2ui.begin_rendering(trace_id))
         True -> Nil
       }
 
       stream_pump.push(pump, a2ui.data_model_update(trace_id, delta))
-      StreamFlags(agui_state: agui_state, a2ui_started: True)
+      A2uiFlags(started: True)
+    }
+
+    A2aFlags(state) -> {
+      let #(next, events) = a2a.convert_stream(state, a2a.ContentChunk(delta))
+      events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
+      A2aFlags(next)
     }
   }
 }
 
 fn emit_terminal(
   pump: stream_pump.StreamPump,
-  stream_sink: sink.StreamSink,
   trace_id: types_core.TraceId,
   result: Result(types_output.InteractionResult, types_output.InteractionError),
   flags: StreamFlags,
 ) -> Nil {
-  case sink.protocol(stream_sink) {
-    sink.A2uiV08 -> Nil
+  case flags {
+    A2uiFlags(_) -> Nil
 
-    sink.AgUi ->
+    AguiFlags(agui_state) ->
       case result {
         Ok(ok) -> {
-          let StreamFlags(agui_state: agui_state, ..) = flags
           let #(_next_state, events) =
             agui.convert(
               agui_state,
@@ -484,9 +493,24 @@ fn emit_terminal(
         }
 
         Error(err) -> {
-          let StreamFlags(agui_state: agui_state, ..) = flags
           let #(_next_state, events) =
             agui.convert(agui_state, agui.StreamError(err))
+          events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
+          Nil
+        }
+      }
+
+    A2aFlags(state) ->
+      case result {
+        Ok(ok) -> {
+          let #(_next, events) =
+            a2a.convert_stream(state, a2a.StreamFinished(ok.artifacts))
+          events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
+          Nil
+        }
+
+        Error(err) -> {
+          let #(_next, events) = a2a.convert_stream(state, a2a.StreamError(err))
           events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
           Nil
         }

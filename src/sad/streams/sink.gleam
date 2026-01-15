@@ -25,6 +25,8 @@ import sad/types/stream
 pub type WireProtocol {
   AgUi
   A2uiV08
+  A2a
+  A2aA2uiV08
 }
 
 /// Minimal interface required to write SSE frames.

@@ -27,7 +27,7 @@ import gleam/http/response
 import gleam/int
 import gleam/json
 import gleam/list
-import gleam/option.{type Option, None, Some}
+import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
 import gleam/yielder
@@ -38,6 +38,7 @@ import sad/decoders
 import sad/gateway/lookup
 import sad/gateway/lookup_http
 import sad/gateway/problem
+import sad/gateway/request_url
 import sad/otp/safe_call
 import sad/profiles_sources
 import sad/types/agent as types_agent
@@ -811,33 +812,7 @@ fn a2a_base_url(
   req: request.Request(mist.Connection),
   instance_id: types_core.InstanceId,
 ) -> String {
-  let suffix =
-    "/instances/" <> types_core.instance_id_to_string(instance_id) <> "/"
-
-  case request_base_url(req) {
-    Some(base) -> base <> suffix
-    None -> suffix
-  }
-}
-
-fn request_base_url(req: request.Request(mist.Connection)) -> Option(String) {
-  let forwarded_proto = request.get_header(req, "x-forwarded-proto")
-  let forwarded_host = request.get_header(req, "x-forwarded-host")
-
-  case forwarded_proto, forwarded_host {
-    Ok(proto), Ok(host) -> Some(proto <> "://" <> host)
-    _, _ -> {
-      let proto = case forwarded_proto {
-        Ok(p) -> p
-        Error(_) -> http.scheme_to_string(req.scheme)
-      }
-
-      case request.get_header(req, "host") {
-        Ok(host) -> Some(proto <> "://" <> host)
-        Error(_) -> Some(proto <> "://" <> req.host)
-      }
-    }
-  }
+  request_url.a2a_base_url(req, instance_id)
 }
 
 fn json_response(
