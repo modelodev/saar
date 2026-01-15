@@ -1,4 +1,4 @@
--module(daemon).
+-module(sad_daemon).
 
 -export([
     daemonize/4,

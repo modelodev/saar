@@ -30,7 +30,6 @@ pub type Status {
 
 pub type KillError {
   NoServer
-  InvalidPidfile
   KillFailed(daemon.DaemonError)
 }
 
