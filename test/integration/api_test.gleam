@@ -768,6 +768,40 @@ pub fn post_a2a_stream_auth_required() {
   resp.status |> should.equal(401)
 }
 
+pub fn post_a2a_message_send_unknown_instance_404() {
+  let base_url = start_sad()
+
+  let instance_id = "inst-a2a-send-missing-1"
+
+  let url = base_url <> "/instances/" <> instance_id <> "/a2a/message:send"
+
+  let body =
+    "{"
+    <> "\"message\":{"
+    <> "\"messageId\":\"msg-a2a-missing-1\","
+    <> "\"role\":\"user\","
+    <> "\"parts\":[{\"text\":\"hi\"}]"
+    <> "}"
+    <> "}"
+
+  let resp =
+    http_client.request_sync_string(
+      http.Post,
+      url,
+      dict.insert(auth_headers(), "content-type", "application/json"),
+      Some(body),
+      5000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp.status |> should.equal(404)
+
+  // A2A endpoints return RFC7807-like payloads.
+  should.equal(string.contains(resp.body, "\"type\""), True)
+  should.equal(string.contains(resp.body, "\"status\":404"), True)
+}
+
 pub fn post_a2a_message_send_ok() {
   let base_url = start_sad()
 
