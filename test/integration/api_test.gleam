@@ -618,7 +618,7 @@ pub fn post_agents_interact_timeout_then_next_request_ok() {
   should.equal(string.contains(resp2.body, "\"trace_id\""), True)
 }
 
-pub fn post_agents_interact_streaming_a2ui_header_switches_wire() {
+pub fn post_agents_interact_streaming_a2ui_message_shape() {
   let base_url = start_sad()
 
   let instance_id = "inst-a2ui-1"
@@ -730,7 +730,7 @@ pub fn get_agent_card_auth_required() {
   resp.status |> should.equal(401)
 }
 
-pub fn post_a2a_message_send_auth_required() {
+pub fn post_a2a_send_auth_required() {
   let base_url = start_sad()
 
   let url = base_url <> "/instances/inst-a2a-send-auth-1/a2a/message:send"
@@ -749,7 +749,7 @@ pub fn post_a2a_message_send_auth_required() {
   resp.status |> should.equal(401)
 }
 
-pub fn post_a2a_message_stream_auth_required() {
+pub fn post_a2a_stream_auth_required() {
   let base_url = start_sad()
 
   let url = base_url <> "/instances/inst-a2a-stream-auth-1/a2a/message:stream"
