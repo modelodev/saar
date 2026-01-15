@@ -56,6 +56,7 @@ pub fn manager_restart_does_not_orphan_port_pool_reservations_test() {
     _profiles_name,
     agent_manager_name,
     _agent_factory_name,
+    _gateway_shutdown_name,
   ) = names
 
   let manager = process.named_subject(agent_manager_name)

@@ -138,6 +138,26 @@ pub fn infra_error_with_status(
   )
 }
 
+/// Returns an infra error response with a stable `extensions.code`.
+pub fn infra_error_with_code(
+  status: Int,
+  trace_id: types_core.TraceId,
+  instance: String,
+  detail: String,
+  code: String,
+) -> response.Response(mist.ResponseData) {
+  build(
+    status: status,
+    title: http_title(status),
+    type_url: "https://sad/errors/infra-error",
+    detail: detail,
+    instance: instance,
+    kind: types_enums.error_kind_to_string(types_enums.InfraError),
+    trace_id: types_core.trace_id_to_string(trace_id),
+    code: option.Some(code),
+  )
+}
+
 /// Maps a `safe_call.CallError` into a Problem Details response.
 pub fn from_call_error(
   err: safe_call.CallError,

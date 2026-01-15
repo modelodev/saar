@@ -32,8 +32,15 @@ pub fn start_agent_same_key_one_wins_test() {
   let assert Ok(actor.Started(data: _ref, ..)) =
     root_supervisor.start(state, names)
 
-  let supervisor_names.RootNames(registry_name, _, _, _, agent_manager_name, _) =
-    names
+  let supervisor_names.RootNames(
+    registry_name,
+    _,
+    _,
+    _,
+    agent_manager_name,
+    _,
+    _,
+  ) = names
 
   let registry = process.named_subject(registry_name)
   let manager = process.named_subject(agent_manager_name)
@@ -94,8 +101,15 @@ pub fn create_agent_profile_not_found_test() {
 
   let assert Ok(actor.Started(..)) = root_supervisor.start(state, names)
 
-  let supervisor_names.RootNames(_, _, _, _profiles_name, agent_manager_name, _) =
-    names
+  let supervisor_names.RootNames(
+    _,
+    _,
+    _,
+    _profiles_name,
+    agent_manager_name,
+    _,
+    _,
+  ) = names
 
   let manager = process.named_subject(agent_manager_name)
 
@@ -132,6 +146,7 @@ pub fn create_agent_uses_profiles_actor_test() {
     _,
     profiles_name,
     agent_manager_name,
+    _,
     _,
   ) = names
 
@@ -207,8 +222,15 @@ pub fn start_agent_registration_failed_rolls_back_test() {
   let assert Ok(actor.Started(data: _ref, ..)) =
     root_supervisor.start(state, names)
 
-  let supervisor_names.RootNames(registry_name, _, _, _, agent_manager_name, _) =
-    names
+  let supervisor_names.RootNames(
+    registry_name,
+    _,
+    _,
+    _,
+    agent_manager_name,
+    _,
+    _,
+  ) = names
 
   let registry = process.named_subject(registry_name)
   let manager = process.named_subject(agent_manager_name)

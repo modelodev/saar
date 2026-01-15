@@ -33,6 +33,7 @@ import sad/core/profiles
 import sad/core/registry
 import sad/core/supervisor_names
 import sad/gateway/http_server
+import sad/gateway/shutdown as gateway_shutdown
 import sad/types/config as types_config
 import sad/types/core as types_core
 import sad/types/profile as types_profile
@@ -52,6 +53,7 @@ pub opaque type SupervisorRef {
       messages.StartArgs,
       agent.AgentRef,
     ),
+    gateway_shutdown: process.Subject(gateway_shutdown.Msg),
   )
 }
 
@@ -70,6 +72,7 @@ pub fn start(
     profiles_name,
     agent_manager_name,
     agent_factory_name,
+    gateway_shutdown_name,
   ) = names
 
   let registry_subject = process.named_subject(registry_name)
@@ -77,6 +80,7 @@ pub fn start(
   let port_pool_subject = process.named_subject(port_pool_name)
   let profiles_subject = process.named_subject(profiles_name)
   let agent_manager_subject = process.named_subject(agent_manager_name)
+  let gateway_shutdown_subject = process.named_subject(gateway_shutdown_name)
 
   let agent_factory = factory_supervisor.get_by_name(agent_factory_name)
 
@@ -108,12 +112,18 @@ pub fn start(
       agent_factory,
     ))
     |> supervisor.add(agent_factory_child_spec(agent_factory_name))
+    |> supervisor.add(gateway_shutdown_child_spec(
+      gateway_shutdown_name,
+      config,
+      registry_subject,
+    ))
     |> supervisor.add(http_server_child_spec(
       config,
       registry_subject,
       artifact_registry_subject,
       profiles_subject,
       agent_manager_subject,
+      gateway_shutdown_subject,
     ))
 
   supervisor.start(spec)
@@ -128,6 +138,7 @@ pub fn start(
         profiles: profiles_subject,
         agent_manager: agent_manager_subject,
         agent_factory: agent_factory,
+        gateway_shutdown: gateway_shutdown_subject,
       ),
     )
   })
@@ -200,6 +211,14 @@ fn agent_factory_child_spec(
   supervision.supervisor(fn() { agent_factory_supervisor.start(name) })
 }
 
+fn gateway_shutdown_child_spec(
+  name: process.Name(gateway_shutdown.Msg),
+  config: types_config.SadConfig,
+  registry: process.Subject(messages.RegistryMsg),
+) -> supervision.ChildSpecification(process.Subject(gateway_shutdown.Msg)) {
+  supervision.worker(fn() { gateway_shutdown.start(name, config, registry) })
+}
+
 fn http_server_child_spec(
   config: types_config.SadConfig,
   registry: process.Subject(messages.RegistryMsg),
@@ -208,6 +227,7 @@ fn http_server_child_spec(
   ),
   profiles: process.Subject(messages.ProfilesMsg),
   agent_manager: process.Subject(messages.AgentManagerMsg),
+  gateway_shutdown: process.Subject(gateway_shutdown.Msg),
 ) -> supervision.ChildSpecification(Nil) {
   supervision.worker(fn() {
     http_server.start(
@@ -216,6 +236,7 @@ fn http_server_child_spec(
       artifact_registry,
       profiles,
       agent_manager,
+      gateway_shutdown,
     )
   })
 }
@@ -254,4 +275,11 @@ pub fn agent_factory(
   ref: SupervisorRef,
 ) -> factory_supervisor.Supervisor(messages.StartArgs, agent.AgentRef) {
   ref.agent_factory
+}
+
+/// Returns the gateway shutdown subject.
+pub fn gateway_shutdown(
+  ref: SupervisorRef,
+) -> process.Subject(gateway_shutdown.Msg) {
+  ref.gateway_shutdown
 }

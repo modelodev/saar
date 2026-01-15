@@ -17,6 +17,7 @@ import gleam/otp/factory_supervisor
 import sad/core/agent
 import sad/core/artifact_registry_protocol
 import sad/core/messages
+import sad/gateway/shutdown as gateway_shutdown
 import youid/uuid
 
 /// Process names required to boot the core OTP tree.
@@ -35,6 +36,7 @@ pub type RootNames {
     agent_factory: process.Name(
       factory_supervisor.Message(messages.StartArgs, agent.AgentRef),
     ),
+    gateway_shutdown: process.Name(gateway_shutdown.Msg),
   )
 }
 
@@ -46,6 +48,7 @@ pub fn new_names() -> RootNames {
     profiles: process.new_name("sad_profiles"),
     agent_manager: process.new_name("sad_agent_manager"),
     agent_factory: process.new_name("sad_agent_factory"),
+    gateway_shutdown: process.new_name("sad_gateway_shutdown"),
   )
 }
 
@@ -65,5 +68,6 @@ pub fn new_names_with_suffix(suffix: String) -> RootNames {
     profiles: process.new_name("sad_profiles_" <> unique),
     agent_manager: process.new_name("sad_agent_manager_" <> unique),
     agent_factory: process.new_name("sad_agent_factory_" <> unique),
+    gateway_shutdown: process.new_name("sad_gateway_shutdown_" <> unique),
   )
 }

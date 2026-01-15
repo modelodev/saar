@@ -33,7 +33,9 @@ RootSupervisor (RestForOne, Permanent)
 ├── RegistryActor (Permanent)
 │   - SSOT de instancias activas (InstanceId → AgentRef)
 │   - Si crashea, **no intentamos rehidratar** el índice en v0
-│   - Por diseño, su caída provoca (RestForOne) la terminación del subtree dependiente (ProfilesActor + AgentManagerActor + AgentFactorySupervisor + agentes + HttpServer): evita “agentes fantasma”
+│   - Por diseño, su caída provoca (RestForOne) la terminación del subtree dependiente
+│     (ProfilesActor + AgentManagerActor + AgentFactorySupervisor + agentes + GatewayShutdown + HttpServer):
+│     evita “agentes fantasma”
 ├── ArtifactRegistry (Permanent)
 │   - Whitelist en memoria para servir `/artifacts/:artifact_id` (ArtifactId → #(InstanceId, WorkspacePath, mime))
 │   - No monitorea agentes (cleanup explícito)
@@ -51,8 +53,13 @@ RootSupervisor (RestForOne, Permanent)
 ├── AgentFactorySupervisor (Permanent)
 │   - `factory_supervisor` nombrado para crear `AgentActor` dinámicamente
 │   - Children con `restart_strategy=Temporary` (sin auto-restart)
+├── GatewayShutdown (Permanent)
+│   - Coordinador de graceful shutdown del gateway.
+│   - Activa "drain" y espera a que se vacíen las requests in-flight (best-effort).
+│   - Recibe el evento SIGTERM reenviado y dispara el flujo de parada global.
 └── HttpServer (Permanent)
     - Gateway HTTP (SSE).
+    - Consulta a `GatewayShutdown` por request para rechazar con 503 durante drain.
     - Se arranca al final para apagarse primero (dejar de aceptar conexiones antes de detener el core).
 ```
 
@@ -72,11 +79,11 @@ RootSupervisor (RestForOne, Permanent)
 
 | Supervisor | Estrategia | Justificación |
 |------------|------------|---------------|
-| Root | RestForOne | Si cae Registry o ArtifactRegistry, reinicia el subtree dependiente (`ProfilesActor` + `AgentManagerActor` + `AgentFactorySupervisor` + agentes + `HttpServer`); si cae `AgentManagerActor`, reinicia su subtree dependiente (`AgentFactorySupervisor` + agentes + `HttpServer`) |
+| Root | RestForOne | Si cae Registry o ArtifactRegistry, reinicia el subtree dependiente (`ProfilesActor` + `AgentManagerActor` + `AgentFactorySupervisor` + agentes + `GatewayShutdown` + `HttpServer`); si cae `AgentManagerActor`, reinicia su subtree dependiente (`AgentFactorySupervisor` + agentes + `GatewayShutdown` + `HttpServer`) |
 
-Hijos declarados en ese orden (Registry -> ArtifactRegistry -> PortPoolActor -> ProfilesActor -> AgentManagerActor -> AgentFactorySupervisor -> HttpServer) para que RestForOne reinicie dependencias sin cascadas innecesarias y para evitar “agentes huérfanos”.
+Hijos declarados en ese orden (Registry -> ArtifactRegistry -> PortPoolActor -> ProfilesActor -> AgentManagerActor -> AgentFactorySupervisor -> GatewayShutdown -> HttpServer) para que RestForOne reinicie dependencias sin cascadas innecesarias y para evitar “agentes huérfanos”.
 
-**Invariante (consistencia):** si el `RegistryActor` pierde estado (crash+restart), SAD no permite que queden agentes vivos “invisibles” para el índice. La estrategia elegida (RestForOne con Registry antes del subtree dependiente: `ProfilesActor` + `AgentManagerActor` + `AgentFactorySupervisor` + agentes + `HttpServer`) garantiza que la caída del Registry tumba ese subtree. La reconciliación/recreación es responsabilidad de SAM.
+**Invariante (consistencia):** si el `RegistryActor` pierde estado (crash+restart), SAD no permite que queden agentes vivos “invisibles” para el índice. La estrategia elegida (RestForOne con Registry antes del subtree dependiente: `ProfilesActor` + `AgentManagerActor` + `AgentFactorySupervisor` + agentes + `GatewayShutdown` + `HttpServer`) garantiza que la caída del Registry tumba ese subtree. La reconciliación/recreación es responsabilidad de SAM.
 Además, al declarar `AgentManagerActor` antes del `AgentFactorySupervisor`, si el manager crashea entre `start_child` y `registry.register`, el `RestForOne` tumba el factory (y por tanto los agentes) y no puede quedar un proceso “vivo pero no registrado”.
 
 ### 1.2 Política de Reinicio

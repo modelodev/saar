@@ -215,11 +215,18 @@ sad serve --status
 4. Proceso padre termina inmediatamente
 
 **Comportamiento de `-k` (kill):**
-1. Lee PID de `~/.sad/sad.pid`
+1. Lee PID de `~/.sad/sad.pid` (o `$SAD_PID_FILE`)
 2. Envía `SIGTERM` al proceso **SAD** (no a runners)
-3. Espera hasta 10s a que termine
+3. Espera hasta `limits.shutdown_timeout_ms` (default 10s) a que termine
 4. Si no termina, envía `SIGKILL`
-5. Elimina PID file
+
+**Notas:**
+- Exit code: `0` si no hay proceso o si se detuvo; `2` en error operacional.
+- El PID file se elimina como parte del flujo de shutdown del servidor (best-effort).
+
+**SIGTERM handler (graceful shutdown):**
+- SAD reemplaza el handler por defecto de Erlang para SIGTERM (`sad/ffi/signals.gleam` + `sad/ffi/sad_signal_handler.erl`) y reenvía el evento al proceso `GatewayShutdown`.
+- El gateway entra en modo *drain* y puede devolver 503 `shutting_down` a nuevas requests antes de parar el VM.
 
 ### 3.2 Herramientas (no requieren servidor)
 
