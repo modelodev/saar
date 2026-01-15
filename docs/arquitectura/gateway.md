@@ -60,6 +60,18 @@ En Gleam/OTP, `actor.call`/`process.call` son **fail-fast**: si el callee muere 
 
 Referencia (v0): `arquitectura/examples/snippets/otp_safe_call.gleam`.
 
+## 3.4 Graceful shutdown (drain)
+
+Durante shutdown (por SIGTERM o por `sad serve -k`), el gateway entra en modo *drain*:
+
+- Nuevas requests se rechazan con 503 (Problem Details) y `extensions.code = "shutting_down"`.
+- Requests in-flight continúan best-effort hasta `limits.shutdown_timeout_ms`.
+
+Implementación canónica:
+
+- `sad/gateway/shutdown.gleam` mantiene `draining` + contador `inflight` y dispara el flujo de parada global.
+- `sad/gateway/http_server.gleam` consulta a `GatewayShutdown` al inicio de cada request; si está en drain responde 503.
+
 ---
 
 ## SSE en SAD (2 usos distintos)

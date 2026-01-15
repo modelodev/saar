@@ -32,6 +32,7 @@ pub fn start_initializes_supervisors() {
     profiles_name,
     agent_manager_name,
     agent_factory_name,
+    _gateway_shutdown_name,
   ) = names
 
   let assert Ok(_) = process.subject_owner(process.named_subject(registry_name))
@@ -62,6 +63,7 @@ pub fn deps_discovered_by_name_not_passed_by_hand() {
     profiles_name,
     agent_manager_name,
     _agent_factory_name,
+    _gateway_shutdown_name,
   ) = names
 
   process.subject_name(root_supervisor.registry(ref))
@@ -119,6 +121,7 @@ pub fn root_supervisor_rest_for_one_order() {
     profiles_name,
     _agent_manager_name,
     _agent_factory_name,
+    _gateway_shutdown_name,
   ) = names
 
   let registry_subject = process.named_subject(registry_name)
@@ -155,6 +158,7 @@ pub fn root_supervisor_restart_tolerance() {
     _profiles_name,
     agent_manager_name,
     _agent_factory_name,
+    _gateway_shutdown_name,
   ) = names
 
   let monitor = process.monitor(sup_pid)

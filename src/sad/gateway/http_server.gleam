@@ -30,6 +30,7 @@ import sad/gateway/artifacts_api
 import sad/gateway/auth
 import sad/gateway/health
 import sad/gateway/problem
+import sad/gateway/shutdown as gateway_shutdown
 import sad/gateway/sys_api
 import sad/gateway/ui_proxy_api
 import sad/types/config as types_config
@@ -45,6 +46,7 @@ pub fn start(
   ),
   profiles: process.Subject(messages.ProfilesMsg),
   agent_manager: process.Subject(messages.AgentManagerMsg),
+  shutdown: process.Subject(gateway_shutdown.Msg),
 ) -> actor.StartResult(Nil) {
   let types_config.SadConfig(server_host: host, server_port: port, ..) = config
 
@@ -70,6 +72,7 @@ pub fn start(
       artifacts_deps,
       ui_deps,
       profiles,
+      shutdown,
     )
   }
 
@@ -89,9 +92,51 @@ fn handle_request(
   artifacts_deps: artifacts_api.Deps,
   ui_deps: ui_proxy_api.Deps,
   profiles: process.Subject(messages.ProfilesMsg),
+  shutdown: process.Subject(gateway_shutdown.Msg),
 ) -> response.Response(mist.ResponseData) {
   let trace_id = request_trace_id()
 
+  case gateway_shutdown.enter_request(shutdown, 50) {
+    False ->
+      problem.infra_error_with_code(
+        503,
+        trace_id,
+        req.path,
+        "shutting down",
+        "shutting_down",
+      )
+
+    True -> {
+      let resp =
+        route_request(
+          req,
+          cfg,
+          sys_deps,
+          agents_deps,
+          a2a_deps,
+          artifacts_deps,
+          ui_deps,
+          profiles,
+          trace_id,
+        )
+
+      gateway_shutdown.leave_request(shutdown)
+      resp
+    }
+  }
+}
+
+fn route_request(
+  req: request.Request(mist.Connection),
+  cfg: types_config.SadConfig,
+  sys_deps: sys_api.Deps,
+  agents_deps: agents_api.Deps,
+  a2a_deps: a2a_api.Deps,
+  artifacts_deps: artifacts_api.Deps,
+  ui_deps: ui_proxy_api.Deps,
+  profiles: process.Subject(messages.ProfilesMsg),
+  trace_id: types_core.TraceId,
+) -> response.Response(mist.ResponseData) {
   case auth.is_public_path(req.path) {
     True ->
       case req.path {

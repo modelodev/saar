@@ -544,6 +544,7 @@ fn start_root(
     _,
     agent_manager_name,
     _,
+    _,
   ) = names
 
   #(

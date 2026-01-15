@@ -25,6 +25,7 @@ import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/otp/actor
 import gleam/result
 import sad/app_state
 import sad/cli
@@ -34,6 +35,7 @@ import sad/core/supervisor_names
 import sad/daemon_control
 import sad/daemon_paths
 import sad/ffi/daemon
+import sad/ffi/signals
 import sad/profiles_sources
 import sad/types/config as types_config
 import simplifile
@@ -178,7 +180,11 @@ fn serve_foreground(cfg: types_config.SadConfig, _config_path: String) -> Nil {
         app_state.AppState(config: cfg, initial_profiles: initial_profiles)
 
       case root_supervisor.start(state, names) {
-        Ok(_) -> sleep_forever()
+        Ok(actor.Started(data: ref, ..)) -> {
+          install_sigterm_handler(ref)
+          sleep_forever()
+        }
+
         Error(_) -> {
           io.println_error("failed to start supervisor")
           halt(exit_operational)
@@ -228,6 +234,15 @@ fn serve_background(plan: BackgroundPlan) -> Result(Nil, Nil) {
 fn sleep_forever() -> Nil {
   process.sleep(60_000)
   sleep_forever()
+}
+
+fn install_sigterm_handler(ref: root_supervisor.SupervisorRef) -> Nil {
+  let shutdown_subject = root_supervisor.gateway_shutdown(ref)
+
+  case process.subject_owner(shutdown_subject) {
+    Ok(pid) -> signals.install_sigterm_handler(pid)
+    Error(_) -> Nil
+  }
 }
 
 fn help_text() -> List(String) {
@@ -299,6 +314,7 @@ fn plan_serve(
 
       case res {
         Ok(_) -> RunPlan(code, [], [], NoAction)
+        Error(daemon_control.NoServer) -> RunPlan(code, [], [], NoAction)
         Error(_) -> RunPlan(code, [], ["failed to kill"], NoAction)
       }
     }

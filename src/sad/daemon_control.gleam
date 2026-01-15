@@ -74,12 +74,12 @@ pub fn status_exit_code(status: Status) -> Int {
 /// Exit code for `serve -k/--kill`.
 ///
 /// - Ok -> 0
-/// - No server -> 1
+/// - No server -> 0
 /// - Operational error -> 2
 pub fn kill_exit_code(result: Result(Nil, KillError)) -> Int {
   case result {
     Ok(_) -> 0
-    Error(NoServer) -> 1
+    Error(NoServer) -> 0
     Error(_) -> 2
   }
 }

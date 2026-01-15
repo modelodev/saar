@@ -126,6 +126,27 @@ pub fn infra_error_with_status(
   instance: String,
   detail: String,
 ) -> response.Response(mist.ResponseData) {
+  infra_error(status, trace_id, instance, detail, option.None)
+}
+
+/// Returns an infra error response with a stable `extensions.code`.
+pub fn infra_error_with_code(
+  status: Int,
+  trace_id: types_core.TraceId,
+  instance: String,
+  detail: String,
+  code: String,
+) -> response.Response(mist.ResponseData) {
+  infra_error(status, trace_id, instance, detail, option.Some(code))
+}
+
+fn infra_error(
+  status: Int,
+  trace_id: types_core.TraceId,
+  instance: String,
+  detail: String,
+  code: option.Option(String),
+) -> response.Response(mist.ResponseData) {
   build(
     status: status,
     title: http_title(status),
@@ -134,7 +155,7 @@ pub fn infra_error_with_status(
     instance: instance,
     kind: types_enums.error_kind_to_string(types_enums.InfraError),
     trace_id: types_core.trace_id_to_string(trace_id),
-    code: option.None,
+    code: code,
   )
 }
 
