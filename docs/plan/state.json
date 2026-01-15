@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": "S16",
+  "current_sprint": "S17",
   "sprints": {
     "S01": {
       "status": "completed",
@@ -534,6 +534,19 @@
         "S16-T03": {"status": "completed", "branch": "feat/s16-t03-adapter-a2a", "commit": "577f11c577ffebb22d72038790622adfc2c34c72"},
         "S16-T04": {"status": "completed", "branch": "feat/s16-t04-a2a-endpoints", "commit": "128c64355c97334ecd094e4412e9215f380e4f55"},
         "S16-T05": {"status": "completed", "branch": "sprint/s16-protocolos-ag-ui-a2ui-a2a", "commit": "f78ac6cf746240e78263034641ede3bda30d9eeb"}
+      }
+    },
+    "S17": {
+      "status": "in_progress",
+      "branch": null,
+      "started_at": "2026-01-15T14:59:02Z",
+      "completed_at": null,
+      "current_story": null,
+      "stories": {
+        "S17-T01": {"status": "pending", "branch": null},
+        "S17-T02": {"status": "pending", "branch": null},
+        "S17-T03": {"status": "pending", "branch": null},
+        "S17-T04": {"status": "pending", "branch": null}
       }
     }
   }
