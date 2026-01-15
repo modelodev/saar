@@ -18,8 +18,10 @@ import sad/sse
 import sad/types/core as types_core
 import sad/types/stream
 
-/// Builds an A2UI `beginRendering` message.
-pub fn begin_rendering(trace_id: types_core.TraceId) -> stream.StreamEvent {
+/// Builds an A2UI `beginRendering` message as JSON.
+///
+/// This is useful when A2UI is transported inside other envelopes (e.g. A2A).
+pub fn begin_rendering_json(trace_id: types_core.TraceId) -> json.Json {
   json.object([
     #(
       "beginRendering",
@@ -28,16 +30,23 @@ pub fn begin_rendering(trace_id: types_core.TraceId) -> stream.StreamEvent {
       ]),
     ),
   ])
+}
+
+/// Builds an A2UI `beginRendering` message as an SSE `data:` frame.
+pub fn begin_rendering(trace_id: types_core.TraceId) -> stream.StreamEvent {
+  begin_rendering_json(trace_id)
   |> json.to_string
   |> sse.line
   |> stream.event
 }
 
-/// Builds an A2UI `dataModelUpdate` message.
-pub fn data_model_update(
+/// Builds an A2UI `dataModelUpdate` message as JSON.
+///
+/// This is useful when A2UI is transported inside other envelopes (e.g. A2A).
+pub fn data_model_update_json(
   trace_id: types_core.TraceId,
   delta: String,
-) -> stream.StreamEvent {
+) -> json.Json {
   json.object([
     #(
       "dataModelUpdate",
@@ -47,6 +56,14 @@ pub fn data_model_update(
       ]),
     ),
   ])
+}
+
+/// Builds an A2UI `dataModelUpdate` message as an SSE `data:` frame.
+pub fn data_model_update(
+  trace_id: types_core.TraceId,
+  delta: String,
+) -> stream.StreamEvent {
+  data_model_update_json(trace_id, delta)
   |> json.to_string
   |> sse.line
   |> stream.event
