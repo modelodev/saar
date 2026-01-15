@@ -41,9 +41,19 @@ pub fn check_available(
   case ffi.check_port_available(host, port) {
     Ok(_) -> Ok(Nil)
 
-    Error("in_use") -> Error(port_pool.CheckPortInUse)
-    Error("invalid_host") -> Error(port_pool.CheckInvalidHost(host: host))
-    Error("permission_denied") -> Error(port_pool.CheckPermissionDenied)
-    Error(reason) -> Error(port_pool.CheckBindFailed(reason))
+    Error(ffi.CheckPortAvailableFailed("in_use")) ->
+      Error(port_pool.CheckPortInUse)
+
+    Error(ffi.CheckPortAvailableFailed("invalid_host")) ->
+      Error(port_pool.CheckInvalidHost(host: host))
+
+    Error(ffi.CheckPortAvailableFailed("permission_denied")) ->
+      Error(port_pool.CheckPermissionDenied)
+
+    Error(ffi.CheckPortAvailableFailed(reason)) ->
+      Error(port_pool.CheckBindFailed(reason))
+
+    Error(ffi.OpenPortFailed(reason)) ->
+      Error(port_pool.CheckBindFailed(reason))
   }
 }

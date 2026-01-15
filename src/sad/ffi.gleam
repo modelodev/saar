@@ -34,12 +34,15 @@ pub type PortMessage {
 pub type FfiError {
   /// Opening a port failed with the given reason string.
   OpenPortFailed(reason: String)
+  /// Port availability check failed with the given reason string.
+  CheckPortAvailableFailed(reason: String)
 }
 
 /// Renders an `FfiError` as a human-readable string.
 pub fn ffi_error_to_string(err: FfiError) -> String {
   case err {
     OpenPortFailed(reason) -> reason
+    CheckPortAvailableFailed(reason) -> reason
   }
 }
 
@@ -143,9 +146,15 @@ fn port_receive_ffi(port: Port, timeout_ms: Int) -> Result(PortMessage, Nil)
 
 /// Checks whether `host:port` can be bound (best effort).
 ///
-/// Returns `Ok(Nil)` if binding is possible, otherwise `Error(reason)`.
-pub fn check_port_available(host: String, port: Int) -> Result(Nil, String) {
-  check_port_available_ffi(host, port)
+/// Returns `Ok(Nil)` if binding is possible, otherwise `Error(FfiError)`.
+pub fn check_port_available(
+  host: String,
+  port: Int,
+) -> Result(Nil, FfiError) {
+  case check_port_available_ffi(host, port) {
+    Ok(_) -> Ok(Nil)
+    Error(reason) -> Error(CheckPortAvailableFailed(reason))
+  }
 }
 
 @external(erlang, "sad_ffi", "check_port_available")
