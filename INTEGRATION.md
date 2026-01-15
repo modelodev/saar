@@ -140,6 +140,39 @@ Authorization: Bearer <api_key>
 }
 ```
 
+##### 3.3.2.1 Esquema mínimo (estable) de `GET /tasks/:task_id`
+
+SAD garantiza que la consulta de una tarea (`200`) devuelve como mínimo:
+
+- `task_id: string`
+- `instance_id: string`
+- `capability: string`
+- `state: "running" | "completed" | "failed" | "cancelled"`
+
+Reglas de consistencia (para que un cliente pueda validar sin ambigüedad):
+
+- Si `state = "running"`:
+  - no deben aparecer `result` ni `error`.
+- Si `state = "completed"`:
+  - debe aparecer `result`.
+  - no debe aparecer `error`.
+- Si `state = "failed"`:
+  - debe aparecer `error`.
+  - no debe aparecer `result`.
+- Si `state = "cancelled"`:
+  - debe aparecer `error` (con un mensaje estable del estilo `cancelled_by_sad`).
+  - no debe aparecer `result`.
+
+Campos opcionales:
+
+- `artifacts: PublicArtifact[]`
+  - puede aparecer en estados terminales.
+  - el cliente debe asumir que `url` puede ser null.
+
+Errores:
+
+- `404` si el `task_id` no existe.
+
 Cuando la tarea es terminal, aparece `result` o `error`:
 
 ```json
