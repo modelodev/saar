@@ -69,8 +69,8 @@ Si el cliente no tiene una URL pública, debe subir el fichero a un storage acce
 
 ## 6. Ejemplos
 
-- Perfil continuous con runner genérico: `arquitectura/examples/profiles/lightrag/lightrag.json`
-- Perfil transient (CLI) con runner genérico: `arquitectura/examples/profiles/aider/aider.json`
+- Perfil continuous con runner genérico (vNext): `arquitectura/examples/profiles/lightrag/lightrag_vnext.json`
+- Perfil transient (CLI) con runner genérico (vNext): `arquitectura/examples/profiles/aider/aider_vnext.json`
 - Runners genéricos: `arquitectura/examples/runners/README.md`
 
 ## 7. Capacidades
@@ -100,4 +100,4 @@ Una capacidad también determina cómo el cliente debe consumir el resultado.
 Detalles y ejemplos completos:
 
 - `INTEGRATION.md` (guía para clientes)
-- `runners_and_agents.md` (guía para autores de perfiles y runners)
+- `RUNNERS_AND_AGENTS.md` (guía para autores de perfiles y runners)

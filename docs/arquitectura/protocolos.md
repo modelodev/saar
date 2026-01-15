@@ -286,11 +286,29 @@ pub fn agent_card_from_instance(profile: Profile, instance_id: InstanceId, base_
     "streaming": true,
     "pushNotifications": false
   },
+  "extensions": [
+    "urn:sad:extensions:files-semantics:v1"
+  ],
   "skills": [
     {
       "id": "chat",
       "name": "Chat",
-      "description": "General conversation"
+      "description": "General conversation",
+      "inputModes": ["text"],
+      "outputModes": ["text"]
+    },
+    {
+      "id": "files",
+      "name": "Files",
+      "description": "Upload a document for indexing (eventual)",
+      "inputModes": ["file"],
+      "outputModes": ["text"],
+      "extensions": {
+        "urn:sad:extensions:files-semantics:v1": {
+          "maxFiles": 1,
+          "ingestEffect": "eventual"
+        }
+      }
     }
   ]
 }
@@ -308,6 +326,45 @@ pub fn agent_card_from_instance(profile: Profile, instance_id: InstanceId, base_
 | capabilities de interface | `capabilities.streaming` |
 | `false` (SAD no soporta push) | `capabilities.pushNotifications` |
 | capabilities como lista | `skills` |
+| (constante, lista de URIs) | `extensions` |
+| capability `input_schema` | `skills[].inputModes` |
+| response mapping + artifacts | `skills[].outputModes` |
+| files semantics por capability | `skills[].extensions[files-semantics-uri]` |
+
+### 2.2.1 Extensions catalog (A2A)
+
+SAD may include additional metadata in A2A payloads using the `extensions` mechanism.
+
+Principles:
+- Extensions MUST be safe to ignore. If a client does not recognize an extension URI, it MUST ignore it.
+- Extensions MUST be versioned. Breaking changes require a new URI.
+- Extensions MUST NOT change the meaning of core A2A fields. They may only add optional metadata.
+
+#### URN convention
+
+SAD extension URIs use URNs:
+- Format: `urn:sad:extensions:<name>:v<version>`
+- Rationale: stable identifiers without implying a resolvable URL.
+
+#### Known extensions
+
+| URI | Scope | Purpose |
+|-----|-------|---------|
+| `urn:sad:extensions:files-semantics:v1` | AgentCard `skills[].extensions` | Communicate file cardinality and ingest semantics per skill |
+
+#### `urn:sad:extensions:files-semantics:v1`
+
+Scope:
+- Root AgentCard SHOULD advertise the URI in `extensions: [ ... ]`.
+- Each `skills[]` entry MAY include `extensions["urn:sad:extensions:files-semantics:v1"]`.
+
+Schema (v1):
+- `maxFiles: Int` (required)
+- `ingestEffect: "immediate" | "eventual"` (required)
+
+Semantics:
+- `maxFiles` is the maximum number of files accepted by the skill.
+- `ingestEffect=eventual` means a successful upload does not guarantee that subsequent queries immediately incorporate the uploaded content.
 
 ### 2.3 Message Format
 
