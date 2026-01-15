@@ -25,6 +25,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import sad/adapters/a2ui
 import sad/adapters/agui
 import sad/artifacts
 import sad/bridge/artifact_registration
@@ -36,7 +37,6 @@ import sad/bridge/runner_contract
 import sad/bridge/serialization
 import sad/core/artifact_registry_protocol
 import sad/ffi
-import sad/sse
 import sad/streams/sink
 import sad/streams/stream_pump
 import sad/types/config as types_config
@@ -47,7 +47,6 @@ import sad/types/output as types_output
 import sad/types/profile as types_profile
 import sad/types/resolved_params
 import sad/types/runner as types_runner
-import sad/types/stream
 
 /// Executes a single interaction.
 ///
@@ -451,11 +450,11 @@ fn emit_chunk(
 
     sink.A2uiV08 -> {
       case a2ui_started {
-        False -> stream_pump.push(pump, a2ui_begin_rendering(trace_id))
+        False -> stream_pump.push(pump, a2ui.begin_rendering(trace_id))
         True -> Nil
       }
 
-      stream_pump.push(pump, a2ui_data_model_update(trace_id, delta))
+      stream_pump.push(pump, a2ui.data_model_update(trace_id, delta))
       StreamFlags(agui_state: agui_state, a2ui_started: True)
     }
   }
@@ -493,38 +492,6 @@ fn emit_terminal(
         }
       }
   }
-}
-
-fn a2ui_begin_rendering(trace_id: types_core.TraceId) -> stream.StreamEvent {
-  json.object([
-    #(
-      "beginRendering",
-      json.object([
-        #("surfaceId", json.string(types_core.trace_id_to_string(trace_id))),
-      ]),
-    ),
-  ])
-  |> json.to_string
-  |> sse.line
-  |> stream.event
-}
-
-fn a2ui_data_model_update(
-  trace_id: types_core.TraceId,
-  delta: String,
-) -> stream.StreamEvent {
-  json.object([
-    #(
-      "dataModelUpdate",
-      json.object([
-        #("surfaceId", json.string(types_core.trace_id_to_string(trace_id))),
-        #("delta", json.string(delta)),
-      ]),
-    ),
-  ])
-  |> json.to_string
-  |> sse.line
-  |> stream.event
 }
 
 fn runner_response_to_result(
