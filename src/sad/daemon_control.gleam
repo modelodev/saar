@@ -40,7 +40,7 @@ pub fn status(pidfile_path: String) -> Status {
       case daemon.process_alive(pid) {
         True -> Running(pid)
         False -> {
-          let _ = simplifile.delete(file_or_dir_at: pidfile_path)
+          delete_pidfile(pidfile_path)
           NotRunning
         }
       }
@@ -92,17 +92,22 @@ pub fn kill(pidfile_path: String, timeout_ms: Int) -> Result(Nil, KillError) {
 
   case daemon.kill_process(pid, timeout_ms) {
     Ok(_) -> {
-      let _ = simplifile.delete(file_or_dir_at: pidfile_path)
+      delete_pidfile(pidfile_path)
       Ok(Nil)
     }
 
     Error(daemon.NotRunning) -> {
-      let _ = simplifile.delete(file_or_dir_at: pidfile_path)
+      delete_pidfile(pidfile_path)
       Error(NoServer)
     }
 
     Error(err) -> Error(KillFailed(err))
   }
+}
+
+fn delete_pidfile(pidfile_path: String) -> Nil {
+  let _ = simplifile.delete(file_or_dir_at: pidfile_path)
+  Nil
 }
 
 fn read_pidfile(pidfile_path: String) -> Result(Int, Nil) {
@@ -114,7 +119,7 @@ fn read_pidfile(pidfile_path: String) -> Result(Int, Nil) {
   case int.parse(string.trim(content)) {
     Ok(pid) if pid > 0 -> Ok(pid)
     _ -> {
-      let _ = simplifile.delete(file_or_dir_at: pidfile_path)
+      delete_pidfile(pidfile_path)
       Error(Nil)
     }
   }

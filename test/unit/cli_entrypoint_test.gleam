@@ -118,6 +118,23 @@ pub fn main_serve_prints_effective_config() {
   should.equal(string_contains(out, "config_path=./config.toml"), True)
 }
 
+pub fn main_serve_background_plan_exit_0() {
+  let plan =
+    sad.plan(
+      argv: ["serve", "--port", "9090", "--config", "./config.toml", "-b"],
+      program: "sad",
+      get_env: env_none,
+      read_file: read_file_stub,
+      status: fn(_) { daemon_control.NotRunning },
+      kill: fn(_, _) { Error(daemon_control.NoServer) },
+    )
+
+  should.equal(sad.exit_code(plan), sad.exit_ok)
+
+  let out = string.join(sad.stdout_lines(plan), "\n")
+  should.equal(string_contains(out, "port=9090"), True)
+}
+
 fn env_none(_key: String) -> Result(String, Nil) {
   Error(Nil)
 }
