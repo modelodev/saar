@@ -102,34 +102,6 @@ fn known_commands() -> List(String) {
   ["serve", "validate", "dry-run", "runner-test"]
 }
 
-pub fn command_to_string(cmd: Command) -> String {
-  case cmd {
-    Serve(_) -> "serve"
-    Validate(_) -> "validate"
-    DryRun(_) -> "dry-run"
-    RunnerTest(_) -> "runner-test"
-    Version -> "version"
-    Help(_) -> "help"
-  }
-}
-
-pub fn error_to_string(err: ParseError) -> String {
-  case err {
-    MissingCommand -> "missing command"
-    UnknownCommand(name, _) -> "unknown command: " <> name
-    MissingRequiredFlag(flag) -> "missing required flag: " <> flag
-    MissingFlagValue(flag) -> "missing value for flag: " <> flag
-    UnknownFlag(flag) -> "unknown flag: " <> flag
-    ConflictingFlags(flags) -> "conflicting flags: " <> string.inspect(flags)
-    InvalidFlagValue(flag, value) ->
-      "invalid value for " <> flag <> ": " <> value
-  }
-}
-
-pub fn inspect_parse_result(result: Result(Command, ParseError)) -> String {
-  string.inspect(result)
-}
-
 /// Maps parsing results to CLI exit codes.
 ///
 /// - `Ok(_)` -> 0

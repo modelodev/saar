@@ -13,7 +13,7 @@
 //// - Implementing server startup logic (handled by CLI / main).
 ////
 //// Relationships:
-//// - Implemented in Erlang as `daemon` in `src/sad/ffi/daemon.erl`.
+//// - Implemented in Erlang as `sad_daemon` in `src/sad/ffi/sad_daemon.erl`.
 
 import gleam/result
 
@@ -21,14 +21,6 @@ pub type DaemonError {
   SpawnFailed(reason: String)
   KillFailed(reason: String)
   NotRunning
-}
-
-pub fn error_to_string(err: DaemonError) -> String {
-  case err {
-    SpawnFailed(reason) -> reason
-    KillFailed(reason) -> reason
-    NotRunning -> "not_running"
-  }
 }
 
 /// Spawns `command` as a detached background process.
@@ -59,7 +51,7 @@ pub fn process_alive(pid: Int) -> Bool {
   process_alive_ffi(pid)
 }
 
-@external(erlang, "daemon", "daemonize")
+@external(erlang, "sad_daemon", "daemonize")
 fn daemonize_ffi(
   command: String,
   args: List(String),
@@ -67,8 +59,8 @@ fn daemonize_ffi(
   logfile_path: String,
 ) -> Result(Int, String)
 
-@external(erlang, "daemon", "kill_process")
+@external(erlang, "sad_daemon", "kill_process")
 fn kill_process_ffi(pid: Int, timeout_ms: Int) -> Result(Nil, String)
 
-@external(erlang, "daemon", "process_alive")
+@external(erlang, "sad_daemon", "process_alive")
 fn process_alive_ffi(pid: Int) -> Bool
