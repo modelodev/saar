@@ -49,6 +49,25 @@ pub type Deps {
   Deps(registry: process.Subject(messages.RegistryMsg))
 }
 
+type ParsedMessageRequest {
+  ParsedMessageRequest(
+    trace_id: types_core.TraceId,
+    context_id: String,
+    message: a2a.A2aMessage,
+    extensions: a2a.Extensions,
+  )
+}
+
+type PreparedInteraction {
+  PreparedInteraction(
+    trace_id: types_core.TraceId,
+    context_id: String,
+    extensions: a2a.Extensions,
+    req0: agent.AgentRequest,
+    timeout_ms: Int,
+  )
+}
+
 /// Routes a request under `/instances` for the A2A protocol.
 pub fn handle(
   req: request.Request(mist.Connection),
@@ -151,104 +170,29 @@ fn message_send_with_agent(
   server_trace_id: types_core.TraceId,
   agent_ref: agent.AgentRef,
 ) -> response.Response(mist.ResponseData) {
-  let max_body = max_request_body_bytes(cfg)
+  case parse_message_request(req, cfg, server_trace_id) {
+    Error(resp) -> resp
+    Ok(parsed) ->
+      case prepare_interaction(cfg, server_trace_id, agent_ref, parsed) {
+        Error(resp) -> resp
+        Ok(prepared) -> {
+          let PreparedInteraction(
+            trace_id: trace_id,
+            context_id: context_id,
+            req0: req0,
+            timeout_ms: timeout_ms,
+            ..,
+          ) = prepared
 
-  let extensions = parse_extensions(req)
+          case agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms) {
+            Ok(result) ->
+              json_response(200, a2a.message_send_response(result, context_id))
 
-  case mist.read_body(req, max_body) {
-    Error(mist.ExcessBody) ->
-      problem.request_body_too_large_a2a(server_trace_id)
-
-    Error(_) ->
-      problem.from_error_kind_a2a(
-        types_enums.BadRequest,
-        server_trace_id,
-        "malformed body",
-      )
-
-    Ok(req_with_body) -> {
-      let body = bit_array.to_string(req_with_body.body) |> result.unwrap("")
-
-      case a2a.decode_message_send_request(body, extensions) {
-        Error(err) ->
-          problem.from_error_kind_a2a(
-            types_enums.BadRequest,
-            server_trace_id,
-            "invalid request: " <> decode_error_to_string(err),
-          )
-
-        Ok(a2a.MessageSendRequest(message: message, context_id: maybe_context)) -> {
-          let trace_id = types_core.trace_id(uuid.v7_string())
-          let context_id = case maybe_context {
-            Some(id) -> id
-            None -> uuid.v7_string()
-          }
-
-          case agent.info(agent_ref, status_timeout_ms(cfg)) {
-            Error(call_err) ->
-              problem.from_call_error_a2a(call_err, server_trace_id)
-            Ok(info) -> {
-              case pick_capability(info.interface) {
-                Error(_) ->
-                  problem.from_error_kind_a2a(
-                    types_enums.BadRequest,
-                    server_trace_id,
-                    "agent has no capabilities",
-                  )
-
-                Ok(capability) -> {
-                  let payload = a2a.message_to_payload(message)
-
-                  let ctx =
-                    types_input.RequestContext(
-                      trace_id: trace_id,
-                      extra: dict.from_list([#("context_id", context_id)]),
-                    )
-
-                  let req0 =
-                    agent.AgentRequest(
-                      profile_id: info.meta.id,
-                      instance_id: info.status.instance_id,
-                      capability: capability,
-                      inputs: payload,
-                      context: ctx,
-                    )
-
-                  let timeout_ms =
-                    agent.resolve_call_timeout_for(
-                      cfg,
-                      info.interface,
-                      capability,
-                    )
-
-                  case
-                    agent.interact(
-                      agent_ref,
-                      req0,
-                      sink.NonStreaming,
-                      timeout_ms,
-                    )
-                  {
-                    Ok(result) ->
-                      json_response(
-                        200,
-                        a2a.message_send_response(result, context_id),
-                      )
-
-                    Error(err) ->
-                      problem.from_error_kind_a2a(
-                        err.kind,
-                        trace_id,
-                        err.message,
-                      )
-                  }
-                }
-              }
-            }
+            Error(err) ->
+              problem.from_error_kind_a2a(err.kind, trace_id, err.message)
           }
         }
       }
-    }
   }
 }
 
@@ -289,96 +233,149 @@ fn message_stream_with_agent(
   server_trace_id: types_core.TraceId,
   agent_ref: agent.AgentRef,
 ) -> response.Response(mist.ResponseData) {
+  case parse_message_request(req, cfg, server_trace_id) {
+    Error(resp) -> resp
+    Ok(parsed) ->
+      case prepare_interaction(cfg, server_trace_id, agent_ref, parsed) {
+        Error(resp) -> resp
+        Ok(prepared) -> {
+          let keep_alive_ms = sse_keep_alive_interval_ms(cfg)
+
+          let PreparedInteraction(
+            trace_id: trace_id,
+            context_id: context_id,
+            extensions: extensions,
+            req0: req0,
+            timeout_ms: timeout_ms,
+          ) = prepared
+
+          let protocol = select_wire_protocol(extensions)
+
+          interact_streaming_a2a(
+            trace_id,
+            context_id,
+            protocol,
+            extensions,
+            keep_alive_ms,
+            agent_ref,
+            req0,
+            timeout_ms,
+          )
+        }
+      }
+  }
+}
+
+fn parse_message_request(
+  req: request.Request(mist.Connection),
+  cfg: types_config.SadConfig,
+  server_trace_id: types_core.TraceId,
+) -> Result(ParsedMessageRequest, response.Response(mist.ResponseData)) {
   let max_body = max_request_body_bytes(cfg)
-  let keep_alive_ms = sse_keep_alive_interval_ms(cfg)
-
   let extensions = parse_extensions(req)
-  let protocol = select_wire_protocol(extensions)
 
-  case mist.read_body(req, max_body) {
+  let read = case mist.read_body(req, max_body) {
+    Ok(req_with_body) -> Ok(req_with_body)
     Error(mist.ExcessBody) ->
-      problem.request_body_too_large_a2a(server_trace_id)
-
+      Error(problem.request_body_too_large_a2a(server_trace_id))
     Error(_) ->
-      problem.from_error_kind_a2a(
+      Error(problem.from_error_kind_a2a(
         types_enums.BadRequest,
         server_trace_id,
         "malformed body",
-      )
-
-    Ok(req_with_body) -> {
-      let body = bit_array.to_string(req_with_body.body) |> result.unwrap("")
-
-      case a2a.decode_message_send_request(body, extensions) {
-        Error(err) ->
-          problem.from_error_kind_a2a(
-            types_enums.BadRequest,
-            server_trace_id,
-            "invalid request: " <> decode_error_to_string(err),
-          )
-
-        Ok(a2a.MessageSendRequest(message: message, context_id: maybe_context)) -> {
-          let trace_id = types_core.trace_id(uuid.v7_string())
-          let context_id = case maybe_context {
-            Some(id) -> id
-            None -> uuid.v7_string()
-          }
-
-          case agent.info(agent_ref, status_timeout_ms(cfg)) {
-            Error(call_err) ->
-              problem.from_call_error_a2a(call_err, server_trace_id)
-            Ok(info) -> {
-              case pick_capability(info.interface) {
-                Error(_) ->
-                  problem.from_error_kind_a2a(
-                    types_enums.BadRequest,
-                    server_trace_id,
-                    "agent has no capabilities",
-                  )
-
-                Ok(capability) -> {
-                  let payload = a2a.message_to_payload(message)
-
-                  let ctx =
-                    types_input.RequestContext(
-                      trace_id: trace_id,
-                      extra: dict.from_list([#("context_id", context_id)]),
-                    )
-
-                  let req0 =
-                    agent.AgentRequest(
-                      profile_id: info.meta.id,
-                      instance_id: info.status.instance_id,
-                      capability: capability,
-                      inputs: payload,
-                      context: ctx,
-                    )
-
-                  let timeout_ms =
-                    agent.resolve_call_timeout_for(
-                      cfg,
-                      info.interface,
-                      capability,
-                    )
-
-                  interact_streaming_a2a(
-                    trace_id,
-                    context_id,
-                    protocol,
-                    extensions,
-                    keep_alive_ms,
-                    agent_ref,
-                    req0,
-                    timeout_ms,
-                  )
-                }
-              }
-            }
-          }
-        }
-      }
-    }
+      ))
   }
+
+  use req_with_body <- result.try(read)
+
+  let body = bit_array.to_string(req_with_body.body) |> result.unwrap("")
+
+  use decoded <- result.try(
+    a2a.decode_message_send_request(body, extensions)
+    |> result.map_error(fn(err) {
+      problem.from_error_kind_a2a(
+        types_enums.BadRequest,
+        server_trace_id,
+        "invalid request: " <> decode_error_to_string(err),
+      )
+    }),
+  )
+
+  let a2a.MessageSendRequest(message: message, context_id: maybe_context) =
+    decoded
+
+  let trace_id = types_core.trace_id(uuid.v7_string())
+  let context_id = case maybe_context {
+    Some(id) -> id
+    None -> uuid.v7_string()
+  }
+
+  Ok(ParsedMessageRequest(
+    trace_id: trace_id,
+    context_id: context_id,
+    message: message,
+    extensions: extensions,
+  ))
+}
+
+fn prepare_interaction(
+  cfg: types_config.SadConfig,
+  server_trace_id: types_core.TraceId,
+  agent_ref: agent.AgentRef,
+  parsed: ParsedMessageRequest,
+) -> Result(PreparedInteraction, response.Response(mist.ResponseData)) {
+  let ParsedMessageRequest(
+    trace_id: trace_id,
+    context_id: context_id,
+    message: message,
+    extensions: extensions,
+  ) = parsed
+
+  use info <- result.try(
+    agent.info(agent_ref, status_timeout_ms(cfg))
+    |> result.map_error(fn(call_err) {
+      problem.from_call_error_a2a(call_err, server_trace_id)
+    }),
+  )
+
+  use capability <- result.try(
+    pick_capability(info.interface)
+    |> result.map_error(fn(_) {
+      problem.from_error_kind_a2a(
+        types_enums.BadRequest,
+        server_trace_id,
+        "agent has no capabilities",
+      )
+    }),
+  )
+
+  let payload = a2a.message_to_payload(message)
+
+  let ctx =
+    types_input.RequestContext(
+      trace_id: trace_id,
+      extra: dict.from_list([#("context_id", context_id)]),
+    )
+
+  let req0 =
+    agent.AgentRequest(
+      profile_id: info.meta.id,
+      instance_id: info.status.instance_id,
+      capability: capability,
+      inputs: payload,
+      context: ctx,
+    )
+
+  let timeout_ms =
+    agent.resolve_call_timeout_for(cfg, info.interface, capability)
+
+  Ok(PreparedInteraction(
+    trace_id: trace_id,
+    context_id: context_id,
+    extensions: extensions,
+    req0: req0,
+    timeout_ms: timeout_ms,
+  ))
 }
 
 fn interact_streaming_a2a(
