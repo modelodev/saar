@@ -79,6 +79,19 @@ pub fn stop_instance_non_continuous() {
   resource_to_stop |> should.equal(option.None)
 }
 
+pub fn stop_instance_continuous_returns_resource() {
+  let params = dict.new()
+  let ready = lifecycle.agent_ready_continuous(params, "resource")
+
+  let lifecycle.StopDecision(
+    next_state: next_state,
+    resource_to_stop: resource_to_stop,
+  ) = lifecycle.on_stop_instance(ready)
+
+  lifecycle.is_stopped(next_state) |> should.equal(True)
+  resource_to_stop |> should.equal(option.Some("resource"))
+}
+
 pub fn server_died_sets_failed() {
   let next_state = lifecycle.on_server_died()
 

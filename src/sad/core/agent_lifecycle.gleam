@@ -15,71 +15,54 @@
 
 import gleam/dict
 import gleam/option
-import sad/bridge/port_owner
 import sad/types/agent as types_agent
 import sad/types/resolved_params.{type ResolvedParams}
 
-/// Opaque resource associated with a continuous agent.
-pub opaque type AgentResource {
-  ContinuousServer(owner: port_owner.PortOwnerRef)
-}
-
-/// Builds an `AgentResource` from a port owner.
-pub fn port_owner_resource(owner: port_owner.PortOwnerRef) -> AgentResource {
-  ContinuousServer(owner)
-}
-
-/// Returns the port owner reference from a resource.
-pub fn port_owner_ref(resource: AgentResource) -> port_owner.PortOwnerRef {
-  let ContinuousServer(owner: owner) = resource
-  owner
-}
-
 /// Unified lifecycle state for an agent instance.
-pub type AgentState {
+pub type AgentState(resource) {
   Created(params: ResolvedParams)
   Provisioning(params: ResolvedParams)
   ReadyTransient(params: ResolvedParams)
-  ReadyContinuous(params: ResolvedParams, resource: AgentResource)
+  ReadyContinuous(params: ResolvedParams, resource: resource)
   Stopped(params: ResolvedParams)
   Failed(reason: types_agent.FailureReason)
 }
 
 /// Returns the Created state.
-pub fn agent_created(params: ResolvedParams) -> AgentState {
+pub fn agent_created(params: ResolvedParams) -> AgentState(resource) {
   Created(params)
 }
 
 /// Returns the Provisioning state.
-pub fn agent_provisioning(params: ResolvedParams) -> AgentState {
+pub fn agent_provisioning(params: ResolvedParams) -> AgentState(resource) {
   Provisioning(params)
 }
 
 /// Returns the ReadyTransient state.
-pub fn agent_ready_transient(params: ResolvedParams) -> AgentState {
+pub fn agent_ready_transient(params: ResolvedParams) -> AgentState(resource) {
   ReadyTransient(params)
 }
 
 /// Returns the ReadyContinuous state.
 pub fn agent_ready_continuous(
   params: ResolvedParams,
-  resource: AgentResource,
-) -> AgentState {
+  resource: resource,
+) -> AgentState(resource) {
   ReadyContinuous(params, resource)
 }
 
 /// Returns the Stopped state.
-pub fn agent_stopped(params: ResolvedParams) -> AgentState {
+pub fn agent_stopped(params: ResolvedParams) -> AgentState(resource) {
   Stopped(params)
 }
 
 /// Returns the Failed state.
-pub fn agent_failed(reason: types_agent.FailureReason) -> AgentState {
+pub fn agent_failed(reason: types_agent.FailureReason) -> AgentState(resource) {
   Failed(reason)
 }
 
 /// Returns True when the state is Created.
-pub fn is_created(state: AgentState) -> Bool {
+pub fn is_created(state: AgentState(resource)) -> Bool {
   case state {
     Created(_) -> True
     _ -> False
@@ -87,7 +70,7 @@ pub fn is_created(state: AgentState) -> Bool {
 }
 
 /// Returns True when the state is Provisioning.
-pub fn is_provisioning(state: AgentState) -> Bool {
+pub fn is_provisioning(state: AgentState(resource)) -> Bool {
   case state {
     Provisioning(_) -> True
     _ -> False
@@ -95,7 +78,7 @@ pub fn is_provisioning(state: AgentState) -> Bool {
 }
 
 /// Returns True when the state is ready.
-pub fn is_ready(state: AgentState) -> Bool {
+pub fn is_ready(state: AgentState(resource)) -> Bool {
   case state {
     ReadyTransient(_) -> True
     ReadyContinuous(_, _) -> True
@@ -104,7 +87,7 @@ pub fn is_ready(state: AgentState) -> Bool {
 }
 
 /// Returns True when the state is ReadyTransient.
-pub fn is_ready_transient(state: AgentState) -> Bool {
+pub fn is_ready_transient(state: AgentState(resource)) -> Bool {
   case state {
     ReadyTransient(_) -> True
     _ -> False
@@ -112,7 +95,7 @@ pub fn is_ready_transient(state: AgentState) -> Bool {
 }
 
 /// Returns True when the state is ReadyContinuous.
-pub fn is_ready_continuous(state: AgentState) -> Bool {
+pub fn is_ready_continuous(state: AgentState(resource)) -> Bool {
   case state {
     ReadyContinuous(_, _) -> True
     _ -> False
@@ -120,7 +103,7 @@ pub fn is_ready_continuous(state: AgentState) -> Bool {
 }
 
 /// Returns True when the state is Stopped.
-pub fn is_stopped(state: AgentState) -> Bool {
+pub fn is_stopped(state: AgentState(resource)) -> Bool {
   case state {
     Stopped(_) -> True
     _ -> False
@@ -128,7 +111,7 @@ pub fn is_stopped(state: AgentState) -> Bool {
 }
 
 /// Returns True when the state is Failed.
-pub fn is_failed(state: AgentState) -> Bool {
+pub fn is_failed(state: AgentState(resource)) -> Bool {
   case state {
     Failed(_) -> True
     _ -> False
@@ -137,7 +120,7 @@ pub fn is_failed(state: AgentState) -> Bool {
 
 /// Returns the failure reason if present.
 pub fn get_failure_reason(
-  state: AgentState,
+  state: AgentState(resource),
 ) -> option.Option(types_agent.FailureReason) {
   case state {
     Failed(reason) -> option.Some(reason)
@@ -146,7 +129,7 @@ pub fn get_failure_reason(
 }
 
 /// Returns the continuous resource if present.
-pub fn get_resource(state: AgentState) -> option.Option(AgentResource) {
+pub fn get_resource(state: AgentState(resource)) -> option.Option(resource) {
   case state {
     ReadyContinuous(_, resource) -> option.Some(resource)
     _ -> option.None
@@ -154,7 +137,7 @@ pub fn get_resource(state: AgentState) -> option.Option(AgentResource) {
 }
 
 /// Returns the parameters for states that carry them.
-pub fn get_params(state: AgentState) -> option.Option(ResolvedParams) {
+pub fn get_params(state: AgentState(resource)) -> option.Option(ResolvedParams) {
   case state {
     Created(params)
     | Provisioning(params)
@@ -174,7 +157,7 @@ pub type InteractGate {
 }
 
 /// Determines whether the agent can interact.
-pub fn can_interact(state: AgentState) -> InteractGate {
+pub fn can_interact(state: AgentState(resource)) -> InteractGate {
   case state {
     ReadyTransient(params) -> Allow(params)
     ReadyContinuous(params, _) -> Allow(params)
@@ -183,15 +166,15 @@ pub fn can_interact(state: AgentState) -> InteractGate {
 }
 
 /// Decision returned when stopping an instance.
-pub type StopDecision {
+pub type StopDecision(resource) {
   StopDecision(
-    next_state: AgentState,
-    resource_to_stop: option.Option(AgentResource),
+    next_state: AgentState(resource),
+    resource_to_stop: option.Option(resource),
   )
 }
 
 /// Applies a StopInstance transition and returns any resource to stop.
-pub fn on_stop_instance(state: AgentState) -> StopDecision {
+pub fn on_stop_instance(state: AgentState(resource)) -> StopDecision(resource) {
   case state {
     ReadyContinuous(params, resource) ->
       StopDecision(
@@ -207,7 +190,7 @@ pub fn on_stop_instance(state: AgentState) -> StopDecision {
 }
 
 /// Applies a StartInstance transition.
-pub fn on_start_instance(state: AgentState) -> AgentState {
+pub fn on_start_instance(state: AgentState(resource)) -> AgentState(resource) {
   case state {
     Created(params) -> Provisioning(params)
     Stopped(params) -> Provisioning(params)
@@ -217,8 +200,11 @@ pub fn on_start_instance(state: AgentState) -> AgentState {
 
 /// Applies a provisioning outcome to produce the next state.
 pub fn on_provisioning_done(
-  outcome: Result(#(AgentState, option.Option(Int)), types_agent.FailureReason),
-) -> #(AgentState, option.Option(Int)) {
+  outcome: Result(
+    #(AgentState(resource), option.Option(Int)),
+    types_agent.FailureReason,
+  ),
+) -> #(AgentState(resource), option.Option(Int)) {
   case outcome {
     Ok(#(state, port)) -> #(state, port)
     Error(reason) -> #(Failed(reason), option.None)
@@ -226,6 +212,6 @@ pub fn on_provisioning_done(
 }
 
 /// Returns the Failed state for a server death.
-pub fn on_server_died() -> AgentState {
+pub fn on_server_died() -> AgentState(resource) {
   Failed(types_agent.ServerDied)
 }

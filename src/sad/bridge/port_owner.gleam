@@ -11,7 +11,7 @@
 //// - Interpreting runner events beyond stop/exit.
 ////
 //// Relationships:
-//// - Used as an `AgentResource` payload by `sad/core/agent_lifecycle`.
+//// - Used as an `AgentResource` payload by `sad/core/agent`.
 //// - Wraps `sad/bridge/runner`.
 
 import gleam/erlang/process

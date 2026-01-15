@@ -40,16 +40,20 @@ import sad/types/profile as types_profile
 import sad/types/resolved_params.{type ResolvedParams}
 
 /// Opaque resource associated with a continuous agent.
-pub type AgentResource =
-  lifecycle.AgentResource
+///
+/// In v0 this is a dedicated port owner process so stop/delete can reliably
+/// close the underlying wrapper port.
+pub opaque type AgentResource {
+  ContinuousServer(owner: port_owner.PortOwnerRef)
+}
 
 /// Unified internal agent state.
 pub type AgentState =
-  lifecycle.AgentState
+  lifecycle.AgentState(AgentResource)
 
 /// Builds an agent resource from a port owner.
 pub fn port_owner_resource(owner: port_owner.PortOwnerRef) -> AgentResource {
-  lifecycle.port_owner_resource(owner)
+  ContinuousServer(owner)
 }
 
 /// Returns the Created state.
@@ -364,9 +368,14 @@ pub fn default_deps() -> AgentDeps {
     },
     cancel_interaction: fn(pid) { process.kill(pid) },
     stop_server: fn(resource) {
-      port_owner.stop_async(lifecycle.port_owner_ref(resource))
+      port_owner.stop_async(port_owner_ref(resource))
     },
   )
+}
+
+fn port_owner_ref(resource: AgentResource) -> port_owner.PortOwnerRef {
+  let ContinuousServer(owner: owner) = resource
+  owner
 }
 
 type AgentRuntimeState {
