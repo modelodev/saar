@@ -314,6 +314,7 @@ fn plan_serve(
 
       case res {
         Ok(_) -> RunPlan(code, [], [], NoAction)
+        Error(daemon_control.NoServer) -> RunPlan(code, [], [], NoAction)
         Error(_) -> RunPlan(code, [], ["failed to kill"], NoAction)
       }
     }

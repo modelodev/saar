@@ -87,6 +87,8 @@ pub fn handle(
       handle_reload_profiles(req, cfg, deps, trace_id)
     ["sys", "profiles"] -> handle_sys_profiles(req, cfg, deps, trace_id)
 
+    ["sys", "sleep", ms_raw] -> handle_sleep(req, trace_id, ms_raw)
+
     _ -> problem.not_found(trace_id, req.path)
   }
 }
@@ -100,6 +102,32 @@ fn handle_agents_collection(
   case req.method {
     http.Get -> list_agents(req, cfg, deps, trace_id)
     http.Post -> create_agent(req, cfg, deps, trace_id)
+    _ -> empty_response(405)
+  }
+}
+
+fn handle_sleep(
+  req: request.Request(mist.Connection),
+  trace_id: types_core.TraceId,
+  ms_raw: String,
+) -> response.Response(mist.ResponseData) {
+  case req.method {
+    http.Get ->
+      case int.parse(ms_raw) {
+        Ok(ms) if ms >= 0 -> {
+          process.sleep(ms)
+          json_response(200, json.object([#("slept_ms", json.int(ms))]))
+        }
+
+        _ ->
+          problem.from_error_kind(
+            types_enums.BadRequest,
+            trace_id,
+            req.path,
+            "invalid sleep milliseconds",
+          )
+      }
+
     _ -> empty_response(405)
   }
 }

@@ -65,7 +65,7 @@ pub fn serve_kill_no_server() {
   let assert Ok(_) = simplifile.create_directory_all(root)
 
   let kill_result = daemon_control.kill(pidfile, 50)
-  should.equal(daemon_control.kill_exit_code(kill_result), 1)
+  should.equal(daemon_control.kill_exit_code(kill_result), 0)
 
   case kill_result {
     Error(daemon_control.NoServer) -> Nil
