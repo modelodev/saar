@@ -2,6 +2,7 @@ import gleam/int
 import gleam/string
 import gleeunit
 import gleeunit/should
+import sad/daemon_control
 import sad/ffi/daemon
 import simplifile
 
@@ -40,15 +41,83 @@ pub fn serve_kill_stops_running() {
     |> assert_ok_pid
 
   should.equal(daemon.process_alive(pid), True)
-  daemon.kill_process(pid, 500) |> assert_ok_nil
+
+  case daemon_control.kill(pidfile, 500) {
+    Ok(_) -> Nil
+    Error(_) -> panic as "Expected kill ok"
+  }
+
+  // kill cleans the pidfile
+  case simplifile.read(pidfile) {
+    Error(simplifile.Enoent) -> Nil
+    _ -> panic as "Expected pidfile deleted"
+  }
+
   should.equal(daemon.process_alive(pid), False)
 }
 
 pub fn serve_kill_no_server() {
-  case daemon.kill_process(999_999, 50) {
-    Error(daemon.NotRunning) -> Nil
-    _ -> panic as "Expected NotRunning"
+  let root = "./build/test-workspaces/daemon-kill-no-server"
+  let pidfile = root <> "/sad.pid"
+  let assert Ok(_) = simplifile.create_directory_all(root)
+
+  case daemon_control.kill(pidfile, 50) {
+    Error(daemon_control.NoServer) -> Nil
+    _ -> panic as "Expected NoServer"
   }
+}
+
+pub fn serve_status_running() {
+  let root = "./build/test-workspaces/daemon-status-running"
+  let pidfile = root <> "/sad.pid"
+  let logfile = root <> "/sad.log"
+  let assert Ok(_) = simplifile.create_directory_all(root)
+
+  let pid =
+    daemon.daemonize("/bin/sleep", ["5"], pidfile, logfile)
+    |> assert_ok_pid
+
+  let status = daemon_control.status(pidfile)
+
+  case status {
+    daemon_control.Running(found_pid) -> should.equal(found_pid, pid)
+    daemon_control.NotRunning -> panic as "Expected running status"
+  }
+
+  should.equal(
+    daemon_control.status_message(status, 8080),
+    "SAD running on port 8080 (PID " <> int.to_string(pid) <> ")",
+  )
+
+  daemon.kill_process(pid, 500) |> assert_ok_nil
+}
+
+pub fn serve_status_not_running() {
+  let root = "./build/test-workspaces/daemon-status-not-running"
+  let pidfile = root <> "/sad.pid"
+  let logfile = root <> "/sad.log"
+  let assert Ok(_) = simplifile.create_directory_all(root)
+
+  let pid =
+    daemon.daemonize("/bin/sleep", ["5"], pidfile, logfile)
+    |> assert_ok_pid
+
+  daemon.kill_process(pid, 500) |> assert_ok_nil
+
+  let status = daemon_control.status(pidfile)
+
+  case status {
+    daemon_control.NotRunning -> Nil
+    _ -> panic as "Expected not running status"
+  }
+
+  // Stale pidfile is cleaned.
+  case simplifile.read(pidfile) {
+    Error(simplifile.Enoent) -> Nil
+    _ -> panic as "Expected pidfile deleted"
+  }
+
+  should.equal(daemon_control.status_message(status, 8080), "SAD not running")
 }
 
 pub fn serve_background_forks_process_test() {
@@ -61,6 +130,14 @@ pub fn serve_kill_stops_running_test() {
 
 pub fn serve_kill_no_server_test() {
   serve_kill_no_server()
+}
+
+pub fn serve_status_running_test() {
+  serve_status_running()
+}
+
+pub fn serve_status_not_running_test() {
+  serve_status_not_running()
 }
 
 fn assert_ok_pid(result: Result(Int, daemon.DaemonError)) -> Int {
