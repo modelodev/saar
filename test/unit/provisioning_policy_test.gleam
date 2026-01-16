@@ -34,6 +34,9 @@ pub fn failure_reason_to_string_is_stable_test() {
   types_agent.failure_reason_to_string(types_agent.NoNetwork)
   |> should.equal("no_network")
 
+  types_agent.failure_reason_to_string(types_agent.LandlockUnavailable)
+  |> should.equal("landlock_unavailable")
+
   types_agent.failure_reason_to_string(types_agent.Unknown)
   |> should.equal("unknown")
 }

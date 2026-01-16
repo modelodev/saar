@@ -53,6 +53,7 @@ pub type FailureReason {
   ServerDied
   AgentDown
   NoNetwork
+  LandlockUnavailable
   Unknown
 }
 
@@ -69,6 +70,7 @@ pub fn failure_reason_to_string(reason: FailureReason) -> String {
     ServerDied -> "server_died"
     AgentDown -> "agent_down"
     NoNetwork -> "no_network"
+    LandlockUnavailable -> "landlock_unavailable"
     Unknown -> "unknown"
   }
 }
