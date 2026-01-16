@@ -698,6 +698,10 @@ fn append_wrapper_env(
     #("SAD_WRAPPER_CONTROL_LINE_BYTES", int.to_string(control_line_bytes)),
     #("SAD_WRAPPER_POLL_MS", int.to_string(poll_interval_ms)),
     #("SAD_WRAPPER_POST_KILL_WAIT_MS", int.to_string(post_kill_wait_ms)),
+    #(
+      "SAD_LANDLOCK_MODE",
+      types_enums.landlock_mode_to_string(config.landlock_mode),
+    ),
   ])
 }
 
