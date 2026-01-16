@@ -18,6 +18,7 @@
 //// - Uses `tom` for TOML parsing and `envoy`/`simplifile` for boundary IO.
 
 import envoy
+import filepath
 import gleam/dict.{type Dict}
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -235,7 +236,7 @@ fn validate_top_level_key(
         "push_timeout_ms",
       ])
 
-    "security" -> validate_table_fields("security", value, ["landlock_mode"])
+    "security" -> validate_security_table(value)
 
     _ -> Error(UnknownKey(key: key))
   }
@@ -259,6 +260,36 @@ fn validate_table_fields(
     case list.contains(allowed, k) {
       True -> Ok(Nil)
       False -> Error(UnknownKey(key: prefix <> "." <> k))
+    }
+  })
+  |> result.map(fn(_) { Nil })
+}
+
+fn validate_security_table(value: tom.Toml) -> Result(Nil, ConfigLoadError) {
+  use table <- result.try(
+    tom.as_table(value)
+    |> result.map_error(fn(_) {
+      InvalidValue(key: "security", message: "expected table")
+    }),
+  )
+
+  table
+  |> dict.keys
+  |> list.try_map(fn(k) {
+    case k {
+      "landlock_mode" | "landlock" -> Ok(Nil)
+      other -> Error(UnknownKey(key: "security." <> other))
+    }
+  })
+  |> result.try(fn(_) {
+    case dict.get(table, "landlock") {
+      Ok(v) ->
+        validate_table_fields("security.landlock", v, [
+          "allow_read",
+          "allow_exec",
+          "allow_write",
+        ])
+      Error(_) -> Ok(Nil)
     }
   })
   |> result.map(fn(_) { Nil })
@@ -1050,27 +1081,198 @@ fn apply_security(
   case dict.get(root, "security") {
     Error(_) -> Ok(cfg)
     Ok(v) -> {
-      use mode <- result.try(optional_string(
+      use mode_opt <- result.try(optional_string(
         v,
         "landlock_mode",
         "security.landlock_mode",
       ))
 
-      let next = case mode {
-        None -> Ok(cfg)
+      let mode_out = case mode_opt {
+        None -> Ok(cfg.landlock_mode)
         Some(value) ->
           types_enums.landlock_mode_from_string(value)
-          |> result.map(fn(m) {
-            types_config.SadConfig(..cfg, landlock_mode: m)
-          })
           |> result.map_error(fn(_) {
             InvalidValue(key: "security.landlock_mode", message: "invalid")
           })
       }
 
-      next
+      use mode <- result.try(mode_out)
+
+      let policy_out = read_landlock_policy(v, mode)
+      use policy <- result.try(policy_out)
+
+      // Enforced mode requires absolute workspaces.directory.
+      case mode {
+        types_enums.LandlockEnforced ->
+          case is_absolute_workspaces_dir(cfg) {
+            True ->
+              Ok(
+                types_config.SadConfig(
+                  ..cfg,
+                  landlock_mode: mode,
+                  landlock_policy: policy,
+                ),
+              )
+            False ->
+              Error(InvalidValue(
+                key: "workspaces.directory",
+                message: "LANDLOCK_WORKSPACES_DIR_NOT_ABSOLUTE",
+              ))
+          }
+
+        _ ->
+          Ok(
+            types_config.SadConfig(
+              ..cfg,
+              landlock_mode: mode,
+              landlock_policy: policy,
+            ),
+          )
+      }
     }
   }
+}
+
+fn is_absolute_workspaces_dir(cfg: types_config.SadConfig) -> Bool {
+  let types_config.SadConfig(storage: storage, ..) = cfg
+  let types_config.StorageConfig(workspaces_directory: dir, ..) = storage
+  filepath.is_absolute(dir)
+}
+
+fn read_landlock_policy(
+  security_value: tom.Toml,
+  mode: types_enums.LandlockMode,
+) -> Result(Option(types_config.LandlockPolicyConfig), ConfigLoadError) {
+  case mode {
+    types_enums.LandlockEnforced -> {
+      use security_table <- result.try(
+        tom.as_table(security_value)
+        |> result.map_error(fn(_) {
+          InvalidValue(key: "security", message: "expected table")
+        }),
+      )
+
+      case dict.get(security_table, "landlock") {
+        Error(_) ->
+          Error(InvalidValue(
+            key: "security.landlock",
+            message: "LANDLOCK_POLICY_MISSING",
+          ))
+        Ok(v) -> {
+          use table <- result.try(
+            tom.as_table(v)
+            |> result.map_error(fn(_) {
+              InvalidValue(key: "security.landlock", message: "expected table")
+            }),
+          )
+
+          use allow_read <- result.try(required_string_array(
+            table,
+            "allow_read",
+            "security.landlock.allow_read",
+          ))
+          use allow_exec <- result.try(required_string_array(
+            table,
+            "allow_exec",
+            "security.landlock.allow_exec",
+          ))
+          use allow_write <- result.try(required_string_array(
+            table,
+            "allow_write",
+            "security.landlock.allow_write",
+          ))
+
+          use _ <- result.try(validate_landlock_paths(
+            allow_read,
+            "security.landlock.allow_read",
+          ))
+          use _ <- result.try(validate_landlock_paths(
+            allow_exec,
+            "security.landlock.allow_exec",
+          ))
+          use _ <- result.try(validate_landlock_paths(
+            allow_write,
+            "security.landlock.allow_write",
+          ))
+
+          Ok(
+            Some(types_config.LandlockPolicyConfig(
+              allow_read: allow_read,
+              allow_exec: allow_exec,
+              allow_write: allow_write,
+            )),
+          )
+        }
+      }
+    }
+
+    _ -> Ok(None)
+  }
+}
+
+fn required_string_array(
+  table: Dict(String, tom.Toml),
+  field: String,
+  key: String,
+) -> Result(List(String), ConfigLoadError) {
+  case dict.get(table, field) {
+    Error(_) -> Error(InvalidValue(key: key, message: "required"))
+    Ok(v) ->
+      tom.as_array(v)
+      |> result.map_error(fn(_) {
+        InvalidValue(key: key, message: "expected array")
+      })
+      |> result.try(fn(items) {
+        items
+        |> list.try_map(fn(item) {
+          tom.as_string(item)
+          |> result.map_error(fn(_) {
+            InvalidValue(key: key, message: "expected string")
+          })
+        })
+      })
+  }
+}
+
+fn validate_landlock_paths(
+  paths: List(String),
+  key: String,
+) -> Result(Nil, ConfigLoadError) {
+  paths
+  |> list.try_map(fn(path) {
+    case filepath.is_absolute(path) {
+      False ->
+        Error(InvalidValue(
+          key: key,
+          message: "LANDLOCK_POLICY_PATH_NOT_ABSOLUTE",
+        ))
+      True ->
+        case path {
+          "/" ->
+            Error(InvalidValue(
+              key: key,
+              message: "LANDLOCK_POLICY_PATH_IS_ROOT",
+            ))
+          _ ->
+            case has_dot_segment(path) {
+              True ->
+                Error(InvalidValue(
+                  key: key,
+                  message: "LANDLOCK_POLICY_PATH_HAS_DOT_SEGMENT",
+                ))
+              False -> Ok(Nil)
+            }
+        }
+    }
+  })
+  |> result.map(fn(_) { Nil })
+}
+
+fn has_dot_segment(path: String) -> Bool {
+  string.contains(path, "/../")
+  || string.contains(path, "/./")
+  || string.ends_with(path, "/..")
+  || string.ends_with(path, "/.")
 }
 
 fn optional_int(
