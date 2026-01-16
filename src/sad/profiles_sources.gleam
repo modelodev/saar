@@ -207,7 +207,7 @@ fn load_dir_source(
     let path = profiles_dir <> "/" <> name
     use pair <- result.try(load_profile_file(root, path))
     let #(id, profile) = pair
-    Ok(LoadedProfile(id: id, profile: profile, origin: "dir:" <> path))
+    Ok(LoadedProfile(id: id, profile: profile, origin: "dir:" <> root))
   })
 }
 
@@ -230,13 +230,7 @@ fn load_git_source(
     }),
   )
 
-  let label =
-    "git:"
-    <> url
-    <> case ref {
-      Some(r) -> "@" <> r
-      None -> ""
-    }
+  let _label = #(url, ref)
 
   entries
   |> list.filter(fn(name) { string.ends_with(name, ".json") })
@@ -245,12 +239,16 @@ fn load_git_source(
     let path = profiles_dir <> "/" <> name
     use pair <- result.try(load_profile_file(root, path))
     let #(id, profile) = pair
-    Ok(LoadedProfile(
-      id: id,
-      profile: profile,
-      origin: label <> ":profiles/" <> name,
-    ))
+    Ok(LoadedProfile(id: id, profile: profile, origin: "git:" <> root))
   })
+}
+
+pub fn profile_source_root_from_origin(origin: String) -> option.Option(String) {
+  case origin {
+    "dir:" <> root -> option.Some(root)
+    "git:" <> _ -> option.None
+    _ -> option.None
+  }
 }
 
 fn load_profile_file(

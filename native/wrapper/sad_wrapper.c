@@ -12,8 +12,13 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #ifdef __linux__
+#include <linux/landlock.h>
+#include <poll.h>
 #include <sched.h>
+#include <sys/syscall.h>
 #endif
+
+#define LANDLOCK_UNAVAILABLE_EXIT_CODE 42
 
 static volatile sig_atomic_t child_exited = 0;
 
@@ -46,6 +51,37 @@ static void setup_signals(void) {
   signal(SIGTERM, SIG_IGN);
 }
 
+static bool poll_for_input_or_child(int stdin_fd, int timeout_ms) {
+  struct pollfd fds[1];
+  fds[0].fd = stdin_fd;
+  fds[0].events = POLLIN;
+
+  while (1) {
+    if (child_exited) {
+      return true;
+    }
+
+    int rc = poll(fds, 1, timeout_ms);
+    if (rc < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      return true;
+    }
+    if (rc == 0) {
+      continue;
+    }
+
+    if (fds[0].revents & POLLIN) {
+      return true;
+    }
+
+    if (fds[0].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+      return true;
+    }
+  }
+}
+
 static int read_env_int(const char *name, int default_value) {
   const char *value = getenv(name);
   if (!value) {
@@ -56,6 +92,26 @@ static int read_env_int(const char *name, int default_value) {
     return default_value;
   }
   return parsed;
+}
+
+typedef enum {
+  LANDLOCK_MODE_BEST_EFFORT,
+  LANDLOCK_MODE_ENFORCED,
+  LANDLOCK_MODE_OFF,
+} LandlockMode;
+
+static LandlockMode read_landlock_mode(void) {
+  const char *value = getenv("SAD_LANDLOCK_MODE");
+  if (!value || strcmp(value, "best_effort") == 0) {
+    return LANDLOCK_MODE_BEST_EFFORT;
+  }
+  if (strcmp(value, "enforced") == 0) {
+    return LANDLOCK_MODE_ENFORCED;
+  }
+  if (strcmp(value, "off") == 0) {
+    return LANDLOCK_MODE_OFF;
+  }
+  return LANDLOCK_MODE_BEST_EFFORT;
 }
 
 static int read_shutdown_ms(void) {
@@ -479,7 +535,17 @@ static bool apply_user_ns_mappings(pid_t pid) {
 
 static void wait_for_parent_ready(int sync_fd) {
   char buf[1];
-  while (read(sync_fd, buf, sizeof(buf)) > 0) {
+  while (1) {
+    ssize_t n = read(sync_fd, buf, sizeof(buf));
+    if (n == 0) {
+      break;
+    }
+    if (n < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      break;
+    }
   }
   close(sync_fd);
 }
@@ -502,6 +568,10 @@ static void stop_sequence(pid_t child_pid, int shutdown_ms, bool in_namespace) {
   int poll_ms = read_env_int("SAD_WRAPPER_POLL_MS", 50);
   int post_kill_wait_ms = read_env_int("SAD_WRAPPER_POST_KILL_WAIT_MS", 200);
   if (wait_for_child_exit(child_pid, shutdown_ms, poll_ms)) {
+    int status = 0;
+    if (waitpid(child_pid, &status, WNOHANG) == child_pid) {
+      _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 1);
+    }
     _exit(0);
   }
   if (in_namespace) {
@@ -564,7 +634,212 @@ static void handle_control_line(const char *line,
   }
 }
 
+#ifdef __linux__
+static int ll_create_ruleset(struct landlock_ruleset_attr *attr,
+                             size_t size,
+                             __u32 flags) {
+  return syscall(__NR_landlock_create_ruleset, attr, size, flags);
+}
+
+static int ll_add_rule(int ruleset_fd,
+                       enum landlock_rule_type type,
+                       const void *attr,
+                       __u32 flags) {
+  return syscall(__NR_landlock_add_rule, ruleset_fd, type, attr, flags);
+}
+
+static int ll_restrict_self(int ruleset_fd, __u32 flags) {
+  return syscall(__NR_landlock_restrict_self, ruleset_fd, flags);
+}
+
+static int try_apply_landlock_policy_v0(const char *workspace_dir,
+                                       LandlockMode mode) {
+  if (mode == LANDLOCK_MODE_OFF) {
+    return 0;
+  }
+
+  if (!workspace_dir || workspace_dir[0] == '\0') {
+    if (mode == LANDLOCK_MODE_ENFORCED) {
+      debug_log("landlock: missing SAD_WORKSPACE in enforced mode");
+      fprintf(stderr, "LANDLOCK_UNAVAILABLE\n");
+      return -1;
+    }
+    debug_log("landlock: missing SAD_WORKSPACE, skipping");
+    return 0;
+  }
+
+  // Landlock requires no_new_privs.
+  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
+    if (mode == LANDLOCK_MODE_ENFORCED) {
+      debug_log("landlock: PR_SET_NO_NEW_PRIVS failed: %s", strerror(errno));
+      fprintf(stderr, "LANDLOCK_UNAVAILABLE\n");
+      return -1;
+    }
+    debug_log("landlock: PR_SET_NO_NEW_PRIVS failed, skipping: %s",
+              strerror(errno));
+    return 0;
+  }
+
+  struct landlock_ruleset_attr ruleset = {0};
+  ruleset.handled_access_fs = LANDLOCK_ACCESS_FS_EXECUTE |
+                              LANDLOCK_ACCESS_FS_READ_FILE |
+                              LANDLOCK_ACCESS_FS_READ_DIR |
+                              LANDLOCK_ACCESS_FS_WRITE_FILE |
+                              LANDLOCK_ACCESS_FS_REMOVE_DIR |
+                              LANDLOCK_ACCESS_FS_REMOVE_FILE |
+                              LANDLOCK_ACCESS_FS_MAKE_CHAR |
+                              LANDLOCK_ACCESS_FS_MAKE_DIR |
+                              LANDLOCK_ACCESS_FS_MAKE_REG |
+                              LANDLOCK_ACCESS_FS_MAKE_SOCK |
+                              LANDLOCK_ACCESS_FS_MAKE_FIFO |
+                              LANDLOCK_ACCESS_FS_MAKE_BLOCK |
+                              LANDLOCK_ACCESS_FS_MAKE_SYM;
+
+  int ruleset_fd = ll_create_ruleset(&ruleset, sizeof(ruleset), 0);
+  if (ruleset_fd < 0) {
+    if (errno == ENOSYS || errno == EOPNOTSUPP) {
+      if (mode == LANDLOCK_MODE_ENFORCED) {
+        debug_log("landlock: unavailable on this kernel");
+        fprintf(stderr, "LANDLOCK_UNAVAILABLE\n");
+        return -1;
+      }
+      debug_log("landlock: unavailable on this kernel, continuing");
+      return 0;
+    }
+
+    if (mode == LANDLOCK_MODE_ENFORCED) {
+      debug_log("landlock: create_ruleset failed: %s", strerror(errno));
+      fprintf(stderr, "LANDLOCK_UNAVAILABLE\n");
+      return -1;
+    }
+    debug_log("landlock: create_ruleset failed, skipping: %s", strerror(errno));
+    return 0;
+  }
+
+  // Helpers to add a path rule.
+  struct landlock_path_beneath_attr path = {0};
+
+  // Read-only paths.
+  const char *allow_r[] = {
+      "/etc",
+      "/run/systemd/resolve/",
+      "/proc/self",
+      "/dev/random",
+      "/dev/urandom",
+      NULL,
+  };
+
+  // Read+exec paths.
+  const char *allow_rx[] = {
+      "/bin",
+      "/lib",
+      "/lib64",
+      "/usr",
+      NULL,
+  };
+
+  // Read+write+exec paths.
+  const char *allow_rwx[] = {
+      workspace_dir,
+      "/tmp",
+      "/var/tmp",
+      "/dev/null",
+      NULL,
+  };
+
+  // A minimal allowlist for v0. We allow access beneath each path.
+  for (int i = 0; allow_r[i]; i++) {
+    int fd = open(allow_r[i], O_PATH | O_CLOEXEC);
+    if (fd < 0) {
+      continue;
+    }
+    path.allowed_access = LANDLOCK_ACCESS_FS_READ_FILE |
+                          LANDLOCK_ACCESS_FS_READ_DIR;
+    path.parent_fd = fd;
+    (void)ll_add_rule(ruleset_fd,
+                      LANDLOCK_RULE_PATH_BENEATH,
+                      &path,
+                      0);
+    close(fd);
+  }
+
+  for (int i = 0; allow_rx[i]; i++) {
+    int fd = open(allow_rx[i], O_PATH | O_CLOEXEC);
+    if (fd < 0) {
+      continue;
+    }
+    path.allowed_access = LANDLOCK_ACCESS_FS_READ_FILE |
+                          LANDLOCK_ACCESS_FS_READ_DIR |
+                          LANDLOCK_ACCESS_FS_EXECUTE;
+    path.parent_fd = fd;
+    (void)ll_add_rule(ruleset_fd,
+                      LANDLOCK_RULE_PATH_BENEATH,
+                      &path,
+                      0);
+    close(fd);
+  }
+
+  for (int i = 0; allow_rwx[i]; i++) {
+    int fd = open(allow_rwx[i], O_PATH | O_CLOEXEC);
+    if (fd < 0) {
+      continue;
+    }
+    path.allowed_access = LANDLOCK_ACCESS_FS_READ_FILE |
+                          LANDLOCK_ACCESS_FS_READ_DIR |
+                          LANDLOCK_ACCESS_FS_WRITE_FILE |
+                          LANDLOCK_ACCESS_FS_REMOVE_DIR |
+                          LANDLOCK_ACCESS_FS_REMOVE_FILE |
+                          LANDLOCK_ACCESS_FS_MAKE_CHAR |
+                          LANDLOCK_ACCESS_FS_MAKE_DIR |
+                          LANDLOCK_ACCESS_FS_MAKE_REG |
+                          LANDLOCK_ACCESS_FS_MAKE_SOCK |
+                          LANDLOCK_ACCESS_FS_MAKE_FIFO |
+                          LANDLOCK_ACCESS_FS_MAKE_BLOCK |
+                          LANDLOCK_ACCESS_FS_MAKE_SYM;
+    path.parent_fd = fd;
+    (void)ll_add_rule(ruleset_fd,
+                      LANDLOCK_RULE_PATH_BENEATH,
+                      &path,
+                      0);
+    close(fd);
+  }
+
+  if (ll_restrict_self(ruleset_fd, 0) != 0) {
+    close(ruleset_fd);
+    if (errno == ENOSYS || errno == EOPNOTSUPP) {
+      if (mode == LANDLOCK_MODE_ENFORCED) {
+        debug_log("landlock: restrict_self unavailable");
+        fprintf(stderr, "LANDLOCK_UNAVAILABLE\n");
+        return -1;
+      }
+      debug_log("landlock: restrict_self unavailable, continuing");
+      return 0;
+    }
+
+    if (mode == LANDLOCK_MODE_ENFORCED) {
+      debug_log("landlock: restrict_self failed: %s", strerror(errno));
+      fprintf(stderr, "LANDLOCK_UNAVAILABLE\n");
+      return -1;
+    }
+    debug_log("landlock: restrict_self failed, skipping: %s", strerror(errno));
+    return 0;
+  }
+
+  close(ruleset_fd);
+  debug_log("landlock: policy applied");
+  return 0;
+}
+#endif
+
 static int run_child(char **argv) {
+#ifdef __linux__
+  LandlockMode mode = read_landlock_mode();
+  const char *workspace = getenv("SAD_WORKSPACE");
+  if (try_apply_landlock_policy_v0(workspace, mode) != 0) {
+    _exit(LANDLOCK_UNAVAILABLE_EXIT_CODE);
+  }
+#endif
+
   execvp(argv[0], argv);
   _exit(127);
 }
@@ -598,6 +873,22 @@ static int main_loop(pid_t child_pid, bool in_namespace, int child_stdin_fd) {
         return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
       }
       child_exited = 0;
+    }
+
+    // Avoid blocking forever on stdin when the child exits.
+    poll_for_input_or_child(STDIN_FILENO, 100);
+
+    if (child_exited) {
+      int status = 0;
+      pid_t waited = waitpid(child_pid, &status, WNOHANG);
+      if (waited == child_pid) {
+        close_child_stdin(&child_stdin_fd);
+        free(buf);
+        free(line_buf);
+        return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+      }
+      child_exited = 0;
+      continue;
     }
 
     ssize_t n = read(STDIN_FILENO, buf, (size_t)buffer_bytes);
@@ -683,7 +974,8 @@ static int fallback_main(char **argv) {
 #ifdef __linux__
 struct NamespaceArgs {
   char **argv;
-  int sync_fd;
+  int sync_fd_read;
+  int sync_fd_write;
 };
 
 static int ns_init_main(void *arg) {
@@ -692,7 +984,13 @@ static int ns_init_main(void *arg) {
 
   struct NamespaceArgs *args = (struct NamespaceArgs *)arg;
   char **argv = args->argv;
-  wait_for_parent_ready(args->sync_fd);
+
+  // Close our copy of the write end so EOF is observable.
+  close(args->sync_fd_write);
+
+  // The parent writes uid/gid maps and then closes the sync pipe.
+  // Wait for that signal before spawning the child.
+  wait_for_parent_ready(args->sync_fd_read);
 
   return spawn_and_run(argv, true, false);
 }
@@ -741,7 +1039,8 @@ int main(int argc, char **argv) {
 
   struct NamespaceArgs args = {
       .argv = child_argv,
-      .sync_fd = sync_pipe[0],
+      .sync_fd_read = sync_pipe[0],
+      .sync_fd_write = sync_pipe[1],
   };
 
   int flags = CLONE_NEWPID | CLONE_NEWUSER | SIGCHLD;
