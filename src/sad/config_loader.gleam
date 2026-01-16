@@ -1143,71 +1143,106 @@ fn read_landlock_policy(
   security_value: tom.Toml,
   mode: types_enums.LandlockMode,
 ) -> Result(Option(types_config.LandlockPolicyConfig), ConfigLoadError) {
-  case mode {
-    types_enums.LandlockEnforced -> {
-      use security_table <- result.try(
-        tom.as_table(security_value)
-        |> result.map_error(fn(_) {
-          InvalidValue(key: "security", message: "expected table")
-        }),
-      )
+  use security_table <- result.try(
+    tom.as_table(security_value)
+    |> result.map_error(fn(_) {
+      InvalidValue(key: "security", message: "expected table")
+    }),
+  )
 
-      case dict.get(security_table, "landlock") {
-        Error(_) ->
+  case dict.get(security_table, "landlock") {
+    Error(_) ->
+      case mode {
+        types_enums.LandlockEnforced ->
           Error(InvalidValue(
             key: "security.landlock",
             message: "LANDLOCK_POLICY_MISSING",
           ))
-        Ok(v) -> {
-          use table <- result.try(
-            tom.as_table(v)
-            |> result.map_error(fn(_) {
-              InvalidValue(key: "security.landlock", message: "expected table")
-            }),
-          )
-
-          use allow_read <- result.try(required_string_array(
-            table,
-            "allow_read",
-            "security.landlock.allow_read",
-          ))
-          use allow_exec <- result.try(required_string_array(
-            table,
-            "allow_exec",
-            "security.landlock.allow_exec",
-          ))
-          use allow_write <- result.try(required_string_array(
-            table,
-            "allow_write",
-            "security.landlock.allow_write",
-          ))
-
-          use _ <- result.try(validate_landlock_paths(
-            allow_read,
-            "security.landlock.allow_read",
-          ))
-          use _ <- result.try(validate_landlock_paths(
-            allow_exec,
-            "security.landlock.allow_exec",
-          ))
-          use _ <- result.try(validate_landlock_paths(
-            allow_write,
-            "security.landlock.allow_write",
-          ))
-
-          Ok(
-            Some(types_config.LandlockPolicyConfig(
-              allow_read: allow_read,
-              allow_exec: allow_exec,
-              allow_write: allow_write,
-            )),
-          )
-        }
+        _ -> Ok(None)
       }
-    }
 
-    _ -> Ok(None)
+    Ok(v) -> {
+      use table <- result.try(
+        tom.as_table(v)
+        |> result.map_error(fn(_) {
+          InvalidValue(key: "security.landlock", message: "expected table")
+        }),
+      )
+
+      use allow_read <- result.try(required_string_array(
+        table,
+        "allow_read",
+        "security.landlock.allow_read",
+      ))
+      use allow_exec <- result.try(required_string_array(
+        table,
+        "allow_exec",
+        "security.landlock.allow_exec",
+      ))
+      use allow_write <- result.try(required_string_array(
+        table,
+        "allow_write",
+        "security.landlock.allow_write",
+      ))
+
+      use _ <- result.try(validate_landlock_paths(
+        allow_read,
+        "security.landlock.allow_read",
+      ))
+      use _ <- result.try(validate_landlock_paths(
+        allow_exec,
+        "security.landlock.allow_exec",
+      ))
+      use _ <- result.try(validate_landlock_paths(
+        allow_write,
+        "security.landlock.allow_write",
+      ))
+
+      use _ <- result.try(validate_landlock_symlinks(
+        allow_read,
+        "security.landlock.allow_read",
+      ))
+      use _ <- result.try(validate_landlock_symlinks(
+        allow_exec,
+        "security.landlock.allow_exec",
+      ))
+      use _ <- result.try(validate_landlock_symlinks(
+        allow_write,
+        "security.landlock.allow_write",
+      ))
+
+      Ok(
+        Some(types_config.LandlockPolicyConfig(
+          allow_read: allow_read,
+          allow_exec: allow_exec,
+          allow_write: allow_write,
+        )),
+      )
+    }
   }
+}
+
+fn validate_landlock_symlinks(
+  paths: List(String),
+  key: String,
+) -> Result(Nil, ConfigLoadError) {
+  paths
+  |> list.try_map(fn(path) {
+    case simplifile.link_info(path) {
+      Ok(info) ->
+        case simplifile.file_info_type(info) {
+          simplifile.Symlink ->
+            Error(InvalidValue(
+              key: key,
+              message: "LANDLOCK_POLICY_PATH_IS_SYMLINK",
+            ))
+          _ -> Ok(Nil)
+        }
+
+      Error(_) -> Ok(Nil)
+    }
+  })
+  |> result.map(fn(_) { Nil })
 }
 
 fn required_string_array(

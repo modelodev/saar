@@ -1,0 +1,13 @@
+[auth]
+api_key = "ok"
+
+[workspaces]
+directory = "/tmp/sad-landlock-test-workspaces"
+
+[security]
+landlock_mode = "enforced"
+
+[security.landlock]
+allow_exec = ["/usr"]
+allow_read = ["/tmp/sad-landlock-symlink"]
+allow_write = ["/tmp"]

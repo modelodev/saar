@@ -71,6 +71,7 @@ pub fn execute_transient(
     shutdown_timeout_ms,
     wrapper,
     config.landlock_mode,
+    landlock_policy_json(config, cwd),
     True,
   ))
 
@@ -133,6 +134,7 @@ pub fn run_provision(
     shutdown_timeout_ms,
     wrapper,
     config.landlock_mode,
+    landlock_policy_json(config, cwd),
     True,
   ))
 
@@ -323,6 +325,7 @@ fn run_and_collect_events(
   shutdown_timeout_ms: Int,
   wrapper: types_config.WrapperConfig,
   landlock_mode: types_enums.LandlockMode,
+  landlock_policy_json: option.Option(String),
   stop_on_timeout: Bool,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let env =
@@ -331,7 +334,7 @@ fn run_and_collect_events(
       wrapper,
       shutdown_timeout_ms,
       landlock_mode,
-      option.None,
+      landlock_policy_json,
     )
 
   use process <- result.try(start_process(
