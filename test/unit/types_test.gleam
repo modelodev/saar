@@ -111,6 +111,7 @@ pub fn default_config_invariants_test() {
     limits: limits,
     stream: stream,
     landlock_mode: landlock_mode,
+    landlock_policy: _landlock_policy,
   ) = types_config.default_sad_config()
 
   let types_config.SadTimeouts(

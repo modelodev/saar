@@ -281,7 +281,7 @@ fn execute_runner_streaming(
 
   let env = list.append(runner_env(), dict.to_list(env_map))
   let env = list.append(env, [#("SAD_WORKSPACE", workspace)])
-  let env = append_wrapper_env(env, config)
+  let env = append_wrapper_env(env, config, workspace)
 
   let types_config.RunnerExecSettings(
     max_runner_event_bytes: max_event_bytes,
@@ -688,6 +688,7 @@ fn managed_port_host(config: types_config.SadConfig) -> String {
 fn append_wrapper_env(
   env: List(#(String, String)),
   config: types_config.SadConfig,
+  workspace: String,
 ) -> List(#(String, String)) {
   let types_config.RunnerExecSettings(
     shutdown_timeout_ms: shutdown_timeout_ms,
@@ -702,7 +703,7 @@ fn append_wrapper_env(
     post_kill_wait_ms: post_kill_wait_ms,
   ) = wrapper
 
-  list.append(env, [
+  let base = [
     #("SAD_SHUTDOWN_MS", int.to_string(shutdown_timeout_ms)),
     #("SAD_WRAPPER_READ_BUFFER_BYTES", int.to_string(read_buffer_bytes)),
     #("SAD_WRAPPER_CONTROL_LINE_BYTES", int.to_string(control_line_bytes)),
@@ -712,7 +713,36 @@ fn append_wrapper_env(
       "SAD_LANDLOCK_MODE",
       types_enums.landlock_mode_to_string(config.landlock_mode),
     ),
-  ])
+  ]
+
+  let policy_json = case config.landlock_policy {
+    option.None -> option.None
+    option.Some(policy0) -> {
+      let types_config.LandlockPolicyConfig(
+        allow_read: allow_read0,
+        allow_exec: allow_exec0,
+        allow_write: allow_write0,
+      ) = policy0
+
+      let allow_read = list.append(allow_read0, [workspace])
+      let allow_write = list.append(allow_write0, [workspace])
+
+      json.object([
+        #("allow_read", json.array(allow_read, json.string)),
+        #("allow_exec", json.array(allow_exec0, json.string)),
+        #("allow_write", json.array(allow_write, json.string)),
+      ])
+      |> json.to_string
+      |> option.Some
+    }
+  }
+
+  let policy = case policy_json {
+    option.Some(s) -> [#("SAD_LANDLOCK_POLICY_JSON", s)]
+    option.None -> []
+  }
+
+  list.append(env, list.append(base, policy))
 }
 
 fn port_error_to_string(err: port_process.PortError) -> String {

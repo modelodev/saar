@@ -17,7 +17,7 @@
 
 import gleam/dict
 import gleam/list
-import gleam/option.{type Option}
+import gleam/option.{type Option, None}
 import sad/types/core
 import sad/types/enums
 
@@ -132,6 +132,17 @@ pub type StorageConfig {
   StorageConfig(workspaces_directory: String, artifacts: ArtifactStoreConfig)
 }
 
+/// Configuration for the Landlock filesystem sandbox.
+///
+/// All paths must be absolute.
+pub type LandlockPolicyConfig {
+  LandlockPolicyConfig(
+    allow_read: List(String),
+    allow_exec: List(String),
+    allow_write: List(String),
+  )
+}
+
 /// Top-level SAD configuration.
 ///
 /// This record groups related settings (timeouts, limits, runner settings, etc.)
@@ -148,6 +159,7 @@ pub type SadConfig {
     limits: SadLimits,
     stream: StreamConfig,
     landlock_mode: enums.LandlockMode,
+    landlock_policy: Option(LandlockPolicyConfig),
   )
 }
 
@@ -333,5 +345,6 @@ pub fn default_sad_config() -> SadConfig {
       ),
     ),
     landlock_mode: enums.LandlockBestEffort,
+    landlock_policy: None,
   )
 }
