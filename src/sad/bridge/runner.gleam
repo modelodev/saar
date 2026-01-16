@@ -609,6 +609,10 @@ fn handle_port_exit(
         True -> Error(interaction_error(trace_id, "Runner call timeout"))
         False -> Ok(list.reverse(events))
       }
+
+    code if code == port_process.landlock_unavailable_exit_code ->
+      Error(interaction_error(trace_id, "LANDLOCK_UNAVAILABLE"))
+
     _ ->
       Error(interaction_error(
         trace_id,

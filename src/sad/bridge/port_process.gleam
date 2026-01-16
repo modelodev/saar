@@ -27,6 +27,8 @@ import sad/bridge/jsonl_framer
 import sad/ffi
 import simplifile
 
+pub const landlock_unavailable_exit_code = 42
+
 /// Stateful handle for an open wrapper port process.
 pub type PortProcess {
   PortProcess(

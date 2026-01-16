@@ -369,11 +369,21 @@ fn read_runner_stream(
       ))
 
     Error(port_process.PortExited(code)) ->
-      Error(types_output.sad_error(
-        input.context.trace_id,
-        types_enums.InfraError,
-        "Runner exited with code " <> int.to_string(code),
-      ))
+      case code == port_process.landlock_unavailable_exit_code {
+        True ->
+          Error(types_output.sad_error(
+            input.context.trace_id,
+            types_enums.InfraError,
+            "LANDLOCK_UNAVAILABLE",
+          ))
+
+        False ->
+          Error(types_output.sad_error(
+            input.context.trace_id,
+            types_enums.InfraError,
+            "Runner exited with code " <> int.to_string(code),
+          ))
+      }
 
     Ok(line) ->
       runner_contract.decode_event(line)
