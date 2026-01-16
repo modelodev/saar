@@ -78,6 +78,70 @@ pub fn decode_network_mode_strict_test() {
   |> should.be_error
 }
 
+pub fn http_method_decoder_get() {
+  assert_decoded_http_method("GET", types_profile.HttpGet)
+}
+
+pub fn http_method_decoder_post() {
+  assert_decoded_http_method("POST", types_profile.HttpPost)
+}
+
+pub fn http_method_decoder_put() {
+  assert_decoded_http_method("PUT", types_profile.HttpPut)
+}
+
+pub fn http_method_decoder_delete() {
+  assert_decoded_http_method("DELETE", types_profile.HttpDelete)
+}
+
+pub fn http_method_decoder_lowercase() {
+  assert_decoded_http_method("get", types_profile.HttpGet)
+}
+
+pub fn http_method_decoder_invalid() {
+  let payload = http_interface_payload("GETT")
+  let assert Ok(value) = json.parse(payload, decode.dynamic)
+
+  decoders.decode_interface(value)
+  |> should.be_error
+  Nil
+}
+
+pub fn http_method_decoder_empty() {
+  let payload = http_interface_payload("")
+  let assert Ok(value) = json.parse(payload, decode.dynamic)
+
+  decoders.decode_interface(value)
+  |> should.be_error
+  Nil
+}
+
+fn assert_decoded_http_method(raw: String, expected: types_profile.HttpMethod) {
+  let payload = http_interface_payload(raw)
+  let assert Ok(value) = json.parse(payload, decode.dynamic)
+
+  let interface = decoders.decode_interface(value) |> should.be_ok
+
+  let assert types_profile.HttpInterface(capabilities: caps, ..) = interface
+  let assert Ok(types_profile.HttpCapability(method: method, ..)) =
+    dict.get(caps, "c")
+
+  method |> should.equal(expected)
+}
+
+fn http_interface_payload(method: String) -> String {
+  "{"
+  <> "\"protocol\":\"http\","
+  <> "\"base_url\":\"http://example\","
+  <> "\"capabilities\":{"
+  <> "\"c\":{"
+  <> "\"path\":\"/p\","
+  <> "\"method\":\""
+  <> method
+  <> "\""
+  <> "}}}"
+}
+
 pub fn decode_input_schema_forms_test() {
   let assert Ok(chat) = json.parse("\"std:chat\"", decode.dynamic)
   let assert Ok(types_profile.SchemaChat) = decoders.decode_input_schema(chat)

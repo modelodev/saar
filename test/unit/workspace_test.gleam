@@ -45,6 +45,21 @@ pub fn normalizes_double_slash_test() {
   |> should.equal("a/b")
 }
 
+pub fn to_absolute_joins_root() {
+  let root = "/tmp/sad-workspace"
+  let assert Ok(path) = workspace.workspace_path_validate("outputs/report.txt")
+
+  workspace.workspace_path_to_absolute(root, path)
+  |> should.equal(filepath.join(root, "outputs/report.txt"))
+}
+
+pub fn join_valid() {
+  let root = "/tmp/sad-workspace"
+
+  workspace.workspace_path_join(root, "outputs/report.txt")
+  |> should.equal(Ok(filepath.join(root, "outputs/report.txt")))
+}
+
 pub fn rejects_null_byte_test() {
   let raw = "a\u{0}b"
   workspace.workspace_path_validate(raw)

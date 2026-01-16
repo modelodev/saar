@@ -1,4 +1,5 @@
 import gleam/json
+import gleam/string
 import gleeunit/should
 import qcheck
 import sad/adapters/a2a
@@ -63,5 +64,18 @@ pub fn prop_a2ui_data_model_update_payload_matches_json_test() {
     a2ui.data_model_update(trace_id, delta)
     |> stream.payload
     |> should.equal(expected)
+  })
+}
+
+pub fn prop_trace_id_preserved() {
+  let config = qcheck.default_config() |> qcheck.with_test_count(test_count)
+
+  qcheck.run(config, qcheck.string(), fn(raw_trace_id) {
+    let trace_id = types_core.trace_id(raw_trace_id)
+
+    agui.run_started(trace_id)
+    |> stream.payload
+    |> string.contains(raw_trace_id)
+    |> should.equal(True)
   })
 }
