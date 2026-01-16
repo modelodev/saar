@@ -124,7 +124,7 @@ static int read_control_line_max_bytes(void) {
 }
 
 static bool is_json_ws(char c) {
-  return c == ' ' || c == '\t' || c == '\r';
+  return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
 
 static size_t skip_json_ws(const char *buf, size_t len, size_t pos) {
@@ -328,6 +328,197 @@ static bool skip_json_value(const char *buf, size_t len, size_t *pos) {
   }
   return *pos > start;
 }
+
+#ifdef __linux__
+static int ll_create_ruleset(struct landlock_ruleset_attr *attr,
+                             size_t size,
+                             __u32 flags);
+static int ll_add_rule(int ruleset_fd,
+                       enum landlock_rule_type type,
+                       const void *attr,
+                       __u32 flags);
+static int ll_restrict_self(int ruleset_fd, __u32 flags);
+
+static bool json_consume_char(const char *buf, size_t len, size_t *pos, char c) {
+  *pos = skip_json_ws(buf, len, *pos);
+  if (*pos >= len || buf[*pos] != c) {
+    return false;
+  }
+  (*pos)++;
+  return true;
+}
+
+static int landlock_add_rule_for_path(int ruleset_fd,
+                                     struct landlock_path_beneath_attr *path,
+                                     const char *path_str,
+                                     __u64 allowed_access) {
+  int fd = open(path_str, O_PATH | O_CLOEXEC);
+  if (fd < 0) {
+    return 0;
+  }
+  path->allowed_access = allowed_access;
+  path->parent_fd = fd;
+  (void)ll_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH, path, 0);
+  close(fd);
+  return 0;
+}
+
+static bool landlock_parse_string_path(const char *buf,
+                                      size_t len,
+                                      size_t *pos,
+                                      char *out,
+                                      size_t out_cap) {
+  size_t out_len = 0;
+  bool truncated = false;
+  if (!parse_json_string(buf, len, pos, out, out_cap, &out_len, &truncated)) {
+    return false;
+  }
+  return !truncated && out_len > 0;
+}
+
+static bool landlock_apply_json_string_array(const char *buf,
+                                            size_t len,
+                                            size_t *pos,
+                                            int ruleset_fd,
+                                            struct landlock_path_beneath_attr *path,
+                                            __u64 allowed_access) {
+  if (!json_consume_char(buf, len, pos, '[')) {
+    return false;
+  }
+
+  while (1) {
+    *pos = skip_json_ws(buf, len, *pos);
+    if (*pos >= len) {
+      return false;
+    }
+    if (buf[*pos] == ']') {
+      (*pos)++;
+      return true;
+    }
+
+    char path_buf[4096];
+    if (!landlock_parse_string_path(buf, len, pos, path_buf, sizeof(path_buf))) {
+      return false;
+    }
+    (void)landlock_add_rule_for_path(
+        ruleset_fd, path, path_buf, allowed_access);
+
+    *pos = skip_json_ws(buf, len, *pos);
+    if (*pos >= len) {
+      return false;
+    }
+    if (buf[*pos] == ',') {
+      (*pos)++;
+      continue;
+    }
+    if (buf[*pos] == ']') {
+      (*pos)++;
+      return true;
+    }
+    return false;
+  }
+}
+
+static bool landlock_apply_policy_from_json(const char *json,
+                                           size_t json_len,
+                                           int ruleset_fd,
+                                           struct landlock_path_beneath_attr *path) {
+  size_t pos = skip_json_ws(json, json_len, 0);
+  if (pos >= json_len || json[pos] != '{') {
+    return false;
+  }
+  pos++;
+
+  bool has_allow_read = false;
+  bool has_allow_exec = false;
+  bool has_allow_write = false;
+
+  const __u64 access_r =
+      LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR;
+  const __u64 access_x = access_r | LANDLOCK_ACCESS_FS_EXECUTE;
+  const __u64 access_w =
+      access_r | LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_REMOVE_DIR |
+      LANDLOCK_ACCESS_FS_REMOVE_FILE | LANDLOCK_ACCESS_FS_MAKE_CHAR |
+      LANDLOCK_ACCESS_FS_MAKE_DIR | LANDLOCK_ACCESS_FS_MAKE_REG |
+      LANDLOCK_ACCESS_FS_MAKE_SOCK | LANDLOCK_ACCESS_FS_MAKE_FIFO |
+      LANDLOCK_ACCESS_FS_MAKE_BLOCK | LANDLOCK_ACCESS_FS_MAKE_SYM;
+
+  while (1) {
+    pos = skip_json_ws(json, json_len, pos);
+    if (pos >= json_len) {
+      return false;
+    }
+    if (json[pos] == '}') {
+      pos++;
+      break;
+    }
+
+    char key[32] = {0};
+    size_t key_len = 0;
+    bool key_truncated = false;
+    if (!parse_json_string(json,
+                           json_len,
+                           &pos,
+                           key,
+                           sizeof(key),
+                           &key_len,
+                           &key_truncated)) {
+      return false;
+    }
+    if (key_truncated || key_len == 0) {
+      return false;
+    }
+    if (!json_consume_char(json, json_len, &pos, ':')) {
+      return false;
+    }
+
+    if (strcmp(key, "allow_read") == 0) {
+      if (!landlock_apply_json_string_array(
+              json, json_len, &pos, ruleset_fd, path, access_r)) {
+        return false;
+      }
+      has_allow_read = true;
+    } else if (strcmp(key, "allow_exec") == 0) {
+      if (!landlock_apply_json_string_array(
+              json, json_len, &pos, ruleset_fd, path, access_x)) {
+        return false;
+      }
+      has_allow_exec = true;
+    } else if (strcmp(key, "allow_write") == 0) {
+      if (!landlock_apply_json_string_array(
+              json, json_len, &pos, ruleset_fd, path, access_w)) {
+        return false;
+      }
+      has_allow_write = true;
+    } else {
+      if (!skip_json_value(json, json_len, &pos)) {
+        return false;
+      }
+    }
+
+    pos = skip_json_ws(json, json_len, pos);
+    if (pos >= json_len) {
+      return false;
+    }
+    if (json[pos] == ',') {
+      pos++;
+      continue;
+    }
+    if (json[pos] == '}') {
+      pos++;
+      break;
+    }
+    return false;
+  }
+
+  pos = skip_json_ws(json, json_len, pos);
+  if (pos != json_len) {
+    return false;
+  }
+
+  return has_allow_read && has_allow_exec && has_allow_write;
+}
+#endif
 
 typedef enum {
   CONTROL_NONE,
@@ -692,6 +883,8 @@ static int try_apply_landlock_policy_v0(const char *workspace_dir,
     return 0;
   }
 
+  const char *policy_json = getenv("SAD_LANDLOCK_POLICY_JSON");
+
   if (!workspace_dir || workspace_dir[0] == '\0') {
     if (mode == LANDLOCK_MODE_ENFORCED) {
       debug_log("landlock: missing SAD_WORKSPACE in enforced mode");
@@ -756,90 +949,96 @@ static int try_apply_landlock_policy_v0(const char *workspace_dir,
   // Helpers to add a path rule.
   struct landlock_path_beneath_attr path = {0};
 
-  // Read-only paths.
-  const char *allow_r[] = {
-      "/etc",
-      "/run/systemd/resolve/",
-      "/proc/self",
-      "/dev/random",
-      "/dev/urandom",
-      NULL,
-  };
-
-  // Read+exec paths.
-  const char *allow_rx[] = {
-      "/bin",
-      "/lib",
-      "/lib64",
-      "/usr",
-      "/home",
-      NULL,
-  };
-
-  // Read+write+exec paths.
-  const char *allow_rwx[] = {
-      workspace_dir,
-      "/tmp",
-      "/var/tmp",
-      "/dev/null",
-      NULL,
-  };
-
-  // A minimal allowlist for v0. We allow access beneath each path.
-  for (int i = 0; allow_r[i]; i++) {
-    int fd = open(allow_r[i], O_PATH | O_CLOEXEC);
-    if (fd < 0) {
-      continue;
+  if (policy_json && policy_json[0] != '\0') {
+    size_t json_len = strlen(policy_json);
+    if (!landlock_apply_policy_from_json(
+            policy_json, json_len, ruleset_fd, &path)) {
+      close(ruleset_fd);
+      if (mode == LANDLOCK_MODE_ENFORCED) {
+        debug_log("landlock: invalid SAD_LANDLOCK_POLICY_JSON");
+        fprintf(stderr, "LANDLOCK_UNAVAILABLE\n");
+        return -1;
+      }
+      debug_log("landlock: invalid SAD_LANDLOCK_POLICY_JSON, skipping");
+      return 0;
     }
-    path.allowed_access = LANDLOCK_ACCESS_FS_READ_FILE |
-                          LANDLOCK_ACCESS_FS_READ_DIR;
-    path.parent_fd = fd;
-    (void)ll_add_rule(ruleset_fd,
-                      LANDLOCK_RULE_PATH_BENEATH,
-                      &path,
-                      0);
-    close(fd);
-  }
+  } else {
+    // Read-only paths.
+    const char *allow_r[] = {
+        "/etc",
+        "/run/systemd/resolve/",
+        "/proc/self",
+        "/dev/random",
+        "/dev/urandom",
+        NULL,
+    };
 
-  for (int i = 0; allow_rx[i]; i++) {
-    int fd = open(allow_rx[i], O_PATH | O_CLOEXEC);
-    if (fd < 0) {
-      continue;
-    }
-    path.allowed_access = LANDLOCK_ACCESS_FS_READ_FILE |
-                          LANDLOCK_ACCESS_FS_READ_DIR |
-                          LANDLOCK_ACCESS_FS_EXECUTE;
-    path.parent_fd = fd;
-    (void)ll_add_rule(ruleset_fd,
-                      LANDLOCK_RULE_PATH_BENEATH,
-                      &path,
-                      0);
-    close(fd);
-  }
+    // Read+exec paths.
+    const char *allow_rx[] = {
+        "/bin",
+        "/lib",
+        "/lib64",
+        "/usr",
+        "/home",
+        NULL,
+    };
 
-  for (int i = 0; allow_rwx[i]; i++) {
-    int fd = open(allow_rwx[i], O_PATH | O_CLOEXEC);
-    if (fd < 0) {
-      continue;
+    // Read+write+exec paths.
+    const char *allow_rwx[] = {
+        workspace_dir,
+        "/tmp",
+        "/var/tmp",
+        "/dev/null",
+        NULL,
+    };
+
+    // A minimal allowlist for v0. We allow access beneath each path.
+    for (int i = 0; allow_r[i]; i++) {
+      int fd = open(allow_r[i], O_PATH | O_CLOEXEC);
+      if (fd < 0) {
+        continue;
+      }
+      path.allowed_access = LANDLOCK_ACCESS_FS_READ_FILE |
+                            LANDLOCK_ACCESS_FS_READ_DIR;
+      path.parent_fd = fd;
+      (void)ll_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH, &path, 0);
+      close(fd);
     }
-    path.allowed_access = LANDLOCK_ACCESS_FS_READ_FILE |
-                          LANDLOCK_ACCESS_FS_READ_DIR |
-                          LANDLOCK_ACCESS_FS_WRITE_FILE |
-                          LANDLOCK_ACCESS_FS_REMOVE_DIR |
-                          LANDLOCK_ACCESS_FS_REMOVE_FILE |
-                          LANDLOCK_ACCESS_FS_MAKE_CHAR |
-                          LANDLOCK_ACCESS_FS_MAKE_DIR |
-                          LANDLOCK_ACCESS_FS_MAKE_REG |
-                          LANDLOCK_ACCESS_FS_MAKE_SOCK |
-                          LANDLOCK_ACCESS_FS_MAKE_FIFO |
-                          LANDLOCK_ACCESS_FS_MAKE_BLOCK |
-                          LANDLOCK_ACCESS_FS_MAKE_SYM;
-    path.parent_fd = fd;
-    (void)ll_add_rule(ruleset_fd,
-                      LANDLOCK_RULE_PATH_BENEATH,
-                      &path,
-                      0);
-    close(fd);
+
+    for (int i = 0; allow_rx[i]; i++) {
+      int fd = open(allow_rx[i], O_PATH | O_CLOEXEC);
+      if (fd < 0) {
+        continue;
+      }
+      path.allowed_access = LANDLOCK_ACCESS_FS_READ_FILE |
+                            LANDLOCK_ACCESS_FS_READ_DIR |
+                            LANDLOCK_ACCESS_FS_EXECUTE;
+      path.parent_fd = fd;
+      (void)ll_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH, &path, 0);
+      close(fd);
+    }
+
+    for (int i = 0; allow_rwx[i]; i++) {
+      int fd = open(allow_rwx[i], O_PATH | O_CLOEXEC);
+      if (fd < 0) {
+        continue;
+      }
+      path.allowed_access = LANDLOCK_ACCESS_FS_READ_FILE |
+                            LANDLOCK_ACCESS_FS_READ_DIR |
+                            LANDLOCK_ACCESS_FS_WRITE_FILE |
+                            LANDLOCK_ACCESS_FS_REMOVE_DIR |
+                            LANDLOCK_ACCESS_FS_REMOVE_FILE |
+                            LANDLOCK_ACCESS_FS_MAKE_CHAR |
+                            LANDLOCK_ACCESS_FS_MAKE_DIR |
+                            LANDLOCK_ACCESS_FS_MAKE_REG |
+                            LANDLOCK_ACCESS_FS_MAKE_SOCK |
+                            LANDLOCK_ACCESS_FS_MAKE_FIFO |
+                            LANDLOCK_ACCESS_FS_MAKE_BLOCK |
+                            LANDLOCK_ACCESS_FS_MAKE_SYM;
+      path.parent_fd = fd;
+      (void)ll_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH, &path, 0);
+      close(fd);
+    }
   }
 
   if (ll_restrict_self(ruleset_fd, 0) != 0) {

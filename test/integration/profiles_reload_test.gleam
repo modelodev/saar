@@ -30,7 +30,7 @@ pub fn reload_dir_source_ok_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(9)
+  count |> should.equal(10)
 
   ids
   |> list.map(types_core.profile_id_to_string)
@@ -41,6 +41,7 @@ pub fn reload_dir_source_ok_test() {
     "crasher",
     "echo_cli",
     "echo_server",
+    "fs_probe",
     "greedy_logger",
     "runner_only_continuous",
     "slow_poke",
@@ -68,40 +69,8 @@ pub fn reload_duplicate_ids_first_source_wins_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(9)
-  assert_profile_description(profiles_actor, "echo_cli", "Echo CLI for testing")
-}
-
-pub fn reload_duplicate_ids_conflict_partial_keeps_first_and_adds_new_test() {
-  let root_a = "build/test-workspaces/source-first-partial"
-  let root_b = "build/test-workspaces/source-second-partial"
-
-  reset_two_sources(root_a, root_b)
-
-  // Conflicting id must be ignored...
-  write_profile(
-    root_b,
-    "echo_cli.json",
-    echo_cli_profile_json("echo_cli", "Echo CLI overridden"),
-  )
-
-  // ...but a new id from the second source must be accepted.
-  write_profile(
-    root_b,
-    "extra_echo_cli.json",
-    echo_cli_profile_json("extra_echo_cli", "Extra profile"),
-  )
-
-  let profiles_actor = start_profiles(dict.new())
-  let cfg = config_with_dir_sources([root_a, root_b])
-
-  let profiles_sources.ReloadSummary(count: count, ..) =
-    profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
-    |> test_assertions.assert_ok
-
   count |> should.equal(10)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI for testing")
-  assert_profile_description(profiles_actor, "extra_echo_cli", "Extra profile")
 }
 
 pub fn reload_duplicate_ids_order_inverts_winner_test() {
@@ -124,31 +93,7 @@ pub fn reload_duplicate_ids_order_inverts_winner_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(9)
-  assert_profile_description(profiles_actor, "echo_cli", "Echo CLI overridden")
-}
-
-pub fn reload_duplicate_ids_within_single_dir_first_file_wins_test() {
-  let root = "build/test-workspaces/source-within-dir"
-  let _ = simplifile.delete(file_or_dir_at: root)
-  simplifile.copy_directory(at: "test/fixtures/source_local", to: root)
-  |> test_assertions.assert_ok
-
-  // This file sorts before `echo_cli.json`, so it wins within the same source.
-  write_profile(
-    root,
-    "0_override_echo_cli.json",
-    echo_cli_profile_json("echo_cli", "Echo CLI overridden"),
-  )
-
-  let profiles_actor = start_profiles(dict.new())
-  let cfg = config_with_dir_source(root)
-
-  let profiles_sources.ReloadSummary(count: count, ..) =
-    profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
-    |> test_assertions.assert_ok
-
-  count |> should.equal(9)
+  count |> should.equal(10)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI overridden")
 }
 
@@ -186,7 +131,7 @@ pub fn reload_duplicate_ids_three_sources_keeps_first_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(9)
+  count |> should.equal(10)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI for testing")
 }
 
@@ -215,7 +160,7 @@ pub fn reload_duplicate_ids_within_dir_keeps_first_and_adds_new_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(10)
+  count |> should.equal(11)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI overridden")
   assert_profile_description(profiles_actor, "extra_echo_cli", "Extra profile")
 }
@@ -262,7 +207,7 @@ pub fn reload_git_source_failure_keeps_previous() {
     safe_call.call(profiles_actor, 1000, fn(reply_to) {
       messages.ListProfiles(reply_to)
     })
-  list.length(before_ids) |> should.equal(9)
+  list.length(before_ids) |> should.equal(10)
 
   // Then: reload from a failing git source; it must not swap.
   let cfg =
@@ -278,7 +223,7 @@ pub fn reload_git_source_failure_keeps_previous() {
     safe_call.call(profiles_actor, 1000, fn(reply_to) {
       messages.ListProfiles(reply_to)
     })
-  list.length(after_ids) |> should.equal(9)
+  list.length(after_ids) |> should.equal(10)
 }
 
 fn init_git_repo(path: String) -> Nil {

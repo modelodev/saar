@@ -1,0 +1,33 @@
+[server]
+host = "127.0.0.1"
+port = 0
+
+[auth]
+api_key = "${SAD_TEST_API_KEY}"
+
+[limits]
+call_timeout_ms = 5000
+status_timeout_ms = 1000
+shutdown_timeout_ms = 2000
+health_check_timeout_ms = 1000
+
+[profiles]
+sources = [
+  {type = "dir", path = "./test/fixtures/source_local"}
+]
+git_cache_dir = "./test/fixtures/.cache/git"
+
+[runners]
+python_bin = "python3"
+
+[workspaces]
+directory = "/tmp/sad-landlock-test-workspaces"
+
+[security]
+landlock_mode = "enforced"
+
+[security.landlock]
+allow_exec = ["/usr", "/bin", "/lib", "/lib64", "/home"]
+allow_read = ["/etc", "/proc", "/home"]
+# Only the per-instance workspace path is added at runtime.
+allow_write = []

@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "id": "fs_probe",
+    "lifecycle": "transient",
+    "description": "Filesystem probe for Landlock integration tests"
+  },
+  "parameters": {},
+  "runner": {
+    "type": "fs_probe",
+    "tool_config": {"script": "fs_probe.py"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {
+      "probe": {"input_schema": "std:chat", "streaming": false, "limits": {"call_timeout_ms": 2000}}
+    }
+  }
+}
