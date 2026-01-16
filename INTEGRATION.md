@@ -1,6 +1,6 @@
-# Guía de integración para clientes de SAD
+# Guía de integración para clientes de SAAR
 
-Este documento está dirigido a desarrolladores que construyen clientes que consumen SAD (por ejemplo, un cliente tipo SAM).
+Este documento está dirigido a desarrolladores que construyen clientes que consumen SAAR (por ejemplo, un cliente tipo SAM).
 
 Se centra en:
 
@@ -10,7 +10,7 @@ Se centra en:
 
 ## 1. Descubrir capacidades
 
-Una instancia de SAD expone sus capacidades a través del API `/agents`.
+Una instancia de SAAR expone sus capacidades a través del API `/agents`.
 
 - `GET /agents/:instance_id` devuelve un objeto que incluye `capabilities`.
 - Cada entrada de `capabilities` describe el esquema de entrada (`input_schema`), si soporta SSE (`streaming`) y límites opcionales (`limits`).
@@ -33,18 +33,18 @@ El cuerpo incluye:
 
 `capability` no es una promesa sobre lo que el producto “agente” implementa internamente.
 
-Es un contrato de SAD: el perfil decide cómo se implementa cada capacidad.
+Es un contrato de SAAR: el perfil decide cómo se implementa cada capacidad.
 
 - En perfiles basados en runner (`protocol: runner`), una capacidad es una operación “virtual” implementada por la forma en la que el perfil invoca al runner (argumentos, entorno, helpers).
 - En perfiles basados en HTTP (`protocol: http`), una capacidad suele mapear a un endpoint HTTP upstream distinto (`path` + `method`) con su plantilla de request y su mapeo de respuesta.
 
 ## 3. Modos de entrega de respuesta
 
-Cada capacidad determina cómo SAD entregará el resultado al cliente.
+Cada capacidad determina cómo SAAR entregará el resultado al cliente.
 
 ### 3.1 Respuesta inmediata (JSON)
 
-SAD devuelve la respuesta final en la misma llamada HTTP.
+SAAR devuelve la respuesta final en la misma llamada HTTP.
 
 Comportamiento esperado del cliente:
 
@@ -54,17 +54,17 @@ Comportamiento esperado del cliente:
 
 ### 3.2 Respuesta por SSE (emisión progresiva)
 
-SAD devuelve `text/event-stream` (SSE) y emite eventos hasta un evento terminal.
+SAAR devuelve `text/event-stream` (SSE) y emite eventos hasta un evento terminal.
 
 Comportamiento esperado del cliente:
 
 - Mantener la conexión abierta y procesar eventos según llegan.
-- Si el cliente corta la conexión, deja de recibir eventos; la ejecución puede continuar en SAD.
-- SAD no soporta reanudar ni repetir eventos de una interacción tras desconexión.
+- Si el cliente corta la conexión, deja de recibir eventos; la ejecución puede continuar en SAAR.
+- SAAR no soporta reanudar ni repetir eventos de una interacción tras desconexión.
 
 ### 3.3 Respuesta diferida (tarea + sondeo / suscripción)
 
-SAD devuelve inmediatamente un identificador de tarea, y el cliente recupera el resultado más tarde.
+SAAR devuelve inmediatamente un identificador de tarea, y el cliente recupera el resultado más tarde.
 
 #### 3.3.1 Crear tarea (API nativa)
 
@@ -103,7 +103,7 @@ Content-Type: application/json
 
 ##### 3.3.1.1 Esquema mínimo (estable) de la respuesta 202
 
-SAD garantiza que una respuesta diferida (`202`) contiene como mínimo:
+SAAR garantiza que una respuesta diferida (`202`) contiene como mínimo:
 
 - `task_id: string`
 - `state: "running"`
@@ -142,7 +142,7 @@ Authorization: Bearer <api_key>
 
 ##### 3.3.2.1 Esquema mínimo (estable) de `GET /tasks/:task_id`
 
-SAD garantiza que la consulta de una tarea (`200`) devuelve como mínimo:
+SAAR garantiza que la consulta de una tarea (`200`) devuelve como mínimo:
 
 - `task_id: string`
 - `instance_id: string`
@@ -226,9 +226,9 @@ Accept: text/event-stream
 - Después se emiten eventos cuando el estado cambia.
 - El stream se cierra al llegar a estado terminal.
 
-##### 3.3.3.1 Esquema mínimo (estable) que emite SAD
+##### 3.3.3.1 Esquema mínimo (estable) que emite SAAR
 
-SAD emitirá eventos con `event: task`.
+SAAR emitirá eventos con `event: task`.
 
 **Evento SSE (`event: task`):**
 
@@ -257,8 +257,8 @@ SAD emitirá eventos con `event: task`.
 Notas operativas:
 
 - El cliente debe asumir que `url` puede ser null.
-- SAD no garantiza artefactos tras reinicio.
-- `cancelled` significa cancelación iniciada por SAD; no se debe tratar como `failed`.
+- SAAR no garantiza artefactos tras reinicio.
+- `cancelled` significa cancelación iniciada por SAAR; no se debe tratar como `failed`.
 
 Ejemplo:
 
@@ -272,7 +272,7 @@ data: {"task_id":"trace-train-001","state":"completed","result":{"content":"OK"}
 
 #### 3.3.4 Cancelar o borrar una tarea
 
-SAD expone `DELETE /tasks/:task_id` con una semántica doble:
+SAAR expone `DELETE /tasks/:task_id` con una semántica doble:
 
 - Si la tarea está `running`, `DELETE` la cancela y la deja en estado terminal `cancelled`.
 - Si la tarea ya es terminal, `DELETE` la borra (deja de estar disponible y un `GET` posterior devuelve `404`).
@@ -283,18 +283,18 @@ Nota: la cancelación es best-effort con respecto al proceso subyacente, pero el
 
 Para evitar tareas duplicadas:
 
-- Si el cliente envía `context.trace_id` y reintenta la misma petición, SAD debe devolver la **misma** tarea (`task_id = trace_id`) en lugar de crear otra.
+- Si el cliente envía `context.trace_id` y reintenta la misma petición, SAAR debe devolver la **misma** tarea (`task_id = trace_id`) en lugar de crear otra.
 
 Esto permite que un cliente como SAM sea robusto frente a reintentos de red.
 
 Retención y reinicios:
 
-- SAD guarda resultados de tareas en memoria hasta que el cliente los consulta, los borra, o hasta que expire la retención.
-- SAD no garantiza tareas ni artefactos tras reinicio. Un cliente debe asumir que, tras un reinicio, tendrá que reintentar.
+- SAAR guarda resultados de tareas en memoria hasta que el cliente los consulta, los borra, o hasta que expire la retención.
+- SAAR no garantiza tareas ni artefactos tras reinicio. Un cliente debe asumir que, tras un reinicio, tendrá que reintentar.
 
 ## 4. Agente ocupado (sin cola)
 
-SAD no mantiene cola de interacciones por instancia.
+SAAR no mantiene cola de interacciones por instancia.
 
 Si se envía una interacción mientras el agente ya está ejecutando otra:
 
@@ -309,8 +309,8 @@ Comportamiento esperado del cliente:
 
 Un cliente debe distinguir explícitamente:
 
-- **Fallo (`failed`)**: el agente devolvió error o SAD no pudo completar por un problema de infraestructura.
-- **Cancelación (`cancelled`)**: SAD abortó deliberadamente la ejecución (por ejemplo, stop/delete de instancia, apagado, o enforcement interno).
+- **Fallo (`failed`)**: el agente devolvió error o SAAR no pudo completar por un problema de infraestructura.
+- **Cancelación (`cancelled`)**: SAAR abortó deliberadamente la ejecución (por ejemplo, stop/delete de instancia, apagado, o enforcement interno).
 
 En la API de tareas, una cancelación debe aparecer como estado terminal `cancelled`, no como `failed`.
 
@@ -337,7 +337,7 @@ Ruta existente:
 
 Contrato de alto nivel:
 
-- Si SAD puede resolver la petición “en el acto”, devuelve una tarea terminal (`completed`) con el mensaje final.
+- Si SAAR puede resolver la petición “en el acto”, devuelve una tarea terminal (`completed`) con el mensaje final.
 - Si la capacidad es de ejecución larga (respuesta diferida), devuelve una tarea no terminal (`working`) y el cliente debe consultar o suscribirse usando las rutas de tareas.
 
 Ejemplo (respuesta no terminal):
@@ -391,9 +391,9 @@ Regla importante: un `StreamResponse` debe contener exactamente uno de estos cam
 - `statusUpdate`
 - `artifactUpdate`
 
-#### 6.4.1 Esquema mínimo (estable) que emite SAD
+#### 6.4.1 Esquema mínimo (estable) que emite SAAR
 
-La fachada A2A de SAD emitirá un subconjunto estable del modelo A2A (lo mínimo para ser interoperable y fácil de consumir).
+La fachada A2A de SAAR emitirá un subconjunto estable del modelo A2A (lo mínimo para ser interoperable y fácil de consumir).
 
 **`StreamResponse` (SSE `data:`):**
 
@@ -405,7 +405,7 @@ La fachada A2A de SAD emitirá un subconjunto estable del modelo A2A (lo mínimo
 **`Task` (campo `task`):**
 
 - `id: string` (igual a `trace_id`)
-- `contextId: string` (si el cliente lo envió; si no, SAD genera uno)
+- `contextId: string` (si el cliente lo envió; si no, SAAR genera uno)
 - `status.state: string`
   - no terminal: `working`
   - terminales: `completed` | `failed` | `cancelled`
@@ -437,8 +437,8 @@ Para clientes tipo SAM, el caso más común será `parts` conteniendo `TextPart`
 
 Notas operativas:
 
-- SAD no garantiza disponibilidad de artefactos tras reinicio; el cliente debe descargarlos cuando estén disponibles.
-- SAD preserva la distinción entre `failed` y `cancelled` (cancelled implica cancelación iniciada por SAD).
+- SAAR no garantiza disponibilidad de artefactos tras reinicio; el cliente debe descargarlos cuando estén disponibles.
+- SAAR preserva la distinción entre `failed` y `cancelled` (cancelled implica cancelación iniciada por SAAR).
 
 Ejemplo:
 
@@ -454,7 +454,7 @@ data: {"statusUpdate": {"taskId": "trace-train-001", "contextId": "conv-77", "st
 
 ### 6.5 Identificadores
 
-SAD usa `trace_id` como identificador estable de tarea, tanto en superficie nativa como en A2A:
+SAAR usa `trace_id` como identificador estable de tarea, tanto en superficie nativa como en A2A:
 
 - `task_id` (nativo) = `trace_id`
 - `taskId` (A2A) = `trace_id`

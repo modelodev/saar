@@ -4,7 +4,7 @@
 // - Reapee zombies (SIGCHLD/waitpid(-1)).
 // - Propague stop a toda la subtree: SIGTERM -> grace -> SIGKILL.
 // - Trate EOF/stdin como orden de parada.
-// - Permanezca silencioso en STDOUT (SAD espera JSONL del runner ahí).
+// - Permanezca silencioso en STDOUT (SAAR espera JSONL del runner ahí).
 //
 // NOTA: Este fichero es un esquema de referencia para la arquitectura.
 // Falta manejo de errores/uid_map/gid_map/robustez de parsing. No es un wrapper listo para producción.
@@ -38,7 +38,7 @@ static void setup_signals(void) {
 }
 
 static void write_json(const char* s) {
-  // Importante: no escribir en STDOUT; SAD espera JSONL del runner en STDOUT.
+  // Importante: no escribir en STDOUT; SAAR espera JSONL del runner en STDOUT.
   // El wrapper puede escribir diagnósticos en STDERR (fuera de contrato).
   write(STDERR_FILENO, s, strlen(s));
   write(STDERR_FILENO, "\n", 1);
@@ -95,7 +95,7 @@ static int ns_init_main(void* arg) {
   write_json("{\"t\":\"wrapper_ready\"}");
 
   char buf[4096];
-  useconds_t grace_us = 800 * 1000;  // ajustar vía env (p.ej. SAD_SHUTDOWN_MS)
+  useconds_t grace_us = 800 * 1000;  // ajustar vía env (p.ej. SAAR_SHUTDOWN_MS)
 
   while (1) {
     int status;

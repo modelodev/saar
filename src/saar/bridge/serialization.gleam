@@ -1,0 +1,226 @@
+//// SAAR input serialization to JSON.
+////
+//// Mission: serialize `SaarInput` records to JSON for consumption by runners.
+////
+//// Responsibilities:
+//// - Convert typed input structures to JSON for runner stdin.
+//// - Serialize resolved parameters, input payloads, and context.
+////
+//// Non-responsibilities:
+//// - Resolving parameters or validating input.
+//// - Writing to ports or handling I/O.
+////
+//// Relationships:
+//// - Used by `saar/bridge/runner` when writing input to runner stdin.
+//// - Uses types from `saar/types/input` and `saar/types/runner`.
+
+import gleam/dict
+import gleam/json.{type Json}
+import gleam/list
+import gleam/option
+import saar/types/core as types_core
+import saar/types/enums as types_enums
+import saar/types/input as types_input
+import saar/types/resolved_params
+import saar/types/runner as types_runner
+
+/// Serializes a `SaarInput` to JSON.
+pub fn saar_input_to_json(input: types_input.SaarInput) -> Json {
+  json.object([
+    #("meta", saar_input_meta_to_json(input.meta)),
+    #("params", params_to_json(input.params)),
+    #("input", input_payload_to_json(input.input)),
+    #("context", request_context_to_json(input.context)),
+    #("helpers", helpers_to_json(input.helpers, input.input)),
+    #("runner_def", runner_to_json(input.runner_def)),
+  ])
+}
+
+fn helpers_to_json(
+  helpers: option.Option(types_input.SaarHelpers),
+  payload: types_input.InputPayload,
+) -> Json {
+  let resolved_helpers = case helpers {
+    option.Some(value) -> value
+    option.None -> types_input.derive_helpers(payload)
+  }
+
+  case resolved_helpers {
+    types_input.SaarHelpers(last_user_content, last_user_files) ->
+      json.object([
+        #("last_user_content", case last_user_content {
+          option.Some(content) -> json.string(content)
+          option.None -> json.null()
+        }),
+        #("last_user_files", json.array(last_user_files, file_ref_to_json)),
+      ])
+  }
+}
+
+/// Serializes a `SaarInput` to a JSON string.
+pub fn saar_input_to_string(input: types_input.SaarInput) -> String {
+  input
+  |> saar_input_to_json
+  |> json.to_string
+}
+
+fn saar_input_meta_to_json(meta: types_input.SaarInputMeta) -> Json {
+  let #(spec_version, profile_id, instance_id, mode) = case meta {
+    types_input.TransientMeta(spec_version, profile_id, instance_id) -> #(
+      spec_version,
+      profile_id,
+      instance_id,
+      types_enums.Transient,
+    )
+
+    types_input.ContinuousMeta(spec_version, profile_id, instance_id) -> #(
+      spec_version,
+      profile_id,
+      instance_id,
+      types_enums.Continuous,
+    )
+  }
+
+  json.object([
+    #("spec_version", json.string(spec_version)),
+    #("profile_id", json.string(types_core.profile_id_to_string(profile_id))),
+    #("instance_id", json.string(types_core.instance_id_to_string(instance_id))),
+    #("mode", json.string(types_enums.lifecycle_to_string(mode))),
+  ])
+}
+
+fn params_to_json(params: types_input.ResolvedParams) -> Json {
+  params
+  |> dict.to_list
+  |> list.map(fn(pair) {
+    #(pair.0, json.string(resolved_params.resolved_value_to_env(pair.1)))
+  })
+  |> json.object
+}
+
+fn request_context_to_json(ctx: types_input.RequestContext) -> Json {
+  let base =
+    ctx.extra
+    |> dict.insert("trace_id", types_core.trace_id_to_string(ctx.trace_id))
+    |> dict.to_list
+    |> list.map(fn(pair) { #(pair.0, json.string(pair.1)) })
+
+  json.object(base)
+}
+
+fn input_payload_to_json(payload: types_input.InputPayload) -> Json {
+  case payload {
+    types_input.PayloadChat(messages, extra) -> {
+      let base = [#("messages", json.array(messages, chat_message_to_json))]
+      let extra_fields =
+        extra
+        |> dict.to_list
+        |> list.map(fn(pair) { #(pair.0, input_value_to_json(pair.1)) })
+      json.object(list.append(base, extra_fields))
+    }
+    types_input.PayloadFiles(files) ->
+      json.object([#("files", json.array(files, file_ref_to_json))])
+    types_input.PayloadMixed(messages, files, extra) -> {
+      let base = [
+        #("messages", json.array(messages, chat_message_to_json)),
+        #("files", json.array(files, file_ref_to_json)),
+      ]
+      let extra_fields =
+        extra
+        |> dict.to_list
+        |> list.map(fn(pair) { #(pair.0, input_value_to_json(pair.1)) })
+      json.object(list.append(base, extra_fields))
+    }
+  }
+}
+
+fn chat_message_to_json(message: types_input.ChatMessage) -> Json {
+  json.object([
+    #("role", json.string(message.role)),
+    #("content", json.string(message.content)),
+  ])
+}
+
+fn file_ref_to_json(file: types_input.FileRef) -> Json {
+  json.object([
+    #("url", json.string(file.url)),
+    #("mime", json.string(file.mime)),
+    #("name", json.string(file.name)),
+    #("context", case file.context {
+      option.Some(ctx) -> json.string(ctx)
+      option.None -> json.null()
+    }),
+  ])
+}
+
+fn input_value_to_json(value: types_input.InputValue) -> Json {
+  case value {
+    types_core.StringVal(s) -> json.string(s)
+    types_core.IntVal(i) -> json.int(i)
+    types_core.FloatVal(f) -> json.float(f)
+    types_core.BoolVal(b) -> json.bool(b)
+    types_core.ListVal(items) -> json.array(items, json.string)
+  }
+}
+
+fn runner_to_json(runner: types_runner.Runner) -> Json {
+  json.object([
+    #("type", json.string(runner.type_)),
+    #("tool_config", tool_config_to_json(runner.tool_config)),
+    #("runtime", runtime_config_to_json(runner.runtime)),
+    #(
+      "env_map",
+      json.object(
+        runner.env_map
+        |> dict.to_list
+        |> list.map(fn(pair) { #(pair.0, json.string(pair.1)) }),
+      ),
+    ),
+    #("args", json.array(runner.args, json.string)),
+    #("artifact_config", artifact_config_to_json(runner.artifact_config)),
+  ])
+}
+
+fn tool_config_to_json(config: types_runner.ToolConfig) -> Json {
+  case config {
+    types_runner.ToolConfigPackage(package, command, with_packages) ->
+      json.object([
+        #("package", json.string(package)),
+        #("command", json.string(command)),
+        #("with_packages", json.array(with_packages, json.string)),
+      ])
+    types_runner.ToolConfigScript(script) ->
+      json.object([#("script", json.string(script))])
+  }
+}
+
+fn runtime_config_to_json(config: types_runner.RuntimeConfig) -> Json {
+  case config {
+    types_runner.ManagedPort(host_env_var, port_env_var) ->
+      json.object([
+        #("mode", json.string("managed_port")),
+        #("port_env_var", case port_env_var {
+          option.Some(value) -> json.string(value)
+          option.None -> json.null()
+        }),
+        #("host_env_var", case host_env_var {
+          option.Some(value) -> json.string(value)
+          option.None -> json.null()
+        }),
+      ])
+
+    types_runner.NoNetwork ->
+      json.object([
+        #("mode", json.string("no_network")),
+        #("port_env_var", json.null()),
+        #("host_env_var", json.null()),
+      ])
+  }
+}
+
+fn artifact_config_to_json(config: types_runner.ArtifactConfig) -> Json {
+  json.object([
+    #("include", json.array(config.include, json.string)),
+    #("exclude", json.array(config.exclude, json.string)),
+  ])
+}

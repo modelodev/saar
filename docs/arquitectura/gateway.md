@@ -1,11 +1,11 @@
-# Gateway HTTP (`sad/gateway/*.gleam`)
+# Gateway HTTP (`saar/gateway/*.gleam`)
 
-El gateway es la frontera HTTP de SAD. Expone dos APIs y servicios de proxy.
+El gateway es la frontera HTTP de SAAR. Expone dos APIs y servicios de proxy.
 
 ## 1. Estructura de módulos
 
 ```text
-sad/gateway/
+saar/gateway/
 ├── api.gleam      # /sys (orquestador) + /agents (nativo) + /instances/:instance_id/a2a (A2A)
 ├── problem.gleam  # RFC7807: dominio → Problem → HTTP response
 ├── proxy.gleam    # /artifacts (archivos)
@@ -14,7 +14,7 @@ sad/gateway/
 
 ## 2. Autenticación
 
-SAD v0 implementa **API Key simple** (Bearer Token).
+SAAR v0 implementa **API Key simple** (Bearer Token).
 
 ```http
 Authorization: Bearer <api_key>
@@ -23,19 +23,19 @@ Authorization: Bearer <api_key>
 **Decisión v0:** todos los endpoints requieren API key **excepto** `GET /health` y `GET /health/ready`.
 El Agent Card (`/instances/:instance_id/.well-known/agent-card.json`) es **privado por defecto** (requiere API key).
 
-**Modelo de amenaza (v0):** SAD puede ser consumido por clientes externos no confiables (además de SAM/orquestadores). Por eso:
+**Modelo de amenaza (v0):** SAAR puede ser consumido por clientes externos no confiables (además de SAM/orquestadores). Por eso:
 - La auth es obligatoria casi en todo.
 - `/artifacts` y `/ui` se tratan como superficies sensibles: no se exponen rutas, no se forwardean credenciales, y se aplican validaciones estrictas.
 
 **Decisiones v0 (API):**
-- SAD no agrega headers CORS en **ningún** endpoint; si se requieren, se gestionan fuera (reverse proxy/gateway upstream).
-- No hay rutas versionadas (no `/v1`); el versionado/compatibilidad se gestiona fuera de SAD.
+- SAAR no agrega headers CORS en **ningún** endpoint; si se requieren, se gestionan fuera (reverse proxy/gateway upstream).
+- No hay rutas versionadas (no `/v1`); el versionado/compatibilidad se gestiona fuera de SAAR.
 
 La API key se configura en `config.toml`:
 
 ```toml
 [auth]
-api_key = "${SAD_API_KEY}"  # Interpolación de env var
+api_key = "${SAAR_API_KEY}"  # Interpolación de env var
 ```
 
 ## 3. Formato de errores
@@ -47,14 +47,14 @@ api_key = "${SAD_API_KEY}"  # Interpolación de env var
 
 **Tabla canónica:** ver `protocolos.md` §0.1.
 
-**Implementación (canónica):** todo error HTTP se construye a través de `sad/gateway/problem.gleam`
+**Implementación (canónica):** todo error HTTP se construye a través de `saar/gateway/problem.gleam`
 (mapping desde `ErrorKind`/errores de dominio) para evitar duplicaciones y asegurar consistencia.
 
 ## 3.3 Safe-call en el borde HTTP (norma v0)
 
 En Gleam/OTP, `actor.call`/`process.call` son **fail-fast**: si el callee muere o no responde en timeout, el proceso llamador puede terminar. Eso es aceptable *dentro* del árbol OTP (todo está supervisado), pero en el borde HTTP puede tumbar el handler y dejar respuestas incompletas.
 
-**Regla v0:** en procesos de request/stream del gateway (Mist), usar únicamente `sad/otp/safe_call.call_within` para cualquier operación síncrona contra actores (manager/agent/profiles/registry/sinks). El gateway convierte:
+**Regla v0:** en procesos de request/stream del gateway (Mist), usar únicamente `saar/otp/safe_call.call_within` para cualquier operación síncrona contra actores (manager/agent/profiles/registry/sinks). El gateway convierte:
 - `CallError.Disconnected` → 503 (servicio temporalmente no disponible)
 - `CallError.TimedOut` → 504 (timeout)
 
@@ -62,21 +62,21 @@ Referencia (v0): `arquitectura/examples/snippets/otp_safe_call.gleam`.
 
 ## 3.4 Graceful shutdown (drain)
 
-Durante shutdown (por SIGTERM o por `sad serve -k`), el gateway entra en modo *drain*:
+Durante shutdown (por SIGTERM o por `saar serve -k`), el gateway entra en modo *drain*:
 
 - Nuevas requests se rechazan con 503 (Problem Details) y `extensions.code = "shutting_down"`.
 - Requests in-flight continúan best-effort hasta `limits.shutdown_timeout_ms`.
 
 Implementación canónica:
 
-- `sad/gateway/shutdown.gleam` mantiene `draining` + contador `inflight` y dispara el flujo de parada global.
-- `sad/gateway/http_server.gleam` consulta a `GatewayShutdown` al inicio de cada request; si está en drain responde 503.
+- `saar/gateway/shutdown.gleam` mantiene `draining` + contador `inflight` y dispara el flujo de parada global.
+- `saar/gateway/http_server.gleam` consulta a `GatewayShutdown` al inicio de cada request; si está en drain responde 503.
 
 ---
 
-## SSE en SAD (2 usos distintos)
+## SSE en SAAR (2 usos distintos)
 
-SAD expone Server-Sent Events (SSE) en **dos** flujos distintos. Es importante no mezclarlos:
+SAAR expone Server-Sent Events (SSE) en **dos** flujos distintos. Es importante no mezclarlos:
 
 | Tipo | Endpoint | Qué transmite | Lifecycle | Notas |
 |------|----------|---------------|-----------|-------|
@@ -90,12 +90,12 @@ SAD expone Server-Sent Events (SSE) en **dos** flujos distintos. Es importante n
 
 **Backpressure (v0):** ambos SSE usan límites para evitar OOM, pero con políticas distintas:
 - Logs: se permite `drop/coalesce` bajo presión (observabilidad best-effort).
-- Interacción: se usa un `sad/streams/sink.StreamSink` por request; el bridge envía batches **con ack** (safe-call) y el socket marca el ritmo. Si el cliente se desconecta, SAD corta el streaming (discard) y la interacción continúa hasta `InteractionDone`.
+- Interacción: se usa un `saar/streams/sink.StreamSink` por request; el bridge envía batches **con ack** (safe-call) y el socket marca el ritmo. Si el cliente se desconecta, SAAR corta el streaming (discard) y la interacción continúa hasta `InteractionDone`.
 
-**Objetivo SSE (v0):** preservar la experiencia de streaming. Si un agente entrega una interacción larga por SSE, SAD debe poder retransmitirla al cliente poco a poco, evitando degradar a una respuesta en bloque al final.
-SSE se trata como **transporte**: SAD no “entiende” protocolos específicos (OpenAI, etc.); solo gestiona framing, backpressure, límites y cancelación (y, cuando aplica, un envelope mínimo estable) para reenviar el stream de forma segura.
+**Objetivo SSE (v0):** preservar la experiencia de streaming. Si un agente entrega una interacción larga por SSE, SAAR debe poder retransmitirla al cliente poco a poco, evitando degradar a una respuesta en bloque al final.
+SSE se trata como **transporte**: SAAR no “entiende” protocolos específicos (OpenAI, etc.); solo gestiona framing, backpressure, límites y cancelación (y, cuando aplica, un envelope mínimo estable) para reenviar el stream de forma segura.
 
-**`sad/streams/sink.StreamSink` (interacción):** protocolo pequeño (type + msgs + `push_batch/finish`) implementado por el gateway como **el loop SSE de Mist por request** (`mist.server_sent_events(...)`).
+**`saar/streams/sink.StreamSink` (interacción):** protocolo pequeño (type + msgs + `push_batch/finish`) implementado por el gateway como **el loop SSE de Mist por request** (`mist.server_sent_events(...)`).
 
 Regla v0: el sink de interacción **no** es “send-only”. Debe ser una operación tipo call (ack) para imponer backpressure real:
 - `push_batch(events)` MUST esperar ack del loop SSE (o timeout/disconnect) antes de que el worker siga leyendo.
@@ -124,7 +124,7 @@ En endpoints streaming, el gateway crea este `StreamSink` (1 por request) y lo p
 
 ```json
 {
-  "type": "https://sad/errors/invalid-request",
+  "type": "https://saar/errors/invalid-request",
   "status": 400,
   "title": "Bad Request",
   "detail": "Missing required field: capability",
@@ -155,7 +155,7 @@ Endpoints para SAM y herramientas de gestión.
 
 ### 4.0 Decisión v0: sync vs async
 
-Para mantener simplicidad (sin background jobs ni estados adicionales), SAD v0 sigue este criterio:
+Para mantener simplicidad (sin background jobs ni estados adicionales), SAAR v0 sigue este criterio:
 
 - **Síncrono (respuesta al terminar):** cuando el trabajo es **interno** y se espera **rápido/determinista**
   (p.ej. cleanup de workspace/registry/artefactos en `/delete`).
@@ -180,7 +180,7 @@ Authorization: Bearer <api_key>
 ```
 
 **Notas:**
-- `instance_id` lo genera el cliente (SAM), no SAD
+- `instance_id` lo genera el cliente (SAM), no SAAR
 - Formato `instance_id`: slug ASCII `[A-Za-z0-9_-]`, longitud 1..64
 - `init_params` son `Dict(String, ConfigValue)` (solo escalares)
 - instance_id invalido => 400 (bad_request)
@@ -192,7 +192,7 @@ Authorization: Bearer <api_key>
 {
   "instance_id": "vanna-prod-1",
   "profile_id": "vanna",
-  "a2a_base_url": "https://sad.example/instances/vanna-prod-1/",
+  "a2a_base_url": "https://saar.example/instances/vanna-prod-1/",
   "status": {
     "state": "provisioning",
     "timestamp": "2025-01-15T10:00:00Z"
@@ -200,7 +200,7 @@ Authorization: Bearer <api_key>
 }
 ```
 
-**Semántica:** `201` indica que la instancia (actor) se creó correctamente y SAD inició el provisioning de forma asíncrona.
+**Semántica:** `201` indica que la instancia (actor) se creó correctamente y SAAR inició el provisioning de forma asíncrona.
 El provisioning puede tardar; consultar `GET /sys/agents/:instance_id/status` (o `GET /sys/agents`) para ver transición a `ready` o `failed`.
 Un ejemplo típico de fallo asíncrono es `port_pool_exhausted` (continuous con `managed_port` sin puertos libres), que se observa como `phase=failed` + `failure_reason` en status. Otros fallos posibles de provisioning son `port_in_use` (puerto ya ocupado en el SO) y `port_bind_failed` (bind-check fallido).
 
@@ -226,7 +226,7 @@ Authorization: Bearer <api_key>
     {
       "instance_id": "vanna-prod-1",
       "profile_id": "vanna",
-      "a2a_base_url": "https://sad.example/instances/vanna-prod-1/",
+      "a2a_base_url": "https://saar.example/instances/vanna-prod-1/",
       "lifecycle": "continuous",
       "phase": "ready_continuous",
       "mode": "run_idle",
@@ -238,7 +238,7 @@ Authorization: Bearer <api_key>
     {
       "instance_id": "aider-dev-1",
       "profile_id": "aider",
-      "a2a_base_url": "https://sad.example/instances/aider-dev-1/",
+      "a2a_base_url": "https://saar.example/instances/aider-dev-1/",
       "lifecycle": "transient",
       "phase": "ready_transient",
       "mode": "run_idle",
@@ -399,7 +399,7 @@ Authorization: Bearer <api_key>
 **Implementación (IO en el borde):**
 
 ```gleam
-// sad/gateway/api.gleam
+// saar/gateway/api.gleam
 
 pub fn reload_profiles(req: Request, app_state: AppState, sup_ref: SupervisorRef) -> Response {
   // 1. IO en el borde: cargar desde profiles.sources
@@ -412,7 +412,7 @@ pub fn reload_profiles(req: Request, app_state: AppState, sup_ref: SupervisorRef
       // Fallo de IO → 500, perfiles anteriores se mantienen
       response.new(500)
       |> response.json(json.object([
-        #("type", json.string("https://sad/errors/infra-error")),
+        #("type", json.string("https://saar/errors/infra-error")),
         #("status", json.int(500)),
         #("title", json.string("Internal Server Error")),
         #("detail", json.string(msg)),
@@ -458,7 +458,7 @@ pub fn reload_profiles(req: Request, app_state: AppState, sup_ref: SupervisorRef
 
 ```json
 {
-  "type": "https://sad/errors/infra-error",
+  "type": "https://saar/errors/infra-error",
   "status": 500,
   "title": "Internal Server Error",
   "detail": "Failed to parse profile 'aider': invalid JSON at line 42",
@@ -472,7 +472,7 @@ pub fn reload_profiles(req: Request, app_state: AppState, sup_ref: SupervisorRef
 
 **Casos de uso:**
 - Hot reload de perfiles en desarrollo
-- Actualizar perfiles sin reiniciar SAD
+- Actualizar perfiles sin reiniciar SAAR
 - CI/CD: desplegar nuevos perfiles y recargar
 
 **Nota sobre arquitectura:** El IO (lectura de disco, parsing JSON) ocurre en el gateway
@@ -485,7 +485,7 @@ el principio de core puro.
 
 - AG-UI: el gateway traduce `StreamEvent` → eventos AG-UI (solo texto soportado). `taskId` = `trace_id`.
 - A2A: Agent Card desde instancia (profile snapshot + instance_id); endpoints `/instances/:instance_id/a2a/message:send` (sync) y `/instances/:instance_id/a2a/message:stream` (SSE). `taskId` = `trace_id`, `contextId` passthrough. No hay push notifications.
-- A2UI: protocolo de UI declarativa por streaming (JSONL) para interfaces agent-driven; SAD lo soporta como wire/adapter (ver `protocolos.md`).
+- A2UI: protocolo de UI declarativa por streaming (JSONL) para interfaces agent-driven; SAAR lo soporta como wire/adapter (ver `protocolos.md`).
 
 ```http
 GET /sys/profiles
@@ -513,7 +513,7 @@ Authorization: Bearer <api_key>
 
 ---
 
-## 5. API `/agents` (Nativa SAD)
+## 5. API `/agents` (Nativa SAAR)
 
 Endpoints para interacción directa con agentes.
 
@@ -530,7 +530,7 @@ Authorization: Bearer <api_key>
 {
   "instance_id": "vanna-prod-1",
   "profile_id": "vanna",
-  "a2a_base_url": "https://sad.example/instances/vanna-prod-1/",
+  "a2a_base_url": "https://saar.example/instances/vanna-prod-1/",
   "description": "Agente SQL en lenguaje natural",
   "capabilities": {
     "chat": {
@@ -581,12 +581,12 @@ Authorization: Bearer <api_key>
 - Si `streaming: true` → Respuesta SSE (`text/event-stream`)
 
 **Formato de streaming (v0):**
-- Por defecto, SAD emite SSE en formato **AG-UI** (ver `protocolos.md` §3).
+- Por defecto, SAAR emite SSE en formato **AG-UI** (ver `protocolos.md` §3).
 - Para solicitar streaming **A2UI** (JSONL de mensajes A2UI), el cliente envía:
-  - `X-SAD-UI-Protocol: a2ui/v0.8`
+  - `X-SAAR-UI-Protocol: a2ui/v0.8`
 
 En modo A2UI, cada línea SSE `data: <json>` contiene **un** mensaje A2UI (p.ej. `{"surfaceUpdate": {...}}`).
-SAD no interpreta ni valida el catálogo; solo aplica límites/backpressure y transporta mensajes (ver `protocolos.md` §0.3).
+SAAR no interpreta ni valida el catálogo; solo aplica límites/backpressure y transporta mensajes (ver `protocolos.md` §0.3).
 
 **Errores comunes (v0):**
 - Si el agente está Busy (ya hay una interacción en curso), responde `422` (`agent_error`) con detalle `"Agent is busy"`.
@@ -638,7 +638,7 @@ Authorization: Bearer <api_key>
 
 **Nota:** El Agent Card es **por instancia**. El `instance_id` viene del path y se resuelve via registry.
 
-**Generación:** `agent_card_from_instance(instance_info, base_url)` en `sad/a2a.gleam`. Ver `protocolos.md` §2.2 para mapeo Profile → Agent Card.
+**Generación:** `agent_card_from_instance(instance_info, base_url)` en `saar/a2a.gleam`. Ver `protocolos.md` §2.2 para mapeo Profile → Agent Card.
 
 ### 6.2 Enviar mensaje (síncrono)
 
@@ -666,7 +666,7 @@ Authorization: Bearer <api_key>
 ```
 
 **Notas:**
-- `contextId` es opcional. Si ausente, SAD genera uno nuevo (uuid.v7)
+- `contextId` es opcional. Si ausente, SAAR genera uno nuevo (uuid.v7)
 - `messageId` lo genera el cliente para sus mensajes
 - Para A2UI, activar la extensión con `X-A2A-Extensions: https://a2ui.org/a2a-extension/a2ui/v0.8` y usar `DataPart` con `metadata.mimeType="application/json+a2ui"` (ver `protocolos.md` §2.13).
 
@@ -694,7 +694,7 @@ Authorization: Bearer <api_key>
 }
 ```
 
-- `result.id` es el `taskId` (= `trace_id` de SAD)
+- `result.id` es el `taskId` (= `trace_id` de SAAR)
 - `contextId` devuelto para correlación
 
 ### 6.3 Enviar mensaje (streaming)
@@ -733,7 +733,7 @@ data: {"statusUpdate": {"taskId": "trace-abc-789", "contextId": "conv-456", "sta
 ```
 
 **Notas:**
-- `taskId` = `trace_id` de SAD (requerido para correlación)
+- `taskId` = `trace_id` de SAAR (requerido para correlación)
 - El sprint S21 define el soporte de operaciones A2A de tarea (`GetTask`/`CancelTask`/`SubscribeToTask`) para que el modo asíncrono sea funcional.
 - Para A2UI, activar la extensión con `X-A2A-Extensions: https://a2ui.org/a2a-extension/a2ui/v0.8` y usar `DataPart` A2UI en `parts` (ver `protocolos.md` §2.13).
 
@@ -821,7 +821,7 @@ Authorization: Bearer <api_key>
 **Implementación:**
 
 ```gleam
-// sad/gateway/proxy.gleam
+// saar/gateway/proxy.gleam
 import mist
 import gleam/option.{None}
 
@@ -861,7 +861,7 @@ pub fn get_artifact(req: Request, artifact_id: String, sup_ref: SupervisorRef) -
 
 **Seguridad:**
 - El gateway **nunca** acepta rutas del cliente
-- `artifact_id` es un UUID opaco que solo SAD genera
+- `artifact_id` es un UUID opaco que solo SAAR genera
 - `WorkspacePath` fue validado en el decoder del runner response (sin segmentos `..`)
 - La lectura/serving debe ser **symlink-safe** (realpath/no-follow) para evitar escapes fuera del workspace
 - El serving debe ser streaming/sendfile: nunca cargar el fichero completo en memoria (protección OOM)
@@ -897,13 +897,13 @@ Workspace limpiado + artifact_registry purgado para esa instancia
 **Notas:**
 - Artefactos son **efímeros**, ligados al ciclo de vida de la instancia
 - Se borran cuando se elimina la instancia (cleanup del workspace)
-- Persistencia a S3/GCS es responsabilidad del despliegue, no de SAD
+- Persistencia a S3/GCS es responsabilidad del despliegue, no de SAAR
 
 ## 8. Proxy `/ui`
 
 Proxy reverso (HTTP-only v0) para UIs embebidas en runners.
 
-**Implementación:** `sad/gateway/ui_proxy.gleam`
+**Implementación:** `saar/gateway/ui_proxy.gleam`
 
 ### 8.1 Proxy de UI
 
@@ -916,7 +916,7 @@ Authorization: Bearer <api_key>
 - Disponible para cualquier agente con endpoints HTTP adicionales
 - Caso de uso principal: `ui_hint.kind = "ag-ui"`
 - El path después de `/ui/` se reenvía al runner
-- SAD no emite headers CORS; si se requieren, se gestionan fuera (reverse proxy/gateway upstream)
+- SAAR no emite headers CORS; si se requieren, se gestionan fuera (reverse proxy/gateway upstream)
 
 **Headers inyectados:**
 
@@ -924,12 +924,12 @@ Authorization: Bearer <api_key>
 |--------|-------|-----------|
 | `X-Forwarded-For` | IP del cliente | Contexto de red |
 | `X-Forwarded-Host` | Host original | Contexto de red |
-| `X-SAD-Instance-Id` | ID de instancia | Contexto de negocio |
-| `X-SAD-Profile-Id` | ID de perfil | Contexto de negocio |
+| `X-SAAR-Instance-Id` | ID de instancia | Contexto de negocio |
+| `X-SAAR-Profile-Id` | ID de perfil | Contexto de negocio |
 
 ### 8.2 Decisión v0: no proxificar WebSockets
 
-En SAD v0, `/agents/:instance_id/ui/*` **solo** proxifica HTTP (request/response). Si el cliente intenta un upgrade
+En SAAR v0, `/agents/:instance_id/ui/*` **solo** proxifica HTTP (request/response). Si el cliente intenta un upgrade
 (`Upgrade: websocket`), el gateway debe **rechazar** la request (p.ej. 400/426) y no iniciar ningún bridge WS.
 
 **Motivación:** proxificar WS implica implementar un cliente WebSocket upstream + forwarding de frames y subprotocolos,
@@ -943,7 +943,7 @@ como feature aislada (módulo dedicado + tests de seguridad).
 - El upstream (host/port/base_url) se deriva **solo** del estado del agente (nunca de headers/query del cliente).
 - No es un “open proxy”: el cliente no puede elegir destino ni scheme; solo el path bajo `/ui/*`.
 - No se forwardea `Authorization` (ni `Cookie`) del cliente al runner UI.
-- Forward de headers por allowlist (solo lo necesario para HTTP/WS), más los headers SAD (`X-SAD-*`).
+- Forward de headers por allowlist (solo lo necesario para HTTP/WS), más los headers SAAR (`X-SAAR-*`).
 - El path bajo `/ui/*` no puede contener segmentos `..` (incluyendo `%2e%2e` tras decode).
 
 ---
@@ -1010,7 +1010,7 @@ como feature aislada (módulo dedicado + tests de seguridad).
 
 ---
 
-## 11. Entrypoint (`sad.gleam`)
+## 11. Entrypoint (`saar.gleam`)
 
 ### 11.1 CLI Args
 
@@ -1087,7 +1087,7 @@ host = "0.0.0.0"
 port = 8080
 
 [auth]
-api_key = "${SAD_API_KEY}"
+api_key = "${SAAR_API_KEY}"
 
 [limits]
 call_timeout_ms = 30000
@@ -1098,7 +1098,7 @@ health_check_timeout_ms = 10000
 sources = [
   {type = "dir", path = "./profiles"}
 ]
-git_cache_dir = "./.sad/cache/git"
+git_cache_dir = "./.saar/cache/git"
 
 [runners]
 python_bin = "python3"
@@ -1111,9 +1111,9 @@ directory = "./workspaces"
 
 | Variable | Requerida | Default | Descripción |
 |----------|-----------|---------|-------------|
-| `SAD_API_KEY` | Sí | - | API key para autenticación |
-| `SAD_CONFIG_PATH` | No | `./config.toml` | Path al archivo de config |
-| `SAD_LOG_LEVEL` | No | `info` | Nivel de logging |
+| `SAAR_API_KEY` | Sí | - | API key para autenticación |
+| `SAAR_CONFIG_PATH` | No | `./config.toml` | Path al archivo de config |
+| `SAAR_LOG_LEVEL` | No | `info` | Nivel de logging |
 
 ### 11.5 Shutdown ordenado
 
@@ -1158,5 +1158,5 @@ Si no hay perfiles cargados, `GET /health/ready` responde 503 con `status="not_r
 | Error | Causa | Solución |
 |-------|-------|----------|
 | `Config file not found` | `config.toml` no existe | Crear archivo |
-| `Missing required env var` | `SAD_API_KEY` no definido | Exportar variable |
+| `Missing required env var` | `SAAR_API_KEY` no definido | Exportar variable |
 | `Port already in use` | Puerto ocupado | Cambiar puerto |

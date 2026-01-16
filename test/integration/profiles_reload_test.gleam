@@ -7,14 +7,14 @@ import gleam/otp/actor
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/core/messages
-import sad/core/profiles
-import sad/ffi
-import sad/otp/safe_call
-import sad/profiles_sources
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/types/profile as types_profile
+import saar/core/messages
+import saar/core/profiles
+import saar/ffi
+import saar/otp/safe_call
+import saar/profiles_sources
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/types/profile as types_profile
 import simplifile
 import test_assertions
 
@@ -299,13 +299,13 @@ pub fn reload_git_source_corrupt_reclone() {
   |> should.equal(True)
 }
 
-fn config_with_dir_source(path: String) -> types_config.SadConfig {
+fn config_with_dir_source(path: String) -> types_config.SaarConfig {
   config_with_dir_sources([path])
 }
 
-fn config_with_dir_sources(paths: List(String)) -> types_config.SadConfig {
-  let cfg = types_config.default_sad_config()
-  let types_config.SadConfig(profiles: profiles_cfg, ..) = cfg
+fn config_with_dir_sources(paths: List(String)) -> types_config.SaarConfig {
+  let cfg = types_config.default_saar_config()
+  let types_config.SaarConfig(profiles: profiles_cfg, ..) = cfg
   let types_config.ProfilesConfig(git_cache_dir: git_cache_dir, ..) =
     profiles_cfg
 
@@ -316,7 +316,7 @@ fn config_with_dir_sources(paths: List(String)) -> types_config.SadConfig {
   let profiles_cfg =
     types_config.ProfilesConfig(sources: sources, git_cache_dir: git_cache_dir)
 
-  types_config.SadConfig(..cfg, profiles: profiles_cfg)
+  types_config.SaarConfig(..cfg, profiles: profiles_cfg)
 }
 
 fn reset_two_sources(root_a: String, root_b: String) -> Nil {
@@ -381,8 +381,8 @@ fn echo_cli_profile_json(id: String, description: String) -> String {
 fn config_with_git_source(
   url: String,
   cache_dir: String,
-) -> types_config.SadConfig {
-  let cfg = types_config.default_sad_config()
+) -> types_config.SaarConfig {
+  let cfg = types_config.default_saar_config()
 
   let profiles_cfg =
     types_config.ProfilesConfig(
@@ -390,7 +390,7 @@ fn config_with_git_source(
       git_cache_dir: cache_dir,
     )
 
-  types_config.SadConfig(..cfg, profiles: profiles_cfg)
+  types_config.SaarConfig(..cfg, profiles: profiles_cfg)
 }
 
 fn start_profiles(

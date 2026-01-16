@@ -2,9 +2,9 @@ import envoy
 import gleeunit
 import gleeunit/should
 import port_helpers
-import sad/bridge/port_process
-import sad/bridge/runner_contract
-import sad/types/runner as types_runner
+import saar/bridge/port_process
+import saar/bridge/runner_contract
+import saar/types/runner as types_runner
 import test_assertions
 
 const max_event_bytes = 262_144
@@ -57,8 +57,8 @@ pub fn noeol_fragment_is_infra_error_test() {
 }
 
 pub fn port_process_spawns_wrapper_test() {
-  // Validate that SAD_WRAPPER_PATH overrides wrapper resolution.
-  envoy.set("SAD_WRAPPER_PATH", "/bin/true")
+  // Validate that SAAR_WRAPPER_PATH overrides wrapper resolution.
+  envoy.set("SAAR_WRAPPER_PATH", "/bin/true")
 
   let env = port_helpers.base_env(500, [])
 

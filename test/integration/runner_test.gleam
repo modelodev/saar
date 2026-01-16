@@ -11,16 +11,16 @@ import gleeunit
 import gleeunit/should
 import port_helpers
 import runner_fixtures
-import sad/bridge/http_client
-import sad/bridge/runner
-import sad/core/artifact_registry
-import sad/net/tcp_listener
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/types/enums as types_enums
-import sad/types/input as types_input
-import sad/types/output as types_output
-import sad/types/runner as types_runner
+import saar/bridge/http_client
+import saar/bridge/runner
+import saar/core/artifact_registry
+import saar/net/tcp_listener
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/types/enums as types_enums
+import saar/types/input as types_input
+import saar/types/output as types_output
+import saar/types/runner as types_runner
 import simplifile
 import test_assertions
 import youid/uuid
@@ -144,9 +144,9 @@ pub fn greedy_logger_hits_limits_and_fails_cleanly() {
 
   let base = default_config()
   let config =
-    types_config.SadConfig(
+    types_config.SaarConfig(
       ..base,
-      limits: types_config.SadLimits(..base.limits, max_stdout_bytes: 5000),
+      limits: types_config.SaarLimits(..base.limits, max_stdout_bytes: 5000),
     )
 
   let assert Ok(actor.Started(data: registry, ..)) =
@@ -256,7 +256,7 @@ pub fn runner_crash_returns_infra_error_test() {
     runner.execute_transient(
       "python3",
       ["./test/fixtures/source_local/runners/crasher.py"],
-      port_helpers.base_env(500, [#("SAD_CRASH_ON_START", "1")]),
+      port_helpers.base_env(500, [#("SAAR_CRASH_ON_START", "1")]),
       ".",
       input,
       config,
@@ -277,9 +277,9 @@ pub fn transient_timeout_stops_runner_test() {
   let marker = workspace <> "/stopped.txt"
   let base = default_config()
   let config =
-    types_config.SadConfig(
+    types_config.SaarConfig(
       ..base,
-      timeouts: types_config.SadTimeouts(
+      timeouts: types_config.SaarTimeouts(
         ..base.timeouts,
         shutdown_timeout_ms: 100,
       ),
@@ -289,7 +289,7 @@ pub fn transient_timeout_stops_runner_test() {
       runner_fixtures.default_chat_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
-  let env = port_helpers.base_env(500, [#("SAD_TIMEOUT_MARKER", marker)])
+  let env = port_helpers.base_env(500, [#("SAAR_TIMEOUT_MARKER", marker)])
   let assert Ok(actor.Started(data: registry, ..)) =
     artifact_registry.start_unnamed()
 
@@ -377,7 +377,7 @@ pub fn artifact_id_is_uuid_v7_test() {
   port_helpers.ensure_wrapper_path()
   let workspace = "./build/test-workspaces/artifacts-uuid"
   let _ = ensure_workspace(workspace)
-  let sad_config = default_config()
+  let saar_config = default_config()
   let assert Ok(actor.Started(data: registry, ..)) =
     artifact_registry.start_unnamed()
 
@@ -398,10 +398,10 @@ pub fn artifact_id_is_uuid_v7_test() {
       env,
       ".",
       input,
-      sad_config,
+      saar_config,
       registry,
       False,
-      sad_config.timeouts.call_timeout_ms,
+      saar_config.timeouts.call_timeout_ms,
     )
 
   let assert Ok(types_output.InteractionResult(artifacts: artifacts, ..)) =
@@ -445,9 +445,9 @@ pub fn continuous_health_check_timeout_test() {
 
   let base = default_config()
   let config =
-    types_config.SadConfig(
+    types_config.SaarConfig(
       ..base,
-      timeouts: types_config.SadTimeouts(
+      timeouts: types_config.SaarTimeouts(
         ..base.timeouts,
         health_check_timeout_ms: 50,
       ),
@@ -540,7 +540,7 @@ fn wait_for_server_exit(
 fn start_continuous_server(
   profile_path: String,
   runner_script: String,
-  config: types_config.SadConfig,
+  config: types_config.SaarConfig,
 ) -> #(runner.ServerHandle, Int, types_core.TraceId) {
   start_continuous_server_result(profile_path, runner_script, config)
   |> test_assertions.assert_ok
@@ -549,7 +549,7 @@ fn start_continuous_server(
 fn start_continuous_server_result(
   _profile_path: String,
   runner_script: String,
-  config: types_config.SadConfig,
+  config: types_config.SaarConfig,
 ) -> Result(
   #(runner.ServerHandle, Int, types_core.TraceId),
   types_output.InteractionError,
@@ -570,7 +570,7 @@ fn start_continuous_server_result(
     )
 
   let input =
-    types_input.SadInput(
+    types_input.SaarInput(
       ..base_input,
       runner_def: types_runner.Runner(..base_input.runner_def, runtime: runtime),
     )
@@ -594,6 +594,6 @@ fn ensure_workspace(path: String) {
   let assert Ok(_) = simplifile.create_directory_all(path)
 }
 
-fn default_config() -> types_config.SadConfig {
-  types_config.default_sad_config()
+fn default_config() -> types_config.SaarConfig {
+  types_config.default_saar_config()
 }

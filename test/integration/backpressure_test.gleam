@@ -6,15 +6,15 @@ import gleam/option.{None, Some}
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/core/agent
-import sad/otp/safe_call
-import sad/streams/sink
-import sad/streams/stream_pump
-import sad/types/config as types_config
-import sad/types/core
-import sad/types/log as types_log
-import sad/types/output
-import sad/types/stream
+import saar/core/agent
+import saar/otp/safe_call
+import saar/streams/sink
+import saar/streams/stream_pump
+import saar/types/config as types_config
+import saar/types/core
+import saar/types/log as types_log
+import saar/types/output
+import saar/types/stream
 
 pub fn main() {
   gleeunit.main()

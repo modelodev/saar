@@ -2,7 +2,7 @@
 /// Usa health_check_timeout_ms de config.
 pub fn health_check(
   interface: Interface,
-  config: SadConfig,
+  config: SaarConfig,
   trace_id: TraceId,
 ) -> Result(Nil, InteractionError) {
   case interface {

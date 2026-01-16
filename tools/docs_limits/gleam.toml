@@ -1,10 +1,10 @@
-name = "sad_docs_limits"
+name = "saar_docs_limits"
 version = "0.1.0"
 target = "erlang"
 
-authors = ["SAD"]
+authors = ["SAAR"]
 
-description = "Build-time docs generator for SAD limits"
+description = "Build-time docs generator for SAAR limits"
 
 [dependencies]
 gleam_stdlib = "0.67.1"

@@ -1,7 +1,7 @@
 import gleeunit/should
 import qcheck
-import sad/types/core as types_core
-import sad/types/enums as types_enums
+import saar/types/core as types_core
+import saar/types/enums as types_enums
 
 const test_count: Int = 200
 

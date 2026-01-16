@@ -6,12 +6,12 @@ import gleam/dict.{type Dict}
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import sad/types.{
+import saar/types.{
   type ArtifactConfig, type ChatMessage, type ConfigValue, type ErrorKind,
   type FileRef, type InputPayload, type InputValue, type InstanceId,
   type Lifecycle, type LogEvent, type ProfileId, type RequestContext,
   type Runner, type RunnerError, type RuntimeConfig, type SadHelpers,
-  type SadInput, type SadInputMeta, type StreamContext, type StreamEvent,
+  type SaarInput, type SaarInputMeta, type StreamContext, type StreamEvent,
   type ToolConfig, type TraceId, type Value, BoolVal, ContentChunk, FloatVal,
   IntVal, ListVal, PayloadChat, PayloadFiles, PayloadMixed, StreamError,
   StreamFinished, StreamStarted, StringVal, error_kind_to_string,
@@ -22,12 +22,12 @@ import sad/types.{
 // Streaming (tipos genéricos)
 
 // ============================================================================
-// SERIALIZACIÓN DE SadInput
+// SERIALIZACIÓN DE SaarInput
 // ============================================================================
 
-/// Serializa SadInputMeta a JSON para el wire.
-/// Reemplaza el tipo SadInputMetaWire.
-pub fn sad_input_meta_to_json(meta: SadInputMeta) -> Json {
+/// Serializa SaarInputMeta a JSON para el wire.
+/// Reemplaza el tipo SaarInputMetaWire.
+pub fn saar_input_meta_to_json(meta: SaarInputMeta) -> Json {
   json.object([
     #("spec_version", json.string(meta.spec_version)),
     #("profile_id", json.string(profile_id_to_string(meta.profile_id))),
@@ -40,7 +40,7 @@ pub fn sad_input_meta_to_json(meta: SadInputMeta) -> Json {
 }
 
 /// Serializa RequestContext a Dict plano para el wire.
-/// SAD es stateless: solo trace_id + extra.
+/// SAAR es stateless: solo trace_id + extra.
 pub fn request_context_to_dict(ctx: RequestContext) -> Dict(String, String) {
   dict.new()
   |> dict.insert("trace_id", trace_id_to_string(ctx.trace_id))
@@ -63,7 +63,7 @@ pub fn params_to_env_dict(params: ResolvedParams) -> Dict(String, String) {
   dict.map_values(params, fn(_k, v) { resolved_value_to_env(v) })
 }
 
-/// Serializa params a JSON para el wire (SadInput).
+/// Serializa params a JSON para el wire (SaarInput).
 /// ADVERTENCIA: Los secretos se incluyen en el JSON porque van al runner.
 /// Este JSON NO debe loguearse.
 pub fn params_to_json(params: ResolvedParams) -> Json {
@@ -207,12 +207,12 @@ fn artifact_config_to_json(ac: ArtifactConfig) -> Json {
   ])
 }
 
-/// Serializa SadInput completo a JSON para enviar al runner.
-/// Reemplaza el tipo SadInputWire.
+/// Serializa SaarInput completo a JSON para enviar al runner.
+/// Reemplaza el tipo SaarInputWire.
 /// Los params ya vienen resueltos; aquí solo se serializan.
-pub fn sad_input_to_json(input: SadInput) -> Json {
+pub fn saar_input_to_json(input: SaarInput) -> Json {
   json.object([
-    #("meta", sad_input_meta_to_json(input.meta)),
+    #("meta", saar_input_meta_to_json(input.meta)),
     #("params", params_to_json(input.params)),
     #("input", input_payload_to_json(input.input)),
     #("context", request_context_to_json(input.context)),
@@ -224,10 +224,10 @@ pub fn sad_input_to_json(input: SadInput) -> Json {
   ])
 }
 
-/// Convierte SadInput a string JSON listo para enviar por STDIN.
-pub fn sad_input_to_string(input: SadInput) -> String {
+/// Convierte SaarInput a string JSON listo para enviar por STDIN.
+pub fn saar_input_to_string(input: SaarInput) -> String {
   input
-  |> sad_input_to_json
+  |> saar_input_to_json
   |> json.to_string
 }
 

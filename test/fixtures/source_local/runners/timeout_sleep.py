@@ -8,7 +8,7 @@ import time
 
 
 def write_marker():
-    marker = os.environ.get("SAD_TIMEOUT_MARKER")
+    marker = os.environ.get("SAAR_TIMEOUT_MARKER")
     if not marker:
         return
     with open(marker, "w", encoding="utf-8") as handle:

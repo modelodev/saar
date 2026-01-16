@@ -4,11 +4,11 @@ import gleam/option
 import gleam/otp/actor
 import gleeunit
 import gleeunit/should
-import sad/core/artifact_registry
-import sad/core/artifact_registry_protocol
-import sad/otp/safe_call
-import sad/types/core as types_core
-import sad/workspace
+import saar/core/artifact_registry
+import saar/core/artifact_registry_protocol
+import saar/otp/safe_call
+import saar/types/core as types_core
+import saar/workspace
 import youid/uuid
 
 pub fn main() {

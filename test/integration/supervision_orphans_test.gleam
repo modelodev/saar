@@ -4,16 +4,16 @@ import gleam/erlang/process
 import gleam/otp/actor
 import gleeunit
 import gleeunit/should
-import sad/app_state
-import sad/core/agent
-import sad/core/messages
-import sad/core/root_supervisor
-import sad/core/supervisor_names
-import sad/otp/safe_call
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/types/enums as types_enums
-import sad/types/profile as types_profile
+import saar/app_state
+import saar/core/agent
+import saar/core/messages
+import saar/core/root_supervisor
+import saar/core/supervisor_names
+import saar/otp/safe_call
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/types/enums as types_enums
+import saar/types/profile as types_profile
 import test_assertions
 
 pub fn main() {
@@ -103,7 +103,7 @@ fn start_instance(
   manager: process.Subject(messages.AgentManagerMsg),
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
-  cfg: types_config.SadConfig,
+  cfg: types_config.SaarConfig,
 ) -> agent.AgentRef {
   let artifact_registry = process.new_subject()
 

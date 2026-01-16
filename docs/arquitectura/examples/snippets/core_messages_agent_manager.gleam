@@ -2,10 +2,10 @@
 // Source: arquitectura/tipos.md:144
 // Purpose: documentation-only; may not compile as-is.
 
-// Ubicación: sad/core/messages.gleam
+// Ubicación: saar/core/messages.gleam
 import gleam/otp/actor
-import sad/core/agent
-import sad/types.{type InstanceSummary}
+import saar/core/agent
+import saar/types.{type InstanceSummary}
 
 /// Argumentos para crear un agente.
 pub type StartArgs {
@@ -17,7 +17,7 @@ pub type StartArgs {
     params: ResolvedParams,
     // YA RESUELTOS
     workspace: String,
-    config: SadConfig,
+    config: SaarConfig,
   )
 }
 

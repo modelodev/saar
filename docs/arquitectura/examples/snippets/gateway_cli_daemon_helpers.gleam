@@ -10,15 +10,15 @@ fn daemonize() -> Nil {
 fn kill_running_server() -> Nil {
   case read_pid_file() {
     Ok(pid) -> {
-      // Nota: esta señal es para detener *SAD* (no runners).
+      // Nota: esta señal es para detener *SAAR* (no runners).
       // Implementación: puede ser FFI mínima (kill) o delegar a un comando externo `kill`.
       ffi.kill(pid, signal.SIGTERM)
       wait_for_exit(pid, timeout_ms: 10_000)
       delete_pid_file()
-      io.println("SAD stopped")
+      io.println("SAAR stopped")
     }
     Error(_) -> {
-      io.println("SAD not running")
+      io.println("SAAR not running")
     }
   }
 }
@@ -27,19 +27,19 @@ fn show_status() -> Nil {
   case read_pid_file() {
     Ok(pid) -> {
       case ffi.process_alive(pid) {
-        True -> io.println("SAD running (PID " <> int.to_string(pid) <> ")")
+        True -> io.println("SAAR running (PID " <> int.to_string(pid) <> ")")
         False -> {
           delete_pid_file()
           // Stale PID file
-          io.println("SAD not running")
+          io.println("SAAR not running")
         }
       }
     }
-    Error(_) -> io.println("SAD not running")
+    Error(_) -> io.println("SAAR not running")
   }
 }
 
 fn get_pid_file_path() -> String {
-  os.get_env("SAD_PID_FILE")
-  |> result.unwrap(home_dir() <> "/.sad/sad.pid")
+  os.get_env("SAAR_PID_FILE")
+  |> result.unwrap(home_dir() <> "/.saar/saar.pid")
 }

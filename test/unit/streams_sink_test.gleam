@@ -1,10 +1,10 @@
 import gleam/erlang/process
 import gleeunit
 import gleeunit/should
-import sad/ffi
-import sad/otp/safe_call
-import sad/streams/sink
-import sad/types/stream
+import saar/ffi
+import saar/otp/safe_call
+import saar/streams/sink
+import saar/types/stream
 
 pub fn main() {
   gleeunit.main()

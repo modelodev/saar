@@ -47,7 +47,7 @@ test/
 │   ├── api_test.gleam           # 7 tests
 │   ├── proxy_test.gleam         # 4 tests (artefactos)
 │   ├── ui_proxy_test.gleam      # 6 tests (UI HTTP-only)
-│   ├── sad_test.gleam           # 2 tests (smoke)
+│   ├── saar_test.gleam           # 2 tests (smoke)
 │   ├── system_log_test.gleam    # 8 tests
 │   └── shutdown_test.gleam      # 8 tests
 └── properties/

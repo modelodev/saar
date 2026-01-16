@@ -1,11 +1,11 @@
 # Protocolos Wire
 
-Formatos de comunicación entre SAD y sistemas externos.
+Formatos de comunicación entre SAAR y sistemas externos.
 
 ## Índice
 
 0. [Adaptadores](#0-adaptadores) — Principios (A2A/AG-UI/A2UI)
-1. [Runner Contract](#1-runner-contract) — SAD ↔ scripts
+1. [Runner Contract](#1-runner-contract) — SAAR ↔ scripts
 2. [A2A Protocol](#2-a2a-protocol) — Interoperabilidad entre agentes
 3. [AG-UI Protocol](#3-ag-ui-protocol) — Streaming a frontends
 4. [Perfil JSON](#4-perfil-json) — Definición de agentes
@@ -14,7 +14,7 @@ Formatos de comunicación entre SAD y sistemas externos.
 
 ## 0. Adaptadores
 
-En SAD, **A2A**, **AG-UI** y **A2UI** se implementan como *adaptadores de protocolo* (wire ↔ core):
+En SAAR, **A2A**, **AG-UI** y **A2UI** se implementan como *adaptadores de protocolo* (wire ↔ core):
 
 - Traducen requests/responses/streams al modelo interno (`AgentRequest`, `InteractionResult`, `StreamEvent`).
 - No ejecutan provisioning, no resuelven parámetros, no deciden lifecycle, no cancelan por desconexión.
@@ -23,29 +23,29 @@ En SAD, **A2A**, **AG-UI** y **A2UI** se implementan como *adaptadores de protoc
 **Principio (v0):** cortar una conexión SSE (AG-UI, A2A o A2UI) **no** cancela ni detiene al agente; solo detiene la entrega al cliente. La ejecución sigue hasta completarse o timeout, salvo orden superior explícita.
 
 **Normativa v0 (cierre SSE):**
-- En streaming de interacción (AG-UI/A2A), SAD MUST emitir un **evento terminal explícito** (éxito o error) y luego **cerrar la conexión** SSE.
-- En A2UI “puro” (JSONL de mensajes A2UI), el protocolo no define un evento terminal. SAD considera terminal el **cierre de la conexión**; si se requiere un terminal explícito y error tipado, usar A2UI via A2A (ver §2.13) donde el envelope `task_status` sí lo expresa.
+- En streaming de interacción (AG-UI/A2A), SAAR MUST emitir un **evento terminal explícito** (éxito o error) y luego **cerrar la conexión** SSE.
+- En A2UI “puro” (JSONL de mensajes A2UI), el protocolo no define un evento terminal. SAAR considera terminal el **cierre de la conexión**; si se requiere un terminal explícito y error tipado, usar A2UI via A2A (ver §2.13) donde el envelope `task_status` sí lo expresa.
 - Los clientes MUST tolerar líneas SSE de comentario (`: ...`) usadas como keep-alive.
 
 ### 0.3 A2UI (Agent to UI) — UI declarativa por streaming
 
-SAD v0 decide soportar **A2UI**: https://a2ui.org/introduction/what-is-a2ui/
+SAAR v0 decide soportar **A2UI**: https://a2ui.org/introduction/what-is-a2ui/
 
 **Qué es:** un protocolo de UI declarativa donde el agente envía un stream JSONL de mensajes como `surfaceUpdate`/`dataModelUpdate`/`beginRendering`/`deleteSurface`. El cliente renderiza con su catálogo de componentes (nativo), sin ejecutar código arbitrario del agente.
 
-**Cómo encaja en SAD:** se implementa como adapter wire (igual que A2A/AG-UI). SAD no “interpreta” componentes; solo transporta mensajes A2UI de forma segura (SSE/JSONL) y deja la renderización al cliente.
+**Cómo encaja en SAAR:** se implementa como adapter wire (igual que A2A/AG-UI). SAAR no “interpreta” componentes; solo transporta mensajes A2UI de forma segura (SSE/JSONL) y deja la renderización al cliente.
 
-**Transporte en SAD (v0):**
+**Transporte en SAAR (v0):**
 - **Vía A2A (recomendado):** A2UI como `DataPart` con `mimeType="application/json+a2ui"` + activación por `X-A2A-Extensions` (ver §2.13). Beneficio: lifecycle/errores tipados vía `task_status`.
-- **Vía endpoint nativo (`/agents/.../interact`):** streaming SSE donde cada `data:` es un mensaje A2UI (sin envelope A2A). Selección por header SAD-specific (ver `gateway.md` §5.2). Beneficio: no requiere A2A; trade-off: el final/errores se observan por cierre de conexión.
+- **Vía endpoint nativo (`/agents/.../interact`):** streaming SSE donde cada `data:` es un mensaje A2UI (sin envelope A2A). Selección por header SAAR-specific (ver `gateway.md` §5.2). Beneficio: no requiere A2A; trade-off: el final/errores se observan por cierre de conexión.
 
 ### 0.1 Errores (RFC 7807) — tabla canónica
 
-SAD usa RFC 7807 (Problem Details) tanto en endpoints nativos como A2A. La estructura base:
+SAAR usa RFC 7807 (Problem Details) tanto en endpoints nativos como A2A. La estructura base:
 
 ```json
 {
-  "type": "https://sad/errors/invalid-request",
+  "type": "https://saar/errors/invalid-request",
   "status": 400,
   "title": "Bad Request",
   "detail": "Missing required field: capability",
@@ -61,15 +61,15 @@ Tabla canónica `ErrorKind → Problem Details`:
 
 | ErrorKind core | HTTP | `title` | `type` (nativo) | `type` (A2A) |
 |---------------|------|---------|------------------|--------------|
-| `BadRequest` | 400 | `Bad Request` | `https://sad/errors/invalid-request` | `https://a2a-protocol.org/errors/invalid-request` |
-| `AgentError` | 422 | `Unprocessable Entity` | `https://sad/errors/upstream-error` | `https://a2a-protocol.org/errors/upstream-error` |
-| `InfraError` | 500 | `Internal Server Error` | `https://sad/errors/infra-error` | `https://a2a-protocol.org/errors/infra-error` |
+| `BadRequest` | 400 | `Bad Request` | `https://saar/errors/invalid-request` | `https://a2a-protocol.org/errors/invalid-request` |
+| `AgentError` | 422 | `Unprocessable Entity` | `https://saar/errors/upstream-error` | `https://a2a-protocol.org/errors/upstream-error` |
+| `InfraError` | 500 | `Internal Server Error` | `https://saar/errors/infra-error` | `https://a2a-protocol.org/errors/infra-error` |
 
 **Reglas:**
 - `extensions.kind` usa snake_case: `bad_request`, `agent_error`, `infra_error`.
 - `extensions.trace_id` siempre presente.
 - Nunca incluir secretos ni rutas del filesystem en `detail`.
-- Si el agente está Busy, SAD responde con `AgentError` (422) y `detail: "Agent is busy"` en nativo y A2A.
+- Si el agente está Busy, SAAR responde con `AgentError` (422) y `detail: "Agent is busy"` en nativo y A2A.
 
 ### 0.2 Respuesta síncrona (nativo `POST /agents/:instance_id/interact`) — exacta
 
@@ -102,32 +102,32 @@ Cuando la capability tiene `streaming: false`, el endpoint nativo devuelve JSON 
 
 ## 1. Runner Contract
 
-Contrato obligatorio para scripts runner que interactúen con SAD.
+Contrato obligatorio para scripts runner que interactúen con SAAR.
 
 ### 1.1 Modos de invocación
 
-| Modo | Invocación | STDIN | STDOUT (capturado por SAD) |
+| Modo | Invocación | STDIN | STDOUT (capturado por SAAR) |
 |------|------------|-------|--------|
-| Provision | `./runner --provision` | `SAD_INPUT_JSON` | Stream de eventos JSONL; final `t="provision_result"` |
-| Execution (transient) | `./runner` | `SAD_INPUT_JSON` | Stream de eventos JSONL; final `t="result"` |
-| Start (continuous) | `./runner` | `SAD_INPUT_JSON` | Stream de eventos JSONL (normalmente `t="log"`). No hay `t="result"` salvo salida del proceso |
-| Stop | En el core, SAD cierra stdin/envía la línea `{"t":"stop"}` (terminada en `\n`) al wrapper y espera `shutdown_timeout_ms`; el wrapper aplica SIGTERM→timeout→SIGKILL al runner | - | - |
+| Provision | `./runner --provision` | `SAAR_INPUT_JSON` | Stream de eventos JSONL; final `t="provision_result"` |
+| Execution (transient) | `./runner` | `SAAR_INPUT_JSON` | Stream de eventos JSONL; final `t="result"` |
+| Start (continuous) | `./runner` | `SAAR_INPUT_JSON` | Stream de eventos JSONL (normalmente `t="log"`). No hay `t="result"` salvo salida del proceso |
+| Stop | En el core, SAAR cierra stdin/envía la línea `{"t":"stop"}` (terminada en `\n`) al wrapper y espera `shutdown_timeout_ms`; el wrapper aplica SIGTERM→timeout→SIGKILL al runner | - | - |
 | Status (continuous) | Health-check HTTP definido en perfil | - | - |
 
-**Nota wrapper (stdin de control):** SAD escribe al wrapper líneas JSONL de control. La primera es `{"t":"input","payload":<SAD_INPUT_JSON>}` y el wrapper reenvía `payload` al runner y cierra su stdin. Las líneas siguientes pueden ser `{"t":"stop"}` (o futuras). **Sin compatibilidad v0:** no se acepta el formato previo de input “implícito” (JSON único sin `t`).
+**Nota wrapper (stdin de control):** SAAR escribe al wrapper líneas JSONL de control. La primera es `{"t":"input","payload":<SAAR_INPUT_JSON>}` y el wrapper reenvía `payload` al runner y cierra su stdin. Las líneas siguientes pueden ser `{"t":"stop"}` (o futuras). **Sin compatibilidad v0:** no se acepta el formato previo de input “implícito” (JSON único sin `t`).
 
 ### 1.2 Reglas
 
-1. **JSON in / JSON out (por eventos)** — STDIN del runner recibe `SAD_INPUT_JSON` (reenviado por el wrapper); STDOUT es un stream JSONL de eventos tipados (incluye `result`)
-2. **No depender de STDERR** — STDERR está fuera de contrato; SAD no asume captura ni separación
+1. **JSON in / JSON out (por eventos)** — STDIN del runner recibe `SAAR_INPUT_JSON` (reenviado por el wrapper); STDOUT es un stream JSONL de eventos tipados (incluye `result`)
+2. **No depender de STDERR** — STDERR está fuera de contrato; SAAR no asume captura ni separación
 3. **Exit codes** — `0` para success, `1` para error
 4. **Idempotencia** — `--provision` puede ejecutarse múltiples veces
-5. **Stop** — Wrapper debe salir tras `stop`/EOF propagando SIGTERM→SIGKILL a la subtree; SAD no envía señales directas.
+5. **Stop** — Wrapper debe salir tras `stop`/EOF propagando SIGTERM→SIGKILL a la subtree; SAAR no envía señales directas.
 6. **Artifacts first-class** — Paths validados (`WorkspacePath`) → UUID público
 7. **Streaming y logs** — Eventos por STDOUT (JSONL); sin buffers infinitos
-8. **Interpolación** — SAD resuelve plantillas `{{...}}` antes de invocar runners; el runner recibe `args/env_map` ya resueltos.
+8. **Interpolación** — SAAR resuelve plantillas `{{...}}` antes de invocar runners; el runner recibe `args/env_map` ya resueltos.
 
-### 1.3 SAD_INPUT_JSON
+### 1.3 SAAR_INPUT_JSON
 
 ```json
 {
@@ -158,7 +158,7 @@ Contrato obligatorio para scripts runner que interactúen con SAD.
 }
 ```
 
-**Nota:** `runner.host`/`runner.port` **no** se incluyen en `SAD_INPUT_JSON`. Se inyectan via env (`SAD_HOST`/`SAD_PORT`)
+**Nota:** `runner.host`/`runner.port` **no** se incluyen en `SAAR_INPUT_JSON`. Se inyectan via env (`SAAR_HOST`/`SAAR_PORT`)
 y por interpolacion strict en `args/env_map` cuando aplica `managed_port`.
 
 ### 1.4 RunnerResponse
@@ -222,17 +222,17 @@ pub type ErrorKind {
 
 ### 1.7 Stop / Status / Events
 
-- **Stop:** SAD envía orden de stop (mensaje/EOF) al wrapper; el wrapper aplica SIGTERM y, si tras `shutdown_timeout_ms` sigue vivo, SIGKILL a la subtree. Los runners solo deben manejar las señales.
-- **Status (continuous):** opcional health-check HTTP configurado en el perfil (`health_check`). Si falla, SAD considera el server caído y limpia estado tras stop.
-- **Eventos/Logs (STDOUT JSONL):** SAD consume la salida capturada como un único canal (`open_port` no separa stdout/stderr con `use_stdio`). Para `streaming: true`, el runner emite eventos `t="chunk"` incrementales por STDOUT, además de `t="log"` opcionales. El resultado final siempre llega como `t="result"` (con forma `RunnerResponse`). El gateway los reemite por SSE vía un `sad/streams/sink.StreamSink` por request (batching + límites; sin buffers infinitos).
+- **Stop:** SAAR envía orden de stop (mensaje/EOF) al wrapper; el wrapper aplica SIGTERM y, si tras `shutdown_timeout_ms` sigue vivo, SIGKILL a la subtree. Los runners solo deben manejar las señales.
+- **Status (continuous):** opcional health-check HTTP configurado en el perfil (`health_check`). Si falla, SAAR considera el server caído y limpia estado tras stop.
+- **Eventos/Logs (STDOUT JSONL):** SAAR consume la salida capturada como un único canal (`open_port` no separa stdout/stderr con `use_stdio`). Para `streaming: true`, el runner emite eventos `t="chunk"` incrementales por STDOUT, además de `t="log"` opcionales. El resultado final siempre llega como `t="result"` (con forma `RunnerResponse`). El gateway los reemite por SSE vía un `saar/streams/sink.StreamSink` por request (batching + límites; sin buffers infinitos).
 
 ### 1.8 Streaming HTTP (continuous) — Contrato SSE (v0)
 
-Cuando una capability HTTP (`HttpCapability.streaming: true`) se invoca en un agente continuous, SAD abre una conexión SSE
+Cuando una capability HTTP (`HttpCapability.streaming: true`) se invoca en un agente continuous, SAAR abre una conexión SSE
 contra el agente. El contrato v0 es único y mínimo:
 
-- **Objetivo (v0):** preservar la experiencia de streaming. Si el agente emite eventos durante una interacción larga, SAD los reenvía al cliente progresivamente.
-- **Principio (v0):** SSE es **transporte**. SAD no “entiende” protocolos específicos (OpenAI, etc.); solo aplica framing, backpressure, límites y cancelación (y, cuando aplica, un envelope mínimo estable) para retransmitir el stream de forma segura.
+- **Objetivo (v0):** preservar la experiencia de streaming. Si el agente emite eventos durante una interacción larga, SAAR los reenvía al cliente progresivamente.
+- **Principio (v0):** SSE es **transporte**. SAAR no “entiende” protocolos específicos (OpenAI, etc.); solo aplica framing, backpressure, límites y cancelación (y, cuando aplica, un envelope mínimo estable) para retransmitir el stream de forma segura.
 
 - El agente responde con `Content-Type: text/event-stream`.
 - En v0, una capability con `streaming: true` usa el **mismo request** definido por la capability HTTP (método + headers + body). Para chat streaming lo normal es `POST` con body JSON y respuesta `text/event-stream`. Si el método es `GET`, el body debe ser `None`.
@@ -240,9 +240,9 @@ contra el agente. El contrato v0 es único y mínimo:
   - `{"t":"log","message":"...","level":"info"}` (opcional)
   - `{"t":"chunk","delta":"..."}` (opcional)
   - `{"t":"result", ...RunnerResponse...}` (obligatorio; exactamente uno)
-- SAD parsea `data` como JSON y reusa el mismo decoder de eventos que en `STDOUT JSONL`.
-- Fin de interacción: el agente debe emitir `t="result"` y cerrar la conexión; SAD finaliza la interacción con `InteractionDone(...)`.
-- Si la conexión se cierra sin `t="result"`, SAD devuelve `InfraError` (fail-fast).
+- SAAR parsea `data` como JSON y reusa el mismo decoder de eventos que en `STDOUT JSONL`.
+- Fin de interacción: el agente debe emitir `t="result"` y cerrar la conexión; SAAR finaliza la interacción con `InteractionDone(...)`.
+- Si la conexión se cierra sin `t="result"`, SAAR devuelve `InfraError` (fail-fast).
 
 ---
 
@@ -253,10 +253,10 @@ Protocolo [Agent2Agent](https://a2a-protocol.org) para interoperabilidad entre a
 ### 2.1 Arquitectura
 
 ```
-Frontend (A2A puro) → SAD Gateway → a2a.gleam → Core SAD → Runner
+Frontend (A2A puro) → SAAR Gateway → a2a.gleam → Core SAAR → Runner
 ```
 
-SAD expone una **facade A2A**: traduce internamente a su modelo propio.
+SAAR expone una **facade A2A**: traduce internamente a su modelo propio.
 
 ### 2.1.1 Robustez de parsing (v0)
 
@@ -269,7 +269,7 @@ SAD expone una **facade A2A**: traduce internamente a su modelo propio.
 El Agent Card se genera desde el `Profile` **y la instancia** (`instance_id`), sin tipo intermedio:
 
 ```gleam
-// sad/a2a.gleam
+// saar/a2a.gleam
 pub fn agent_card_from_instance(profile: Profile, instance_id: InstanceId, base_url: String) -> Json
 ```
 
@@ -287,7 +287,7 @@ pub fn agent_card_from_instance(profile: Profile, instance_id: InstanceId, base_
     "pushNotifications": false
   },
   "extensions": [
-    "urn:sad:extensions:files-semantics:v1"
+    "urn:saar:extensions:files-semantics:v1"
   ],
   "skills": [
     {
@@ -304,7 +304,7 @@ pub fn agent_card_from_instance(profile: Profile, instance_id: InstanceId, base_
       "inputModes": ["file"],
       "outputModes": ["text"],
       "extensions": {
-        "urn:sad:extensions:files-semantics:v1": {
+        "urn:saar:extensions:files-semantics:v1": {
           "maxFiles": 1,
           "ingestEffect": "eventual"
         }
@@ -321,10 +321,10 @@ pub fn agent_card_from_instance(profile: Profile, instance_id: InstanceId, base_
 | `meta.name` (o `meta.id` si ausente) | `name` |
 | `meta.description` | `description` |
 | `base_url + "/instances/<instance_id>/a2a"` | `url` |
-| `"1.0.0"` (constante, SAD no versiona agentes) | `version` |
+| `"1.0.0"` (constante, SAAR no versiona agentes) | `version` |
 | `"1.0"` (constante) | `protocolVersion` |
 | capabilities de interface | `capabilities.streaming` |
-| `false` (SAD no soporta push) | `capabilities.pushNotifications` |
+| `false` (SAAR no soporta push) | `capabilities.pushNotifications` |
 | capabilities como lista | `skills` |
 | (constante, lista de URIs) | `extensions` |
 | capability `input_schema` | `skills[].inputModes` |
@@ -333,7 +333,7 @@ pub fn agent_card_from_instance(profile: Profile, instance_id: InstanceId, base_
 
 ### 2.2.1 Extensions catalog (A2A)
 
-SAD may include additional metadata in A2A payloads using the `extensions` mechanism.
+SAAR may include additional metadata in A2A payloads using the `extensions` mechanism.
 
 Principles:
 - Extensions MUST be safe to ignore. If a client does not recognize an extension URI, it MUST ignore it.
@@ -342,21 +342,21 @@ Principles:
 
 #### URN convention
 
-SAD extension URIs use URNs:
-- Format: `urn:sad:extensions:<name>:v<version>`
+SAAR extension URIs use URNs:
+- Format: `urn:saar:extensions:<name>:v<version>`
 - Rationale: stable identifiers without implying a resolvable URL.
 
 #### Known extensions
 
 | URI | Scope | Purpose |
 |-----|-------|---------|
-| `urn:sad:extensions:files-semantics:v1` | AgentCard `skills[].extensions` | Communicate file cardinality and ingest semantics per skill |
+| `urn:saar:extensions:files-semantics:v1` | AgentCard `skills[].extensions` | Communicate file cardinality and ingest semantics per skill |
 
-#### `urn:sad:extensions:files-semantics:v1`
+#### `urn:saar:extensions:files-semantics:v1`
 
 Scope:
 - Root AgentCard SHOULD advertise the URI in `extensions: [ ... ]`.
-- Each `skills[]` entry MAY include `extensions["urn:sad:extensions:files-semantics:v1"]`.
+- Each `skills[]` entry MAY include `extensions["urn:saar:extensions:files-semantics:v1"]`.
 
 Schema (v1):
 - `maxFiles: Int` (required)
@@ -388,7 +388,7 @@ Semantics:
 
 ### 2.3.1 Roles (v0)
 
-SAD acepta `role` en:
+SAAR acepta `role` en:
 
 - `user`
 - `assistant`
@@ -397,45 +397,45 @@ Otros roles (p.ej. `system`, `tool`) se rechazan como `400 BadRequest` (v0).
 
 ### 2.3.2 TextPart (v0)
 
-Si un mensaje contiene múltiples `TextPart`, SAD los concatena en orden para producir un único `ChatMessage(content=...)`. Esto preserva la semántica del mensaje y simplifica el core.
+Si un mensaje contiene múltiples `TextPart`, SAAR los concatena en orden para producir un único `ChatMessage(content=...)`. Esto preserva la semántica del mensaje y simplifica el core.
 
 ### 2.3.3 FilePart (v0)
 
-SAD soporta solo `file.uri` (no soporta `file.bytes` en v0).
+SAAR soporta solo `file.uri` (no soporta `file.bytes` en v0).
  
 - Si llega `file.bytes`: `400 BadRequest` indicando que debe usarse `file.uri`.
 - `file.mediaType` es opcional; si falta se usa `"application/octet-stream"` como valor por defecto.
 
-**Wire:** en A2A, SAD interpreta:
+**Wire:** en A2A, SAAR interpreta:
 - `file.uri` como URL
 - `file.mediaType` como mime (opcional)
 - `file.name` como nombre (opcional; si falta se puede derivar del URI)
 
 #### Aclaración: `file.bytes` (A2A) vs `multipart` (HTTP)
 
-- `file.bytes` es **una representación inline** dentro del payload A2A. SAD v0 **no** la acepta.
-- `multipart` en SAD se refiere a **SAD construyendo una request HTTP** hacia un agente `http` (ver §4.5). No implica aceptar bytes inline en A2A.
+- `file.bytes` es **una representación inline** dentro del payload A2A. SAAR v0 **no** la acepta.
+- `multipart` en SAAR se refiere a **SAAR construyendo una request HTTP** hacia un agente `http` (ver §4.5). No implica aceptar bytes inline en A2A.
 
 Si un cliente tiene un fichero local (sin URL pública), el flujo canónico es:
-subirlo a un storage accesible por SAD/runner y enviar `file.uri`.
+subirlo a un storage accesible por SAAR/runner y enviar `file.uri`.
 
-### 2.4 Mapeo A2A → SAD
+### 2.4 Mapeo A2A → SAAR
 
-| A2A | SAD | Notas |
+| A2A | SAAR | Notas |
 |-----|-----|-------|
 | `Message.parts[TextPart]` | `PayloadChat.messages` | |
 | `Message.parts[FilePart]` | `PayloadFiles.files` | |
 | `Message.parts` (mixed) | `PayloadMixed` | |
-| `context.contextId` | Pass-through | Si ausente, SAD genera uuid.v7 |
+| `context.contextId` | Pass-through | Si ausente, SAAR genera uuid.v7 |
 
-### 2.5 Mapeo SAD → A2A (Respuesta)
+### 2.5 Mapeo SAAR → A2A (Respuesta)
 
-| SAD | A2A | Notas |
+| SAAR | A2A | Notas |
 |-----|-----|-------|
 | `trace_id` | `taskId` | Requerido para streaming |
 | `context.contextId` | `contextId` | Devuelto tal cual o generado |
 
-**Nota:** SAD implementa A2A en modo Message con Task lifecycle simulado:
+**Nota:** SAAR implementa A2A en modo Message con Task lifecycle simulado:
 - Al recibir request: `state: "working"`
 - Al terminar: `state: "completed"`
 
@@ -464,15 +464,15 @@ data: {"taskId": "trace-abc-123", "contextId": "conv-789", "status": {"state": "
 
 **Flujo:**
 1. Cliente envía mensaje (puede incluir `contextId` o no)
-2. SAD genera `trace_id` → se usa como `taskId` en respuesta
-3. Si `contextId` ausente, SAD genera uno nuevo y lo devuelve
+2. SAAR genera `trace_id` → se usa como `taskId` en respuesta
+3. Si `contextId` ausente, SAAR genera uno nuevo y lo devuelve
 4. Cliente recibe ambos IDs para correlación y agrupación
 
 **Nota:** Este SSE es **streaming de interacción** (respuesta), no el SSE de logs de instancia (`/sys/.../logs/stream`).
 
 #### 2.7.2 Payloads de éxito (A2A SSE) — exactos
 
-Eventos mínimos que SAD garantiza en v0:
+Eventos mínimos que SAAR garantiza en v0:
 
 **(1) Inicio**
 
@@ -522,7 +522,7 @@ Reglas:
 
 #### 2.7.3 Payload de error (A2A SSE) — exacto
 
-En caso de error durante streaming, SAD emite un `task_status` final con `state="failed"` y un objeto `error` mínimo.
+En caso de error durante streaming, SAAR emite un `task_status` final con `state="failed"` y un objeto `error` mínimo.
 
 ```text
 event: task_status
@@ -557,12 +557,12 @@ Reglas:
 
 | Core | A2A | Regla |
 |------|-----|-------|
-| `trace_id` | `taskId` | Siempre presente; SAD lo genera si falta en request |
-| `context.extra.context_id` (o generado) | `contextId` | Pass-through si viene; si no, SAD genera |
+| `trace_id` | `taskId` | Siempre presente; SAAR lo genera si falta en request |
+| `context.extra.context_id` (o generado) | `contextId` | Pass-through si viene; si no, SAAR genera |
 
 ### 2.10 Mapeo de errores (A2A)
 
-En endpoints no-streaming, SAD responde con RFC 7807:
+En endpoints no-streaming, SAAR responde con RFC 7807:
 
 | ErrorKind core | HTTP | `type` sugerido |
 |---------------|------|-----------------|
@@ -577,12 +577,12 @@ Cancelación por `stop/delete` se expresa como `task_status(state="failed")` con
 ### 2.11 Backpressure (A2A SSE)
 
 La entrega SSE aplica batching y límites para evitar OOM.
-Esto es transparente para el cliente A2A: SAD puede agrupar chunks, pero **no** reordena eventos.
+Esto es transparente para el cliente A2A: SAAR puede agrupar chunks, pero **no** reordena eventos.
 
 ### 2.12 Respuesta síncrona (A2A `message:send`) — exacta
 
 `POST /instances/:instance_id/a2a/message:send` devuelve un objeto `result` con:
-- `id` (igual a `trace_id` de SAD),
+- `id` (igual a `trace_id` de SAAR),
 - `contextId` (pass-through o generado),
 - `status.state`,
 - `message` final del assistant,
@@ -620,19 +620,19 @@ Esto es transparente para el cliente A2A: SAD puede agrupar chunks, pero **no** 
 
 ### 2.13 Extensión A2UI (v0.8) — soporte “aware”
 
-SAD v0 soporta A2UI como **wire/adapter** (no como motor de UI).
+SAAR v0 soporta A2UI como **wire/adapter** (no como motor de UI).
 
 - Qué es A2UI: `https://a2ui.org/introduction/what-is-a2ui/`
 - URI de extensión A2UI sobre A2A: `https://a2ui.org/a2a-extension/a2ui/v0.8`
 
-**Objetivo v0:** permitir que una capa superior opere UI agent-driven transportando mensajes A2UI via A2A, manteniendo a SAD agnóstico del catálogo y del render.
+**Objetivo v0:** permitir que una capa superior opere UI agent-driven transportando mensajes A2UI via A2A, manteniendo a SAAR agnóstico del catálogo y del render.
 
 #### Activación (A2A)
 
 El cliente activa A2UI mediante el mecanismo estándar de extensiones A2A:
 - Header HTTP `X-A2A-Extensions: https://a2ui.org/a2a-extension/a2ui/v0.8`
 
-Si no se activa, SAD opera en modo A2A “texto” (TextPart) como en §2.7/§2.12.
+Si no se activa, SAAR opera en modo A2A “texto” (TextPart) como en §2.7/§2.12.
 
 #### Encoding (A2A `DataPart`)
 
@@ -640,7 +640,7 @@ Los mensajes A2UI viajan como un `DataPart` A2A con:
 - `metadata.mimeType = "application/json+a2ui"`
 - `data = <objeto A2UI>` (exactamente una de: `beginRendering`, `surfaceUpdate`, `dataModelUpdate`, `deleteSurface`)
 
-SAD **no** interpreta componentes, estilos, bindings ni descarga catálogos; solo transporta y aplica límites.
+SAAR **no** interpreta componentes, estilos, bindings ni descarga catálogos; solo transporta y aplica límites.
 
 #### Respuesta streaming (A2A SSE + A2UI)
 
@@ -665,11 +665,11 @@ El renderer consume cada `DataPart.data` como una línea JSONL A2UI.
 
 Los eventos `userAction` (y `error`) se envían como `DataPart` con `mimeType="application/json+a2ui"` en `POST /instances/:instance_id/a2a/message:send` (o `message:stream` si se requiere streaming de respuesta).
 
-**Nota (modelo v0):** SAD no mantiene estado de “surface/session”. La correlación se hace con `contextId` y los IDs de A2UI (`surfaceId`, component ids). Una capa superior puede implementar la interacción enviando sucesivas requests A2A con `userAction` y recibiendo nuevas actualizaciones A2UI.
+**Nota (modelo v0):** SAAR no mantiene estado de “surface/session”. La correlación se hace con `contextId` y los IDs de A2UI (`surfaceId`, component ids). Una capa superior puede implementar la interacción enviando sucesivas requests A2A con `userAction` y recibiendo nuevas actualizaciones A2UI.
 
 #### Validación mínima (v0)
 
-SAD valida únicamente:
+SAAR valida únicamente:
 - `metadata.mimeType == "application/json+a2ui"`.
 - `data` es un objeto JSON con **exactamente una** key top-level, y esa key ∈ {`beginRendering`, `surfaceUpdate`, `dataModelUpdate`, `deleteSurface`}.
 
@@ -681,9 +681,9 @@ Protocolo [AG-UI](https://github.com/ag-ui-protocol/ag-ui) para streaming a fron
 
 ### 3.1 Alcance de implementación
 
-**SAD v0 implementa solo streaming de texto.** AG-UI define más eventos que no soportamos aún:
+**SAAR v0 implementa solo streaming de texto.** AG-UI define más eventos que no soportamos aún:
 
-| Evento AG-UI | SAD v0 | Notas |
+| Evento AG-UI | SAAR v0 | Notas |
 |--------------|--------|-------|
 | `RUN_STARTED` | ✅ | |
 | `RUN_FINISHED` | ✅ | |
@@ -701,14 +701,14 @@ Protocolo [AG-UI](https://github.com/ag-ui-protocol/ag-ui) para streaming a fron
 ### 3.2 Arquitectura
 
 ```
-Core SAD (StreamEvent) → agui.gleam → Gateway SSE → Frontend
+Core SAAR (StreamEvent) → agui.gleam → Gateway SSE → Frontend
 ```
 
-El adapter `agui.gleam` traduce los 4 eventos genéricos de SAD a los 6 eventos AG-UI soportados.
+El adapter `agui.gleam` traduce los 4 eventos genéricos de SAAR a los 6 eventos AG-UI soportados.
 
-### 3.3 Mapeo SAD → AG-UI
+### 3.3 Mapeo SAAR → AG-UI
 
-| SAD StreamEvent | AG-UI Events |
+| SAAR StreamEvent | AG-UI Events |
 |-----------------|--------------|
 | `StreamStarted` | `RUN_STARTED` |
 | `ContentChunk` (fase `BeforeFirstChunk`) | `TEXT_MESSAGE_START` + `TEXT_MESSAGE_CONTENT` |
@@ -736,7 +736,7 @@ data: {"type": "RUN_FINISHED", "threadId": "trace-abc", "runId": "trace-abc"}
 
 #### 3.4.1 Payloads de éxito (AG-UI SSE) — exactos
 
-Eventos mínimos que SAD garantiza en v0:
+Eventos mínimos que SAAR garantiza en v0:
 
 **(1) Inicio**
 
@@ -771,7 +771,7 @@ Reglas:
 
 #### 3.4.2 Payload de error (AG-UI SSE) — exacto
 
-En caso de error durante streaming, SAD emite exactamente un `RUN_ERROR` y termina el stream.
+En caso de error durante streaming, SAAR emite exactamente un `RUN_ERROR` y termina el stream.
 
 ```text
 data: {
@@ -843,11 +843,11 @@ Definición declarativa de agentes.
 Ver también `integracion.md` para el contrato completo de integración (perfil+runner+adapters).
 
 **Reglas generales:**
-- `interface.protocol` ∈ {`runner`, `http`}; `http` usa solo `managed_port` (host/port asignados por SAD y pasados via env).
+- `interface.protocol` ∈ {`runner`, `http`}; `http` usa solo `managed_port` (host/port asignados por SAAR y pasados via env).
 - `input_schema` cerrado: `std:chat`, `std:files` o chat extendido con `extra_fields` tipados.
 - `limits` por capability sobrescriben `SadConfig`.
 - `response` usa JSON Pointers (`text_pointer`, `artifacts_pointer`); resolucion interna sobre Dynamic para evitar conversion Json/Dynamic repetida.
-- `ui_hint` es Json opaco; SAD no lo interpreta.
+- `ui_hint` es Json opaco; SAAR no lo interpreta.
 - Ver también `protocolos_runner.md` para el contrato de ejecución/provisioning/stop de runners.
 
 ### 4.1 Estructura
@@ -880,18 +880,18 @@ Ver también `integracion.md` para el contrato completo de integración (perfil+
 ```
 
 **Reglas adicionales:**
-- `interface.protocol=http` usa solo `managed_port` (no `static_port`); SAD asigna host/port y los inyecta via env.
+- `interface.protocol=http` usa solo `managed_port` (no `static_port`); SAAR asigna host/port y los inyecta via env.
 - `input_schema` es cerrado: `std:chat`, `std:files` o `chat` extendido con `extra_fields` tipados.
 - `limits` por capability (timeouts, etc.) sobrescriben `SadConfig`.
 - `response` usa JSON Pointers (`text_pointer`, `artifacts_pointer`); resolucion interna sobre Dynamic para evitar conversion Json/Dynamic repetida.
-- `ui_hint` es Json opaco; SAD no lo interpreta.
+- `ui_hint` es Json opaco; SAAR no lo interpreta.
 
 ### 4.1 Entrega de ficheros (solo runners CLI)
 
-En capabilities `runner` que usan `std:files`, SAD trabaja con `FileRef.url` (equivalente a A2A `file.uri`).
+En capabilities `runner` que usan `std:files`, SAAR trabaja con `FileRef.url` (equivalente a A2A `file.uri`).
 El contrato v0 es simple:
 
-- SAD **no descarga ni materializa** ficheros antes de invocar el runner.
+- SAAR **no descarga ni materializa** ficheros antes de invocar el runner.
 - El runner recibe siempre **URLs** y, si necesita rutas locales, descarga/copia dentro del workspace.
 
 Racional: materialización segura (download/copy, límites de tamaño, naming, cleanup, credenciales) añade complejidad
@@ -931,21 +931,21 @@ que es más apropiada en capas superiores (SAM/storage) o en el propio runner.
 
 ### 4.5 Body HTTP (JSON / multipart)
 
-SAD soporta dos modos de request body para capabilities HTTP:
+SAAR soporta dos modos de request body para capabilities HTTP:
 
 - `json`: template Json con:
   - strings con `{{namespace.key}}` (strict, solo escalares), y
-  - inserciones estructuradas `{"$from": "/json/pointer"}` (strict, RFC 6901) contra `SAD_INPUT_JSON` (útil para arrays/objetos).
+  - inserciones estructuradas `{"$from": "/json/pointer"}` (strict, RFC 6901) contra `SAAR_INPUT_JSON` (útil para arrays/objetos).
 - `multipart`: campos string interpolados + ficheros tomados del input vía `source_pointer`.
 
 Nota: la resolucion de `$from` se hace sobre Dynamic interno; conversion Json/Dynamic solo en limites.
 
-**Aclaración:** este `multipart` es **SAD → agente** (SAD construye la request HTTP al agente).
-Los ficheros se originan en `InputPayload` como `FileRef` (URLs, no bytes inline). Para construir `multipart`, SAD debe poder leer/stream-ear el contenido desde esa URL (p.ej. URL pública o pre-firmada).
+**Aclaración:** este `multipart` es **SAAR → agente** (SAAR construye la request HTTP al agente).
+Los ficheros se originan en `InputPayload` como `FileRef` (URLs, no bytes inline). Para construir `multipart`, SAAR debe poder leer/stream-ear el contenido desde esa URL (p.ej. URL pública o pre-firmada).
 
 **Límites (v0):**
-- SAD rechaza requests entrantes cuyo body exceda `SadConfig.max_request_body_bytes` (413).
-- Al construir multipart desde `FileRef` (URL), SAD debe stream-ear la descarga y cortar si excede `SadConfig.max_file_fetch_bytes` (evita OOM/ficheros gigantes).
+- SAAR rechaza requests entrantes cuyo body exceda `SadConfig.max_request_body_bytes` (413).
+- Al construir multipart desde `FileRef` (URL), SAAR debe stream-ear la descarga y cortar si excede `SadConfig.max_file_fetch_bytes` (evita OOM/ficheros gigantes).
 
 Ejemplo (pasar lista completa de mensajes):
 

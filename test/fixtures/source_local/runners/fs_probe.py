@@ -4,7 +4,7 @@
 This runner is intentionally deterministic and is used by integration tests to
 prove the Landlock sandbox boundaries.
 
-It writes and reads inside SAD_WORKSPACE, then attempts to read/write outside
+It writes and reads inside SAAR_WORKSPACE, then attempts to read/write outside
 (using a sibling path) and reports whether access was denied.
 """
 
@@ -45,14 +45,14 @@ def main():
     # Consume the input payload, but it is not needed.
     _ = sys.stdin.read()
 
-    workspace = os.environ.get("SAD_WORKSPACE")
+    workspace = os.environ.get("SAAR_WORKSPACE")
     if not workspace:
         emit({
             "t": "result",
             "status": "error",
             "data": None,
             "artifacts": [],
-            "error": {"kind": "infra_error", "message": "missing SAD_WORKSPACE"},
+            "error": {"kind": "infra_error", "message": "missing SAAR_WORKSPACE"},
         })
         return 2
 
@@ -81,7 +81,7 @@ def main():
         "outside_read_denied": outside_read_denied,
     }
 
-    # This runner always reports success so the SAD API returns 200.
+    # This runner always reports success so the SAAR API returns 200.
     # The integration test asserts the boolean flags in `data`.
     emit({
         "t": "result",

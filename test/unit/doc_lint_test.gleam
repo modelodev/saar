@@ -4,9 +4,9 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
 import gleeunit/should
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/types/enums as types_enums
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/types/enums as types_enums
 import simplifile
 
 pub fn doc_lint_forbidden_patterns_test() {
@@ -54,8 +54,8 @@ pub fn doc_lint_actor_stop_usage_test() {
 }
 
 pub fn doc_lint_limits_defaults_match_config_test() {
-  let cfg = types_config.default_sad_config()
-  let types_config.SadConfig(api_key: api_key, ..) = cfg
+  let cfg = types_config.default_saar_config()
+  let types_config.SaarConfig(api_key: api_key, ..) = cfg
   types_core.secret_is_empty(api_key) |> should.equal(True)
 
   let entries = parse_limits_toml("docs/plan/limits.toml")
@@ -70,135 +70,135 @@ pub fn doc_lint_limits_defaults_match_config_test() {
 
       "profiles.sources" -> {
         entry.default |> should.equal("[{type=\"dir\", path=\".\"}]")
-        let types_config.SadConfig(profiles: profiles, ..) = cfg
+        let types_config.SaarConfig(profiles: profiles, ..) = cfg
         profiles.sources
         |> should.equal([types_config.ProfileSourceDir(path: ".")])
       }
 
       "profiles.git_cache_dir" -> {
-        let types_config.SadConfig(profiles: profiles, ..) = cfg
+        let types_config.SaarConfig(profiles: profiles, ..) = cfg
         entry.default |> should.equal(profiles.git_cache_dir)
       }
 
       "runners.python_bin" -> {
-        let types_config.SadConfig(runner: runner, ..) = cfg
+        let types_config.SaarConfig(runner: runner, ..) = cfg
         entry.default |> should.equal(runner.python_bin)
       }
 
       "workspaces.directory" -> {
-        let types_config.SadConfig(storage: storage, ..) = cfg
+        let types_config.SaarConfig(storage: storage, ..) = cfg
         entry.default |> should.equal(storage.workspaces_directory)
       }
 
       "limits.call_timeout_ms" -> {
-        let types_config.SadConfig(timeouts: timeouts, ..) = cfg
+        let types_config.SaarConfig(timeouts: timeouts, ..) = cfg
         entry.default_int |> should.equal(Some(timeouts.call_timeout_ms))
       }
 
       "limits.status_timeout_ms" -> {
-        let types_config.SadConfig(timeouts: timeouts, ..) = cfg
+        let types_config.SaarConfig(timeouts: timeouts, ..) = cfg
         entry.default_int |> should.equal(Some(timeouts.status_timeout_ms))
       }
 
       "limits.registry_timeout_ms" -> {
-        let types_config.SadConfig(timeouts: timeouts, ..) = cfg
+        let types_config.SaarConfig(timeouts: timeouts, ..) = cfg
         entry.default_int |> should.equal(Some(timeouts.registry_timeout_ms))
       }
 
       "limits.health_check_timeout_ms" -> {
-        let types_config.SadConfig(timeouts: timeouts, ..) = cfg
+        let types_config.SaarConfig(timeouts: timeouts, ..) = cfg
         entry.default_int
         |> should.equal(Some(timeouts.health_check_timeout_ms))
       }
 
       "limits.shutdown_timeout_ms" -> {
-        let types_config.SadConfig(timeouts: timeouts, ..) = cfg
+        let types_config.SaarConfig(timeouts: timeouts, ..) = cfg
         entry.default_int |> should.equal(Some(timeouts.shutdown_timeout_ms))
       }
 
       "limits.log_buffer_bytes" -> {
-        let types_config.SadConfig(limits: limits, ..) = cfg
+        let types_config.SaarConfig(limits: limits, ..) = cfg
         entry.default_int |> should.equal(Some(limits.log_buffer_bytes))
       }
 
       "limits.max_stdout_bytes" -> {
-        let types_config.SadConfig(limits: limits, ..) = cfg
+        let types_config.SaarConfig(limits: limits, ..) = cfg
         entry.default_int |> should.equal(Some(limits.max_stdout_bytes))
       }
 
       "limits.max_runner_event_bytes" -> {
-        let types_config.SadConfig(limits: limits, ..) = cfg
+        let types_config.SaarConfig(limits: limits, ..) = cfg
         entry.default_int |> should.equal(Some(limits.max_runner_event_bytes))
       }
 
       "limits.max_request_body_bytes" -> {
-        let types_config.SadConfig(limits: limits, ..) = cfg
+        let types_config.SaarConfig(limits: limits, ..) = cfg
         entry.default_int |> should.equal(Some(limits.max_request_body_bytes))
       }
 
       "limits.max_http_response_bytes" -> {
-        let types_config.SadConfig(limits: limits, ..) = cfg
+        let types_config.SaarConfig(limits: limits, ..) = cfg
         entry.default_int |> should.equal(Some(limits.max_http_response_bytes))
       }
 
       "limits.max_file_fetch_bytes" -> {
-        let types_config.SadConfig(limits: limits, ..) = cfg
+        let types_config.SaarConfig(limits: limits, ..) = cfg
         entry.default_int |> should.equal(Some(limits.max_file_fetch_bytes))
       }
 
       "limits.sse_keep_alive_interval_ms" -> {
-        let types_config.SadConfig(stream: stream, ..) = cfg
+        let types_config.SaarConfig(stream: stream, ..) = cfg
         entry.default_int
         |> should.equal(Some(stream.sse_keep_alive_interval_ms))
       }
 
       "limits.port_range_min" -> {
-        let types_config.SadConfig(runner: runner, ..) = cfg
+        let types_config.SaarConfig(runner: runner, ..) = cfg
         entry.default_int |> should.equal(Some(runner.port_range_min))
       }
 
       "limits.port_range_max" -> {
-        let types_config.SadConfig(runner: runner, ..) = cfg
+        let types_config.SaarConfig(runner: runner, ..) = cfg
         entry.default_int |> should.equal(Some(runner.port_range_max))
       }
 
       "network.managed_port_host" -> {
-        let types_config.SadConfig(runner: runner, ..) = cfg
+        let types_config.SaarConfig(runner: runner, ..) = cfg
         entry.default |> should.equal(runner.managed_port_host)
       }
 
       "log_stream.batch_byte_size" -> {
-        let types_config.SadConfig(stream: stream, ..) = cfg
+        let types_config.SaarConfig(stream: stream, ..) = cfg
         entry.default_int
         |> should.equal(Some(stream.log_stream.batch_byte_size))
       }
 
       "log_stream.flush_interval_ms" -> {
-        let types_config.SadConfig(stream: stream, ..) = cfg
+        let types_config.SaarConfig(stream: stream, ..) = cfg
         entry.default_int
         |> should.equal(Some(stream.log_stream.flush_interval_ms))
       }
 
       "interaction_stream.batch_byte_size" -> {
-        let types_config.SadConfig(stream: stream, ..) = cfg
+        let types_config.SaarConfig(stream: stream, ..) = cfg
         entry.default_int
         |> should.equal(Some(stream.interaction_stream.batch_byte_size))
       }
 
       "interaction_stream.flush_interval_ms" -> {
-        let types_config.SadConfig(stream: stream, ..) = cfg
+        let types_config.SaarConfig(stream: stream, ..) = cfg
         entry.default_int
         |> should.equal(Some(stream.interaction_stream.flush_interval_ms))
       }
 
       "interaction_stream.push_timeout_ms" -> {
-        let types_config.SadConfig(stream: stream, ..) = cfg
+        let types_config.SaarConfig(stream: stream, ..) = cfg
         entry.default_int
         |> should.equal(Some(stream.interaction_stream.push_timeout_ms))
       }
 
       "security.landlock_mode" -> {
-        let types_config.SadConfig(landlock_mode: mode, ..) = cfg
+        let types_config.SaarConfig(landlock_mode: mode, ..) = cfg
         entry.default |> should.equal(types_enums.landlock_mode_to_string(mode))
       }
 
@@ -228,7 +228,7 @@ pub fn doc_lint_limits_md_matches_toml_test() {
 }
 
 pub fn doc_lint_config_defaults_match_config_test() {
-  let cfg = types_config.default_sad_config()
+  let cfg = types_config.default_saar_config()
   let contents = read_text_or_panic("docs/arquitectura/config.md")
 
   assert_config_md_row_defaults(contents, "server.host", [
@@ -236,7 +236,7 @@ pub fn doc_lint_config_defaults_match_config_test() {
     int.to_string(cfg.server_port),
   ])
 
-  let types_config.SadConfig(
+  let types_config.SaarConfig(
     storage: storage,
     runner: runner,
     limits: limits,

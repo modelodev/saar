@@ -9,18 +9,18 @@ import gleam/string
 import gleeunit
 import gleeunit/should
 import port_helpers
-import sad/app_state
-import sad/bridge/http_client
-import sad/config_loader
-import sad/core/messages
-import sad/core/root_supervisor
-import sad/core/shutdown_all
-import sad/core/supervisor_names
-import sad/daemon_control
-import sad/ffi/daemon as daemon_ffi
-import sad/net/tcp_listener
-import sad/profiles_sources
-import sad/types/config as types_config
+import saar/app_state
+import saar/bridge/http_client
+import saar/config_loader
+import saar/core/messages
+import saar/core/root_supervisor
+import saar/core/shutdown_all
+import saar/core/supervisor_names
+import saar/daemon_control
+import saar/ffi/daemon as daemon_ffi
+import saar/net/tcp_listener
+import saar/profiles_sources
+import saar/types/config as types_config
 import simplifile
 
 const host = "127.0.0.1"
@@ -35,7 +35,7 @@ pub fn main() {
 
 pub fn shutdown_completes_inflight_request_test() {
   let #(pid, base_url, pidfile) =
-    start_external_sad("build/test-workspaces/shutdown-inflight")
+    start_external_saar("build/test-workspaces/shutdown-inflight")
 
   let instance_id = "inst-shutdown-inflight"
   create_agent(base_url, "echo_server", instance_id)
@@ -68,7 +68,7 @@ pub fn shutdown_completes_inflight_request_test() {
 
 pub fn shutdown_rejects_new_requests_test() {
   let #(pid, base_url, pidfile) =
-    start_external_sad("build/test-workspaces/shutdown-reject")
+    start_external_saar("build/test-workspaces/shutdown-reject")
 
   let instance_id = "inst-shutdown-reject"
   create_agent(base_url, "echo_server", instance_id)
@@ -97,7 +97,7 @@ pub fn shutdown_rejects_new_requests_test() {
 
 pub fn shutdown_force_kills_after_timeout_test() {
   let #(pid, base_url, pidfile) =
-    start_external_sad("build/test-workspaces/shutdown-timeout")
+    start_external_saar("build/test-workspaces/shutdown-timeout")
 
   let instance_id = "inst-shutdown-timeout"
   create_agent(base_url, "echo_server", instance_id)
@@ -129,7 +129,7 @@ pub fn shutdown_force_kills_after_timeout_test() {
 }
 
 pub fn shutdown_sends_terminate_to_all_agents_test() {
-  let #(base_url, registry) = start_inprocess_sad()
+  let #(base_url, registry) = start_inprocess_saar()
 
   let id1 = "inst-shutdown-all-1"
   let id2 = "inst-shutdown-all-2"
@@ -146,18 +146,18 @@ pub fn shutdown_sends_terminate_to_all_agents_test() {
   wait_registry_empty(registry, 200)
 }
 
-fn start_external_sad(root: String) -> #(Int, String, String) {
+fn start_external_saar(root: String) -> #(Int, String, String) {
   port_helpers.ensure_wrapper_path()
 
-  let pidfile = root <> "/sad.pid"
-  let logfile = root <> "/sad.log"
+  let pidfile = root <> "/saar.pid"
+  let logfile = root <> "/saar.log"
 
   let _ = simplifile.delete(file_or_dir_at: root)
   let assert Ok(_) = simplifile.create_directory_all(root)
 
-  envoy.set("SAD_TEST_API_KEY", api_key)
-  envoy.set("SAD_PID_FILE", pidfile)
-  envoy.set("SAD_LOG_FILE", logfile)
+  envoy.set("SAAR_TEST_API_KEY", api_key)
+  envoy.set("SAAR_PID_FILE", pidfile)
+  envoy.set("SAAR_LOG_FILE", logfile)
   envoy.set("ERL_LIBS", "build/dev/erlang")
 
   let port = free_port()
@@ -168,7 +168,7 @@ fn start_external_sad(root: String) -> #(Int, String, String) {
       [
         "-noshell",
         "-eval",
-        "application:ensure_all_started(hackney), sad:main().",
+        "application:ensure_all_started(hackney), saar:main().",
         "-extra",
         "serve",
         "--port",
@@ -396,17 +396,17 @@ fn wait_process_dead(pid: Int, attempts: Int) -> Nil {
   }
 }
 
-fn start_inprocess_sad() -> #(String, process.Subject(messages.RegistryMsg)) {
+fn start_inprocess_saar() -> #(String, process.Subject(messages.RegistryMsg)) {
   port_helpers.ensure_wrapper_path()
 
-  envoy.set("SAD_TEST_API_KEY", api_key)
+  envoy.set("SAAR_TEST_API_KEY", api_key)
 
   let cfg0 = load_cfg0()
   let profiles = profiles_sources.load_profiles_from_sources(cfg0) |> assert_ok
 
   let port = free_port()
   let names = supervisor_names.new_names_with_suffix(int.to_string(port))
-  let cfg = types_config.SadConfig(..cfg0, server_port: port)
+  let cfg = types_config.SaarConfig(..cfg0, server_port: port)
 
   let state = app_state.AppState(config: cfg, initial_profiles: profiles)
 
@@ -419,12 +419,12 @@ fn start_inprocess_sad() -> #(String, process.Subject(messages.RegistryMsg)) {
   )
 }
 
-fn load_cfg0() -> types_config.SadConfig {
+fn load_cfg0() -> types_config.SaarConfig {
   config_loader.load_from_path(
     config_path,
     fn(name) {
       case name {
-        "SAD_TEST_API_KEY" -> Ok(api_key)
+        "SAAR_TEST_API_KEY" -> Ok(api_key)
         _ -> Error(Nil)
       }
     },

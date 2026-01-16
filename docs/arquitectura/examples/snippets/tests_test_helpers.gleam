@@ -1,11 +1,11 @@
 // test/test_helpers.gleam
 
 import gleam/erlang/process
-import sad/core/agent.{type AgentRef}
-import sad/types.{type Profile, type SadConfig}
+import saar/core/agent.{type AgentRef}
+import saar/types.{type Profile, type SaarConfig}
 
 /// Carga config de test.
-pub fn test_config() -> SadConfig {
+pub fn test_config() -> SaarConfig {
   config.load("test/fixtures/config/test_config.toml")
   |> result.unwrap(default_test_config())
 }

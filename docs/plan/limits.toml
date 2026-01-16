@@ -31,7 +31,7 @@ use = "cargar perfiles/runners"
 [[limits]]
 key = "profiles.git_cache_dir"
 type = "string"
-default = "./.sad/cache/git"
+default = "./.saar/cache/git"
 sprint = "S02/S13"
 use = "checkout repos"
 

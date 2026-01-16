@@ -5,22 +5,22 @@ import gleam/option
 import gleeunit
 import gleeunit/should
 import runner_fixtures
-import sad/bridge/serialization
-import sad/types/input as types_input
-import sad/types/runner as types_runner
+import saar/bridge/serialization
+import saar/types/input as types_input
+import saar/types/runner as types_runner
 import simplifile
 
 pub fn main() {
   gleeunit.main()
 }
 
-pub fn sad_input_contains_required_blocks_test() {
+pub fn saar_input_contains_required_blocks_test() {
   let input =
     runner_fixtures.base_input(
       load_chat_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
-  let body = serialization.sad_input_to_string(input)
+  let body = serialization.saar_input_to_string(input)
 
   let decoder = {
     use _ <- decode.field("meta", decode.dynamic)
@@ -42,7 +42,7 @@ pub fn runner_def_always_present_test() {
       load_chat_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
-  let body = serialization.sad_input_to_string(input)
+  let body = serialization.saar_input_to_string(input)
 
   let decoder = decode.dict(decode.string, decode.dynamic)
   let assert Ok(values) = json.parse(body, decoder)
@@ -60,7 +60,7 @@ pub fn helpers_include_last_user_content_test() {
       load_chat_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
-  let body = serialization.sad_input_to_string(input)
+  let body = serialization.saar_input_to_string(input)
 
   let decoder = {
     use helpers <- decode.field("helpers", helpers_decoder())
@@ -77,7 +77,7 @@ pub fn helpers_include_last_user_files_test() {
       load_files_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
-  let body = serialization.sad_input_to_string(input)
+  let body = serialization.saar_input_to_string(input)
 
   let decoder = {
     use helpers <- decode.field("helpers", helpers_decoder())

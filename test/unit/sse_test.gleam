@@ -1,6 +1,6 @@
 import gleeunit
 import gleeunit/should
-import sad/sse
+import saar/sse
 
 pub fn main() {
   gleeunit.main()

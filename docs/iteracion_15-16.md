@@ -1,7 +1,7 @@
 # Iteracion 15-16: Plan de refactorizacion integral
 
 ## Contexto
-Se parte de un inventario YAML completo del repositorio (64 modulos). El objetivo de esta iteracion es ejecutar el plan de refactorizacion completo sin perder funcionalidad observable, con cambios de API explicitados y validables. El entorno de ejecucion es BEAM y el sistema usa OTP con supervision en `sad/core/root_supervisor`.
+Se parte de un inventario YAML completo del repositorio (64 modulos). El objetivo de esta iteracion es ejecutar el plan de refactorizacion completo sin perder funcionalidad observable, con cambios de API explicitados y validables. El entorno de ejecucion es BEAM y el sistema usa OTP con supervision en `saar/core/root_supervisor`.
 
 ## Objetivo general
 Maximizar claridad, reutilizacion, coherencia arquitectonica y robustez mediante PRs pequenos y revisables. Se permite ruptura de API si se mantiene la funcionalidad.
@@ -18,33 +18,33 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 
 ### Epica E1: Unificar protocolos y helpers transversales
 **Motivacion (inventario):**
-- Solapamiento de `ArtifactEntry` y `ArtifactRegistryMsg` entre `sad/core/messages` y `sad/core/artifact_registry_protocol`.
-- Duplicacion de helpers de llamadas temporizadas entre `sad/core/boundary_call` y `sad/otp/safe_call`.
+- Solapamiento de `ArtifactEntry` y `ArtifactRegistryMsg` entre `saar/core/messages` y `saar/core/artifact_registry_protocol`.
+- Duplicacion de helpers de llamadas temporizadas entre `saar/core/boundary_call` y `saar/otp/safe_call`.
 
 #### PR 1: Consolidar protocolo de Artifact Registry (tamano S, riesgo bajo)
 **Objetivo:** dejar un unico SSOT para el protocolo de artifact registry.
 
 **Alcance (modulos):**
-- `sad/core/messages`
-- `sad/core/artifact_registry_protocol`
-- `sad/core/artifact_registry`
-- `sad/gateway/artifacts_api`
-- `sad/gateway/http_server`
+- `saar/core/messages`
+- `saar/core/artifact_registry_protocol`
+- `saar/core/artifact_registry`
+- `saar/gateway/artifacts_api`
+- `saar/gateway/http_server`
 
 **Motivacion (inventario):**
 - Overlap: "Artifact registry protocol types duplicated".
 
 **Plan de pasos:**
-1) Definir `sad/core/artifact_registry_protocol` como SSOT.
+1) Definir `saar/core/artifact_registry_protocol` como SSOT.
 2) Reemplazar imports de `ArtifactEntry` y `ArtifactRegistryMsg` en dependientes.
-3) Si hay consumidores externos, mantener reexport temporal en `sad/core/messages` con nota de deprecacion.
+3) Si hay consumidores externos, mantener reexport temporal en `saar/core/messages` con nota de deprecacion.
 4) Actualizar documentacion de modulos sobre el SSOT y responsabilidades.
 
 **Cambios de API (obligatorio):**
 - API publica:
   - added: []
-  - removed: [`sad/core/messages.ArtifactEntry`, `sad/core/messages.ArtifactRegistryMsg`] (si se eliminan)
-  - renamed/moved: [`ArtifactEntry`, `ArtifactRegistryMsg` a `sad/core/artifact_registry_protocol`]
+  - removed: [`saar/core/messages.ArtifactEntry`, `saar/core/messages.ArtifactRegistryMsg`] (si se eliminan)
+  - renamed/moved: [`ArtifactEntry`, `ArtifactRegistryMsg` a `saar/core/artifact_registry_protocol`]
   - signature/type changes: []
 - API interna:
   - added/removed/renamed/moved: []
@@ -62,7 +62,7 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 
 **Riesgo y rollback:**
 - Riesgo: rotura de imports en modulos dependientes.
-- Rollback: restaurar duplicados en `sad/core/messages`.
+- Rollback: restaurar duplicados en `saar/core/messages`.
 
 **Criterios de aceptacion:**
 - Solo existe un SSOT para el protocolo de registry.
@@ -72,26 +72,26 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 **Objetivo:** consolidar `boundary_call` sobre `safe_call` o fusionar en un unico modulo.
 
 **Alcance (modulos):**
-- `sad/core/boundary_call`
-- `sad/otp/safe_call`
-- `sad/gateway/lookup`
-- `sad/gateway/problem`
-- `sad/gateway/health`
+- `saar/core/boundary_call`
+- `saar/otp/safe_call`
+- `saar/gateway/lookup`
+- `saar/gateway/problem`
+- `saar/gateway/health`
 
 **Motivacion (inventario):**
 - Overlap: "Timed actor call helpers".
 
 **Plan de pasos:**
-1) Definir `sad/otp/safe_call` como primitivo estable.
-2) Reimplementar `sad/core/boundary_call` como wrapper, o mover funciones al modulo `safe_call`.
+1) Definir `saar/otp/safe_call` como primitivo estable.
+2) Reimplementar `saar/core/boundary_call` como wrapper, o mover funciones al modulo `safe_call`.
 3) Actualizar dependientes para consumir una sola ruta.
 4) Ajustar documentacion para reflejar punto unico de llamada segura.
 
 **Cambios de API (obligatorio):**
 - API publica:
   - added: [] (si no se expone nuevo wrapper)
-  - removed: [`sad/core/boundary_call.call`, `sad/core/boundary_call.call_unwrap_result`] (si se elimina)
-  - renamed/moved: mover funciones a `sad/otp/safe_call` si aplica
+  - removed: [`saar/core/boundary_call.call`, `saar/core/boundary_call.call_unwrap_result`] (si se elimina)
+  - renamed/moved: mover funciones a `saar/otp/safe_call` si aplica
   - signature/type changes: no esperado
 - API interna:
   - added/removed/renamed/moved: wrappers internos si aplica
@@ -114,16 +114,16 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 
 ### Epica E2: ADTs para eliminar estados ilegales (quick wins)
 **Motivacion (inventario):**
-- Oportunidades ADT en `sad/types/runner`, `sad/types/profile`, `sad/types/input`.
-- Simplification: streaming ADT en `sad/bridge/interaction`.
+- Oportunidades ADT en `saar/types/runner`, `saar/types/profile`, `saar/types/input`.
+- Simplification: streaming ADT en `saar/bridge/interaction`.
 
 #### PR 3: ADT RuntimeConfig para red gestionada (tamano S, riesgo bajo)
 **Objetivo:** evitar combinaciones invalidas de `NoNetwork` con variables de entorno.
 
 **Alcance (modulos):**
-- `sad/types/runner`
-- `sad/bridge/managed_port_env`
-- `sad/bridge/runner`
+- `saar/types/runner`
+- `saar/bridge/managed_port_env`
+- `saar/bridge/runner`
 
 **Motivacion (inventario):**
 - ADT opportunity: RuntimeConfig.
@@ -165,9 +165,9 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 **Objetivo:** eliminar `Some(ResponseMapping(None,None))` y dejar default explicito.
 
 **Alcance (modulos):**
-- `sad/types/profile`
-- `sad/decoders`
-- `sad/response_mapping`
+- `saar/types/profile`
+- `saar/decoders`
+- `saar/response_mapping`
 
 **Motivacion (inventario):**
 - ADT opportunity: ResponseMapping con opciones vacias.
@@ -205,7 +205,7 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 
 ### Epica E3: ADTs de ciclo de vida y mensajes internos OTP
 **Motivacion (inventario):**
-- `SadInputMeta` con `instance_id` opcional.
+- `SaarInputMeta` con `instance_id` opcional.
 - `AgentStatusView` con `phase + failure_reason`.
 - `AgentManagerMsg` con mensajes internos no separables.
 
@@ -213,9 +213,9 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 **Objetivo:** eliminar `streaming=True` con `stream_sink=None`.
 
 **Alcance (modulos):**
-- `sad/bridge/interaction`
-- `sad/core/agent`
-- `sad/gateway/agents_api`
+- `saar/bridge/interaction`
+- `saar/core/agent`
+- `saar/gateway/agents_api`
 
 **Motivacion (inventario):**
 - Simplification opportunity: StreamMode ADT.
@@ -253,33 +253,33 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 - No existe `missing_stream_sink`.
 - Cada request tiene un modo streaming explicito.
 
-#### PR 6: ADT SadInputMeta (tamano M, riesgo medio)
+#### PR 6: ADT SaarInputMeta (tamano M, riesgo medio)
 **Objetivo:** impedir `Continuous` sin `instance_id`.
 
 **Alcance (modulos):**
-- `sad/types/input`
-- `sad/bridge/runner`
-- `sad/gateway/agents_api`
-- `sad/core/agent_manager`
+- `saar/types/input`
+- `saar/bridge/runner`
+- `saar/gateway/agents_api`
+- `saar/core/agent_manager`
 
 **Motivacion (inventario):**
-- ADT opportunity: `SadInputMeta` con Option.
+- ADT opportunity: `SaarInputMeta` con Option.
 
 **Plan de pasos:**
-1) Fase A: introducir `SadInputMeta` ADT con `TransientMeta` y `ContinuousMeta`.
+1) Fase A: introducir `SaarInputMeta` ADT con `TransientMeta` y `ContinuousMeta`.
 2) Agregar transformador desde el record legado.
 3) Migrar constructores en `gateway/agents_api` y `bridge/runner`.
 4) Fase B: eliminar record legacy y actualizar decoders/builders.
 
 **Cambios de API (obligatorio):**
 - API publica:
-  - added: `SadInputMeta.TransientMeta`, `SadInputMeta.ContinuousMeta`
-  - removed: `SadInputMeta.instance_id: Option`, `SadInputMeta.mode` (fase B)
-  - signature/type changes: `SadInputMeta` y constructores
+  - added: `SaarInputMeta.TransientMeta`, `SaarInputMeta.ContinuousMeta`
+  - removed: `SaarInputMeta.instance_id: Option`, `SaarInputMeta.mode` (fase B)
+  - signature/type changes: `SaarInputMeta` y constructores
 - API interna: helpers de compat si aplica
 
 **Cambios de datos/ADT:**
-- Nuevo `SadInputMeta` ADT.
+- Nuevo `SaarInputMeta` ADT.
 
 **Impacto OTP:**
 - Impacta payloads de mensajes que lleven meta (requiere inspeccion en codigo).
@@ -300,10 +300,10 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 **Objetivo:** eliminar combinaciones invalidas de `phase` y `failure_reason`.
 
 **Alcance (modulos):**
-- `sad/types/agent`
-- `sad/core/agent`
-- `sad/core/registry`
-- `sad/gateway/agents_api`
+- `saar/types/agent`
+- `saar/core/agent`
+- `saar/core/registry`
+- `saar/gateway/agents_api`
 
 **Motivacion (inventario):**
 - ADT opportunity: `AgentPhase` con `Failed(FailureReason)`.
@@ -342,9 +342,9 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 **Objetivo:** impedir que clientes externos envien mensajes internos sin efecto.
 
 **Alcance (modulos):**
-- `sad/core/messages`
-- `sad/core/agent_manager`
-- `sad/core/agent_factory_supervisor`
+- `saar/core/messages`
+- `saar/core/agent_manager`
+- `saar/core/agent_factory_supervisor`
 
 **Motivacion (inventario):**
 - OTP ADT opportunity: `AgentManagerMsg` con `Cmd` e `Internal`.
@@ -388,17 +388,17 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 **Objetivo:** evitar deriva de validacion entre decoders, sources y params.
 
 **Alcance (modulos):**
-- `sad/decoders`
-- `sad/profiles_sources`
-- `sad/params`
-- `sad/types/profile`
+- `saar/decoders`
+- `saar/profiles_sources`
+- `saar/params`
+- `saar/types/profile`
 
 **Motivacion (inventario):**
 - Hotspot parsing: decoders + profiles_sources + params.
 
 **Plan de pasos:**
 1) Inspeccionar codigo para detectar validaciones duplicadas (requiere inspeccion en codigo).
-2) Crear helpers comunes en un modulo compartido o en `sad/decoders`.
+2) Crear helpers comunes en un modulo compartido o en `saar/decoders`.
 3) Migrar `profiles_sources` y `params` a esos helpers.
 4) Ajustar tests de validacion.
 
@@ -428,15 +428,15 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 **Objetivo:** centralizar errores FFI compartidos.
 
 **Alcance (modulos):**
-- `sad/ffi`
-- `sad/bridge/port_process`
-- `sad/profiles_sources`
+- `saar/ffi`
+- `saar/bridge/port_process`
+- `saar/profiles_sources`
 
 **Motivacion (inventario):**
 - Hotspot FFI boundary: errores opacos y dispersos.
 
 **Plan de pasos:**
-1) Definir `FfiError` en `sad/ffi`.
+1) Definir `FfiError` en `saar/ffi`.
 2) Mapear errores actuales a `FfiError` en `port_process`.
 3) Ajustar `profiles_sources` para usar `FfiError`.
 
@@ -465,14 +465,14 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 
 ### Epica E5: Orden y coherencia de supervision OTP
 **Motivacion (inventario):**
-- Refactor signal en `sad/core/root_supervisor`: orden de children.
+- Refactor signal en `saar/core/root_supervisor`: orden de children.
 
 #### PR 11: Ajustar orden de children en root_supervisor (tamano S, riesgo bajo)
 **Objetivo:** iniciar `agent_factory` antes de `agent_manager`, o documentar por que es seguro.
 
 **Alcance (modulos):**
-- `sad/core/root_supervisor`
-- `sad/core/supervisor_names`
+- `saar/core/root_supervisor`
+- `saar/core/supervisor_names`
 
 **Motivacion (inventario):**
 - Refactor signal: `agent_manager` se inicia antes que `agent_factory`.
@@ -506,12 +506,12 @@ Incluye todas las epicas y PRs definidos en el plan original, con descripcion de
 - Orden coherente o justificado de forma explicita.
 
 ## Cambios de API globales (consolidados por PR)
-- PR 1: mover `ArtifactEntry` y `ArtifactRegistryMsg` a `sad/core/artifact_registry_protocol`.
+- PR 1: mover `ArtifactEntry` y `ArtifactRegistryMsg` a `saar/core/artifact_registry_protocol`.
 - PR 2: eliminar o mover `boundary_call.call` y `call_unwrap_result`.
 - PR 3: `RuntimeConfig` pasa de record a ADT `ManagedPort | NoNetwork`.
 - PR 4: `ResponseMapping` pasa a ADT `Default | Text | Artifacts | Both`.
 - PR 5: `StreamMode` reemplaza `streaming: Bool` y `stream_sink: Option`.
-- PR 6: `SadInputMeta` pasa a ADT `TransientMeta | ContinuousMeta`.
+- PR 6: `SaarInputMeta` pasa a ADT `TransientMeta | ContinuousMeta`.
 - PR 7: `AgentPhase.Failed(FailureReason)` y eliminacion de `failure_reason` en `AgentStatusView`.
 - PR 8: `AgentManagerMsg` separado en `Cmd` y `Internal`.
 - PR 10: `FfiError` para errores de frontera FFI.

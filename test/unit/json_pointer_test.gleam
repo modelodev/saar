@@ -1,4 +1,4 @@
-//// Unit tests for `sad/json_pointer`.
+//// Unit tests for `saar/json_pointer`.
 ////
 //// Mission: verify JSON Pointer parsing and resolution behavior.
 ////
@@ -14,7 +14,7 @@ import gleam/json
 import gleam/option.{None, Some}
 import gleeunit
 import gleeunit/should
-import sad/json_pointer
+import saar/json_pointer
 
 pub fn main() {
   gleeunit.main()

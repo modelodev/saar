@@ -1,4 +1,4 @@
-# Guía de actores SAD v3 (Gleam/BEAM)
+# Guía de actores SAAR v3 (Gleam/BEAM)
 
 Diseño "inside-out": primero `AgentActor`, luego registro y supervisor. 
 Este documento describe la implementación OTP, referenciando los tipos definidos en `tipos.md`.
@@ -15,16 +15,16 @@ Este documento describe la implementación OTP, referenciando los tipos definido
 
 ## 0. Glosario (estado interno vs wire)
 
-SAD usa **dos** representaciones de estado: una interna (con recursos BEAM) y otra wire (serializable y segura).
+SAAR usa **dos** representaciones de estado: una interna (con recursos BEAM) y otra wire (serializable y segura).
 
 | Concepto | Tipo | Dónde vive | Para qué sirve |
 |----------|------|------------|----------------|
-| Estado interno del agente | `AgentState` (opaco) | `sad/core/agent.gleam` | FSM real; puede incluir `ResolvedParams` y recursos BEAM (`Port`, handles) |
-| Estado runtime del actor | `AgentRuntimeState` (record) | `sad/core/agent.gleam` | Estado completo del proceso OTP (incluye selector, buffers, `ActorMode`) |
-| Concurrencia de interacción | `ActorMode { Idle, Busy(InFlight) }` | `sad/core/agent.gleam` | Garantiza “una interacción a la vez” y hace los estados ilegales irrepresentables |
-| Fase publicable | `AgentPhase` | `sad/types.gleam` | Vista estable para HTTP: Created/Provisioning/Ready*/Stopped/Failed (sin recursos) |
-| Modo publicable | `AgentRunMode` | `sad/types.gleam` | Derivado de `ActorMode` (`RunIdle`/`RunBusy`), sin detalles internos |
-| Vista de estado | `AgentStatusView` | `sad/types.gleam` | Lo que serializa el gateway: fase+modo+assigned_port+failure_reason (safe-to-log) |
+| Estado interno del agente | `AgentState` (opaco) | `saar/core/agent.gleam` | FSM real; puede incluir `ResolvedParams` y recursos BEAM (`Port`, handles) |
+| Estado runtime del actor | `AgentRuntimeState` (record) | `saar/core/agent.gleam` | Estado completo del proceso OTP (incluye selector, buffers, `ActorMode`) |
+| Concurrencia de interacción | `ActorMode { Idle, Busy(InFlight) }` | `saar/core/agent.gleam` | Garantiza “una interacción a la vez” y hace los estados ilegales irrepresentables |
+| Fase publicable | `AgentPhase` | `saar/types.gleam` | Vista estable para HTTP: Created/Provisioning/Ready*/Stopped/Failed (sin recursos) |
+| Modo publicable | `AgentRunMode` | `saar/types.gleam` | Derivado de `ActorMode` (`RunIdle`/`RunBusy`), sin detalles internos |
+| Vista de estado | `AgentStatusView` | `saar/types.gleam` | Lo que serializa el gateway: fase+modo+assigned_port+failure_reason (safe-to-log) |
 
 ## 1. Topología OTP
 
@@ -41,10 +41,10 @@ RootSupervisor (RestForOne, Permanent)
 │   - No monitorea agentes (cleanup explícito)
 ├── PortPoolActor (Permanent, si `managed_port`)
 │   - SSOT de reservas de puertos (InstanceId → port)
-│   - Wrap del helper puro `sad/port_pool.gleam`
+│   - Wrap del helper puro `saar/port_pool.gleam`
 ├── ProfilesActor (Permanent)
 │   - SSOT en memoria de perfiles cargados (ProfileId → Profile)
-│   - Permite `/sys/reload-profiles` sin reiniciar SAD
+│   - Permite `/sys/reload-profiles` sin reiniciar SAAR
 │   - El IO de leer perfiles desde disco ocurre en el borde; aquí solo se actualiza estado puro (SetProfiles)
 ├── AgentManagerActor (Permanent)
 │   - Actor “manager” de instancias (no es un supervisor OTP).
@@ -64,7 +64,7 @@ RootSupervisor (RestForOne, Permanent)
 ```
 
 **Motivación de `ProfilesActor` (decisión v0):**
-- Reiniciar SAD para “recargar perfiles” implica matar el árbol OTP, y por diseño eso termina procesos externos (ports/wrapper/runners). Evitamos introducir esa necesidad.
+- Reiniciar SAAR para “recargar perfiles” implica matar el árbol OTP, y por diseño eso termina procesos externos (ports/wrapper/runners). Evitamos introducir esa necesidad.
 - Mantener perfiles en un actor dedicado permite recargar en caliente sin IO en el core (IO solo en el borde) y sin “statefulness difuso” en el manager.
 - Política simple: el reload solo afecta a instancias nuevas; las existentes mantienen su snapshot.
 
@@ -73,7 +73,7 @@ RootSupervisor (RestForOne, Permanent)
 - `ProfilesActor` es el **SSOT** de perfiles en memoria. **No hace IO**; solo recibe/expone estado puro (`SetProfiles`, `GetProfile`, `ListProfiles`).
 - `RegistryActor` es el **SSOT** de instancias activas. `AgentManagerActor` no mantiene un índice local ni requiere rehidratación.
 - `StartArgs.profile` es un **snapshot** del perfil en el momento de creación. `POST /sys/reload-profiles` **solo** afecta a instancias nuevas.
-- `AgentFactorySupervisor` crea `AgentActor` como children dinámicos con `restart_strategy=Temporary`: SAD **no** auto-reinicia agentes; si un agente cae, SAM decide si recrearlo.
+- `AgentFactorySupervisor` crea `AgentActor` como children dinámicos con `restart_strategy=Temporary`: SAAR **no** auto-reinicia agentes; si un agente cae, SAM decide si recrearlo.
 
 ### 1.1 Estrategias y Justificación
 
@@ -83,7 +83,7 @@ RootSupervisor (RestForOne, Permanent)
 
 Hijos declarados en ese orden (Registry -> ArtifactRegistry -> PortPoolActor -> ProfilesActor -> AgentManagerActor -> AgentFactorySupervisor -> GatewayShutdown -> HttpServer) para que RestForOne reinicie dependencias sin cascadas innecesarias y para evitar “agentes huérfanos”.
 
-**Invariante (consistencia):** si el `RegistryActor` pierde estado (crash+restart), SAD no permite que queden agentes vivos “invisibles” para el índice. La estrategia elegida (RestForOne con Registry antes del subtree dependiente: `ProfilesActor` + `AgentManagerActor` + `AgentFactorySupervisor` + agentes + `GatewayShutdown` + `HttpServer`) garantiza que la caída del Registry tumba ese subtree. La reconciliación/recreación es responsabilidad de SAM.
+**Invariante (consistencia):** si el `RegistryActor` pierde estado (crash+restart), SAAR no permite que queden agentes vivos “invisibles” para el índice. La estrategia elegida (RestForOne con Registry antes del subtree dependiente: `ProfilesActor` + `AgentManagerActor` + `AgentFactorySupervisor` + agentes + `GatewayShutdown` + `HttpServer`) garantiza que la caída del Registry tumba ese subtree. La reconciliación/recreación es responsabilidad de SAM.
 Además, al declarar `AgentManagerActor` antes del `AgentFactorySupervisor`, si el manager crashea entre `start_child` y `registry.register`, el `RestForOne` tumba el factory (y por tanto los agentes) y no puede quedar un proceso “vivo pero no registrado”.
 
 ### 1.2 Política de Reinicio
@@ -111,23 +111,23 @@ Módulos:
 
 | Módulo | Responsabilidad |
 |--------|-----------------|
-| `sad/types.gleam` | Tipos de dominio (ver `tipos.md`) |
-| `sad/core/messages.gleam` | Mensajes OTP internos compartidos (Registry/ArtifactRegistry/Supervisor, etc.) |
-| `sad/params.gleam` | Resolución de parámetros (ver `config.md` §2) |
-| `sad/core/agent.gleam` | `AgentActor` + API pública (`AgentRef`) |
-| `sad/core/agent_internal.gleam` | API interna (bridge → actor) |
-| `sad/core/registry.gleam` | Índice de instancias |
-| `sad/core/registry_api.gleam` | API pública para el registry |
-| `sad/core/profiles.gleam` | SSOT de perfiles (ProfilesActor) |
-| `sad/core/profiles_api.gleam` | API tipada para ProfilesActor |
-| `sad/core/agent_manager.gleam` | Actor “manager” de instancias (start vía factory supervisor) |
-| `sad/gateway/http_server.gleam` | Servidor HTTP (mist) supervisado |
-| `sad/bridge/runner.gleam` | Ports a `generic_uvx`/`generic_uvx_server` |
-| `sad/bridge/client.gleam` | HTTP para continuous (httpp) |
+| `saar/types.gleam` | Tipos de dominio (ver `tipos.md`) |
+| `saar/core/messages.gleam` | Mensajes OTP internos compartidos (Registry/ArtifactRegistry/Supervisor, etc.) |
+| `saar/params.gleam` | Resolución de parámetros (ver `config.md` §2) |
+| `saar/core/agent.gleam` | `AgentActor` + API pública (`AgentRef`) |
+| `saar/core/agent_internal.gleam` | API interna (bridge → actor) |
+| `saar/core/registry.gleam` | Índice de instancias |
+| `saar/core/registry_api.gleam` | API pública para el registry |
+| `saar/core/profiles.gleam` | SSOT de perfiles (ProfilesActor) |
+| `saar/core/profiles_api.gleam` | API tipada para ProfilesActor |
+| `saar/core/agent_manager.gleam` | Actor “manager” de instancias (start vía factory supervisor) |
+| `saar/gateway/http_server.gleam` | Servidor HTTP (mist) supervisado |
+| `saar/bridge/runner.gleam` | Ports a `generic_uvx`/`generic_uvx_server` |
+| `saar/bridge/client.gleam` | HTTP para continuous (httpp) |
 
 ## 2. Imports y tipos del actor
 
-El actor importa tipos de **dominio/wire** de `tipos.md`. Los tipos runtime (OTP/recursos) viven en `sad/core/agent.gleam`.
+El actor importa tipos de **dominio/wire** de `tipos.md`. Los tipos runtime (OTP/recursos) viven en `saar/core/agent.gleam`.
 
 ```gleam
 import gleam/dict.{type Dict}
@@ -137,7 +137,7 @@ import gleam/deque.{type Deque}
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/otp/actor
-import sad/types.{
+import saar/types.{
   // Identificadores
   type ProfileId, type InstanceId, type TraceId,
   
@@ -177,7 +177,7 @@ resuelve parámetros. Eso ocurre en `sys.gleam` antes de crear el actor.
 
 El `AgentActor` tiene un protocolo interno de mensajes, pero **no es API pública**.
 La API pública expone un `AgentRef` opaco (ver §17) y funciones (`interact/status/stop/...`).
-Los eventos internos (logs/fin) se inyectan vía `sad/core/agent_internal.gleam` desde bridge/workers.
+Los eventos internos (logs/fin) se inyectan vía `saar/core/agent_internal.gleam` desde bridge/workers.
 
 **Regla de arquitectura:** ningún módulo del gateway ni SAM construye ni envía `AgentMsg`.
 El gateway solo llama a funciones sobre `AgentRef` (y, hacia fuera, habla HTTP con SAM).
@@ -194,7 +194,7 @@ El gateway solo llama a funciones sobre `AgentRef` (y, hacia fuera, habla HTTP c
 
 **Mapeo a SSE (gateway):**
 - `AttachLogs` alimenta el SSE de logs de instancia: `GET /sys/agents/:instance_id/logs/stream` (ring buffer + live).
-- El SSE de interacción (capability `streaming: true`) se entrega por request vía `sad/streams/sink.StreamSink` (gateway). El actor no es proxy de chunks.
+- El SSE de interacción (capability `streaming: true`) se entrega por request vía `saar/streams/sink.StreamSink` (gateway). El actor no es proxy de chunks.
 - En v0, que el cliente SSE se desconecte **no** implica cancelación de la ejecución; solo deja de entregarse el stream al cliente.
 
 ### Separación público vs interno (canónica)
@@ -204,11 +204,11 @@ Para evitar que capas externas (gateway/SAM/adapters) puedan construir accidenta
 - **Comandos públicos** (lo que el gateway puede pedir **vía la API pública**): `Interact`, `GetStatus`, `GetInfo`, `AttachLogs`, `StopInstance`.
 - **Eventos internos** (solo emitidos por bridge/workers): `ProvisioningDone`, `IngestLog`, `InteractionDone`, `WorkerDown`, `ServerDied`.
 
-Patrón idiomático: exponer un `AgentRef` opaco (en `sad/core/agent.gleam`) y funciones públicas para comandos, mientras que el bridge/workers usan `sad/core/agent_internal.gleam` para emitir eventos internos.
+Patrón idiomático: exponer un `AgentRef` opaco (en `saar/core/agent.gleam`) y funciones públicas para comandos, mientras que el bridge/workers usan `saar/core/agent_internal.gleam` para emitir eventos internos.
 
 **Contrato de frontera (canónico):**
-- `sad/core/agent.gleam` (público) expone `type AgentRef` + funciones: `interact/status/info/attach_logs/stop_instance`.
-- `sad/core/agent_internal.gleam` (interno) expone funciones *solo para eventos internos*:
+- `saar/core/agent.gleam` (público) expone `type AgentRef` + funciones: `interact/status/info/attach_logs/stop_instance`.
+- `saar/core/agent_internal.gleam` (interno) expone funciones *solo para eventos internos*:
   - `provisioning_done(agent: AgentRef, outcome: Result(#(AgentState, Option(Int)), String))`
   - `ingest_log(agent: AgentRef, event: LogEvent)`
   - `interaction_done(agent: AgentRef, result: Result(InteractionResult, InteractionError))`
@@ -264,7 +264,7 @@ pub type AgentRuntimeState {
 
 `StartArgs` está definido en `tipos.md` §13.3 (SSOT de tipos).
 
-**Nota:** `AgentRef` es un handle opaco definido en `sad/core/agent.gleam` (wrapper de `Subject(AgentMsg)`), para que ningún módulo externo pueda construir/enviar mensajes internos del actor.
+**Nota:** `AgentRef` es un handle opaco definido en `saar/core/agent.gleam` (wrapper de `Subject(AgentMsg)`), para que ningún módulo externo pueda construir/enviar mensajes internos del actor.
 
 Referencia completa (v0): `arquitectura/examples/snippets/agent_start_link_init_state.gleam`.
 
@@ -520,7 +520,7 @@ Al servir logs (por ejemplo, en `AttachLogs`), convertir con `deque.to_list(buff
 - **Operaciones O(1) amortizado** con `deque` (`push_back`/`pop_front`)
 - **Política drop-oldest**: se conservan los logs más recientes
 - El límite se configura en `config.toml` con `log_buffer_bytes`
-- En v0, SAD no persiste logs a disco (si se requiere histórico, delegar a capas superiores).
+- En v0, SAAR no persiste logs a disco (si se requiere histórico, delegar a capas superiores).
 
 **Mejora futura (no v0):** agrupar logs en el bridge y enviar `IngestLogs(List(LogEvent))` en lugar de un mensaje por línea para reducir presión del mailbox del `AgentActor`.
 
@@ -533,8 +533,8 @@ Los tipos conceptuales están en `tipos.md` §13.2.
 
 ```gleam
 import gleam/erlang/process.{type Pid}
-import sad/core/agent_internal
-import sad/types.{type InstanceId, type ProfileId, type AgentStatusView, type InstanceSummary}
+import saar/core/agent_internal
+import saar/types.{type InstanceId, type ProfileId, type AgentStatusView, type InstanceSummary}
 
 pub type RegistryState {
   RegistryState(
@@ -704,7 +704,7 @@ fn handle_agent_down(
 
 ### 15.3 Registry vs Named Subjects
 
-SAD usa un Registry custom en lugar de `process.Name` por:
+SAAR usa un Registry custom en lugar de `process.Name` por:
 
 1. **Unicidad por instance_id:** indice directo `InstanceId -> RegistryEntry` y limpieza O(1) con `Pid -> InstanceId`
 2. **Listado por perfil:** necesitamos listar todas las instancias de un perfil
@@ -712,7 +712,7 @@ SAD usa un Registry custom en lugar de `process.Name` por:
 4. **Cleanup automático:** monitoreo integrado para limpieza
 5. **Control explícito:** podemos rechazar registros duplicados
 
-Si se quisieran cachear `Subject`s en otro actor, hay que versionarlos (p.ej. generation del agente) o revalidarlos tras `AgentDown`; de lo contrario se pueden usar PIDs obsoletos tras un restart. SAD prefiere re-resolver vía registry en cada interacción.
+Si se quisieran cachear `Subject`s en otro actor, hay que versionarlos (p.ej. generation del agente) o revalidarlos tras `AgentDown`; de lo contrario se pueden usar PIDs obsoletos tras un restart. SAAR prefiere re-resolver vía registry en cada interacción.
 
 ### 15.4 Queries del Registry
 
@@ -851,7 +851,7 @@ pub fn update_status(registry: Subject(RegistryMsg), instance_id: InstanceId, st
 
 ### 16.0 Visión general
 
-SAD usa una jerarquía de supervisores OTP estándar:
+SAAR usa una jerarquía de supervisores OTP estándar:
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
@@ -887,7 +887,7 @@ workspace ocurren explícitamente cuando el `AgentManagerActor` procesa `DeleteA
 
 ### 16.0.1 Apuntes Gleam/OTP (patrones validados)
 
-Estos puntos están validados en práctica por ejemplos actuales de Gleam OTP (p.ej. `vpribish/small_supervisor`), y se adoptan en SAD v0:
+Estos puntos están validados en práctica por ejemplos actuales de Gleam OTP (p.ej. `vpribish/small_supervisor`), y se adoptan en SAAR v0:
 
 - **Los `Name` no son strings:** `process.new_name("x")` devuelve un valor único; hay que crear los `Name` una sola vez en startup y **pasar el valor** por el árbol. Dos `new_name("x")` no son el mismo nombre.
 - **Actores nombrados + discovery por nombre:** preferir `actor.named(name)` y obtener subjects con `process.named_subject(name)`; para factory supervisors usar `factory_supervisor.get_by_name(name)`.
@@ -895,7 +895,7 @@ Estos puntos están validados en práctica por ejemplos actuales de Gleam OTP (p
 - **Llamadas fail-fast vs borde:** `actor.call` puede tumbar al caller si el callee muere/timeout; en el borde HTTP se usa `call_within` (ver §17.1).
 - **Loops:** para loops infinitos, usar recursión en tail-call o un actor dedicado; si el loop debe arrancar “al boot”, dispararlo desde el `run`/initialiser del child spec (self-send de un mensaje `Start`).
 
-### 16.1 Root Supervisor (`sad/core/supervisor.gleam`)
+### 16.1 Root Supervisor (`saar/core/supervisor.gleam`)
 
 Referencia completa (v0): `arquitectura/examples/snippets/root_supervisor.gleam`.
 
@@ -919,7 +919,7 @@ pub fn start(app_state: AppState, names: RootNames) -> actor.StartResult(Supervi
 
 Al arrancar desde `main` o tareas de mantenimiento, hacer `let assert Ok(_sup) = supervisor.start(app_state, names)` para crash-ear rápido si falla la topología (nombres registrados, init inválido). Cualquier arranque fuera del árbol debe también pattern-matchear el `Result` y registrar el motivo.
 
-### 16.2 Agent Manager (`sad/core/agent_manager.gleam`)
+### 16.2 Agent Manager (`saar/core/agent_manager.gleam`)
 
 El `AgentManagerActor` es un actor “manager” que crea/gestiona instancias bajo demanda delegando
 la creación de procesos BEAM al `AgentFactorySupervisor` (`gleam/otp/factory_supervisor`).
@@ -929,7 +929,7 @@ Los tipos de mensajes (`AgentManagerMsg`, `StartError`, `StopError`) están defi
 
 #### Decisión v0: usar `AgentFactorySupervisor` (factory supervisor)
 
-En SAD v0 se elige:
+En SAAR v0 se elige:
 - Un `RootSupervisor` estático (`RestForOne`) con un `AgentFactorySupervisor` nombrado.
 - Un `AgentManagerActor` que **no linkea manualmente** agentes ni hace `trap_exit`; el `RegistryActor`
   monitorea agentes y es el SSOT de instancias activas.
@@ -980,11 +980,11 @@ pub fn start(app_state: AppState, deps: ManagerDeps, name: Name(AgentManagerMsg)
 ### 16.3 API del AgentManagerActor
 
 ```gleam
-// sad/core/agent_manager_api.gleam
+// saar/core/agent_manager_api.gleam
 
 import gleam/erlang/process.{type Subject}
-import sad/otp/safe_call
-import sad/otp/safe_call.{type CallError, type ApiCallError}
+import saar/otp/safe_call
+import saar/otp/safe_call.{type CallError, type ApiCallError}
 
 /// Crea una nueva instancia de agente.
 pub fn start_agent(
@@ -1118,16 +1118,16 @@ fn wait_for_agents_to_stop(
 ## 17. API Pública del Actor
 
 Para encapsular el protocolo de mensajes y facilitar el uso del actor, se provee
-un módulo de API pública (`sad/core/agent.gleam`) que expone un `AgentRef` opaco.
+un módulo de API pública (`saar/core/agent.gleam`) que expone un `AgentRef` opaco.
 El protocolo `AgentMsg` y sus constructores no se exportan: así el compilador impide
 que Gateway/SAM (o cualquier otro módulo) pueda enviar mensajes internos (`WorkerDown`,
 `IngestLog`, etc.) directamente.
 
 ```gleam
 import gleam/erlang/process.{type Subject}
-import sad/core/agent.{type AgentRef}
-import sad/otp/safe_call.{type CallError}
-import sad/types.{
+import saar/core/agent.{type AgentRef}
+import saar/otp/safe_call.{type CallError}
+import saar/types.{
   type AgentRequest, type InteractionResult, type InteractionError,
   type AgentStatusView, type AgentInfoView, type LogEvent, type StreamEvent,
   type StopReason,
@@ -1150,7 +1150,7 @@ pub fn stop_instance(agent: AgentRef, reason: StopReason) -> Nil
 ### 17.1 Política de llamadas (call vs call_within)
 
 - `process.call`/`actor.call`: fail-fast (pueden panic en timeout/down). Útil **solo** entre procesos supervisados dentro del árbol OTP (queremos crash + restart).
-- `sad/otp/safe_call.call_within` (reply_subject + monitor + selector_receive): **patrón único** para bordes (gateway, SSE writers, workers efímeros). Devuelve `Result(_, CallError)` y permite mapear `Disconnected → 503` y `TimedOut → 504` sin tumbar el proceso HTTP.
+- `saar/otp/safe_call.call_within` (reply_subject + monitor + selector_receive): **patrón único** para bordes (gateway, SSE writers, workers efímeros). Devuelve `Result(_, CallError)` y permite mapear `Disconnected → 503` y `TimedOut → 504` sin tumbar el proceso HTTP.
 - Regla v0: ningún handler HTTP (mist) debe depender de `actor.call` directa (riesgo de respuesta incompleta); en su lugar, el gateway usa `call_within` y construye Problem Details.
 - Timeouts se centralizan en `SadConfig` (p.ej. `call_timeout_ms`, `sink_call_timeout_ms`) para evitar bloqueos prolongados.
 
@@ -1172,9 +1172,9 @@ Ver `tests.md` §3.7-3.10 para la lista completa de tests de actores.
 ```gleam
 	import gleeunit/should
 	import gleam/erlang/process
-	import sad/core/agent
-	import sad/core/agent_internal
-	import sad/bridge/bridge.{Bridge}
+	import saar/core/agent
+	import saar/core/agent_internal
+	import saar/bridge/bridge.{Bridge}
 
 pub fn interact_when_idle_test() {
   // Arrange: crear agente con bridge fake (sin IO real)
@@ -1219,7 +1219,7 @@ pub fn interact_when_idle_test() {
 
 Para habilitar métricas desde logs estructurados, emitir `system_log()` en estos puntos:
 
-**Decisión v0:** SAD no integra `:telemetry` directamente. `SystemLogKind` es la interfaz estable:
+**Decisión v0:** SAAR no integra `:telemetry` directamente. `SystemLogKind` es la interfaz estable:
 SAM/ops pueden transformar logs → métricas/telemetry/Prometheus sin tocar el core.
 
 ### 19.1 Mapa de emisión
@@ -1257,10 +1257,10 @@ Con logs estructurados en formato `kind=<kind> <labels>`, las métricas se deriv
 
 ```bash
 # Promtail/Fluentd: contar eventos por tipo
-grep "kind=interaction_finished" /var/log/sad.log | wc -l
+grep "kind=interaction_finished" /var/log/saar.log | wc -l
 
 # Calcular latencia P99 de interacciones
-grep "kind=interaction_finished" /var/log/sad.log \
+grep "kind=interaction_finished" /var/log/saar.log \
   | jq -r '.duration_ms' \
   | percentile 99
 ```

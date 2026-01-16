@@ -48,7 +48,7 @@ pub fn interpolate_list(
 /// Interpola recursivamente los valores string de un JSON.
 /// Las claves NO se interpolan, solo los valores.
 /// Además soporta inserción de valores estructurados vía:
-///   {"$from": "/json/pointer"}  (RFC 6901) sobre el `SAD_INPUT_JSON`.
+///   {"$from": "/json/pointer"}  (RFC 6901) sobre el `SAAR_INPUT_JSON`.
 /// Esto permite inyectar listas/objetos (ej. `/input/messages`) sin extender la sintaxis `{{...}}`.
 pub fn interpolate_json(
   template: Json,
@@ -60,10 +60,10 @@ pub fn interpolate_json(
       Ok(json.String(interpolated))
     }
     // Inserción estructurada por JSON Pointer: {"$from": "/input/messages"}
-    // El puntero se resuelve contra la estructura de `SAD_INPUT_JSON`.
-    // (Conceptual: implementar resolviendo sobre el Json generado por sad_input_to_json()).
+    // El puntero se resuelve contra la estructura de `SAAR_INPUT_JSON`.
+    // (Conceptual: implementar resolviendo sobre el Json generado por saar_input_to_json()).
     json.Object([#("$from", json.String(ptr))]) ->
-      resolve_from_sad_input_json(ptr, ctx)
+      resolve_from_saar_input_json(ptr, ctx)
     json.Object(fields) -> {
       fields
       |> list.try_map(fn(pair) {

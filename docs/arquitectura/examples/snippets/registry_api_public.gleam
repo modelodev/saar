@@ -2,19 +2,19 @@
 // Source: arquitectura/actores.md:1017
 // Purpose: documentation-only; may not compile as-is.
 
-// sad/core/registry_api.gleam
+// saar/core/registry_api.gleam
 
 import gleam/erlang/process.{type Subject}
 import gleam/list
 import gleam/option.{type Option}
-import sad/core/agent.{type AgentRef}
-import sad/core/messages.{
+import saar/core/agent.{type AgentRef}
+import saar/core/messages.{
   type RegistryError, type RegistryMsg, ListAll, ListByProfile, Lookup, Register,
   Unregister, UnregisterByInstanceId, UpdateStatus,
 }
-import sad/otp/safe_call
-import sad/otp/safe_call.{type ApiCallError, type CallError}
-import sad/types.{
+import saar/otp/safe_call
+import saar/otp/safe_call.{type ApiCallError, type CallError}
+import saar/types.{
   type AgentStatusView, type InstanceId, type InstanceKey, type InstanceSummary,
   type ProfileId, InstanceKey,
 }

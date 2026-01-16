@@ -415,7 +415,7 @@ fn execute_capability(
 
     Some(MultipartBody(spec)) -> {
       // 1) Interpolar fields (strings)
-      // 2) Resolver `source_pointer` contra `SAD_INPUT_JSON` para obtener FileRef
+      // 2) Resolver `source_pointer` contra `SAAR_INPUT_JSON` para obtener FileRef
       // 3) Descargar el contenido (desde FileRef.url) y enviar multipart/form-data
       request_multipart(
         cap.method,

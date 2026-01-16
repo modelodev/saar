@@ -46,7 +46,7 @@ pub fn open_sse(
   let events = process.new_subject()
 
   // Timeout aquí es solo para recibir status+headers iniciales.
-  // El timeout total de interacción lo aplica SAD (deadline en el worker).
+  // El timeout total de interacción lo aplica SAAR (deadline en el worker).
   sse.event_source(req, 5000, events)
   |> result.map(fn(pair) {
     let #(_client_ref, control) = pair

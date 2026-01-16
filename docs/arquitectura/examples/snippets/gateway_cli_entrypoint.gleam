@@ -40,7 +40,7 @@ fn handle_serve(args: ServeArgs) {
   let config = load_config_or_exit()
   let profiles = load_profiles_or_warn(config)
   // Arranca el árbol OTP completo (incluye HttpServer).
-  let assert Ok(_sup_ref) = sad_supervisor.start(config, profiles)
+  let assert Ok(_sup_ref) = saar_supervisor.start(config, profiles)
 
   // Write PID file
   write_pid_file()

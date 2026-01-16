@@ -15,16 +15,16 @@ import gleam/string
 import gleeunit
 import gleeunit/should
 import port_helpers
-import sad/app_state
-import sad/bridge/http_client
-import sad/config_loader
-import sad/core/root_supervisor
-import sad/core/supervisor_names
-import sad/net/tcp_listener
-import sad/profiles_sources
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/types/profile as types_profile
+import saar/app_state
+import saar/bridge/http_client
+import saar/config_loader
+import saar/core/root_supervisor
+import saar/core/supervisor_names
+import saar/net/tcp_listener
+import saar/profiles_sources
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/types/profile as types_profile
 import simplifile
 
 const api_key = "test-key"
@@ -36,7 +36,7 @@ pub fn main() {
 }
 
 pub fn auth_required_elsewhere() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let resp =
     http_client.request_sync_string(
@@ -53,7 +53,7 @@ pub fn auth_required_elsewhere() {
 }
 
 pub fn get_health_ok_without_auth() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let resp =
     http_client.request_sync_string(
@@ -71,7 +71,7 @@ pub fn get_health_ok_without_auth() {
 
 pub fn get_health_ready_requires_profiles() {
   // When profiles are loaded, /health/ready must return 200.
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let ok =
     http_client.request_sync_string(
@@ -87,7 +87,7 @@ pub fn get_health_ready_requires_profiles() {
   ok.status |> should.equal(200)
 
   // With zero profiles, /health/ready must return 503.
-  let base_url_empty = start_sad_with_profiles(dict.new())
+  let base_url_empty = start_saar_with_profiles(dict.new())
 
   let not_ready =
     http_client.request_sync_string(
@@ -104,7 +104,7 @@ pub fn get_health_ready_requires_profiles() {
 }
 
 pub fn post_sys_agents_201_provisioning() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-sys-create-1"
 
@@ -131,7 +131,7 @@ pub fn post_sys_agents_201_provisioning() {
 }
 
 pub fn get_sys_agents_lists() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-sys-list-1"
   create_agent(base_url, "echo_cli", instance_id)
@@ -152,7 +152,7 @@ pub fn get_sys_agents_lists() {
 }
 
 pub fn get_sys_agents_includes_a2a_base_url() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-sys-a2a-1"
   create_agent(base_url, "echo_cli", instance_id)
@@ -175,7 +175,7 @@ pub fn get_sys_agents_includes_a2a_base_url() {
 
 pub fn logs_stream_takeover() {
   // Reduce keep-alive interval so the test completes quickly.
-  let base_url = start_sad_with_sse_keep_alive_interval_ms(50)
+  let base_url = start_saar_with_sse_keep_alive_interval_ms(50)
 
   // Validate keep-alive format is emitted as a comment.
   let quiet_id = "inst-sys-logs-keepalive-1"
@@ -217,7 +217,7 @@ pub fn logs_stream_takeover() {
 }
 
 pub fn post_reload_profiles_auth_required() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let resp =
     http_client.request_sync_string(
@@ -237,7 +237,7 @@ pub fn post_reload_profiles_success() {
   let root = "build/test-workspaces/api-reload-success"
   reset_profiles_source(root)
 
-  let base_url = start_sad_with_profile_source_dir(root)
+  let base_url = start_saar_with_profile_source_dir(root)
 
   let resp =
     http_client.request_sync_string(
@@ -259,7 +259,7 @@ pub fn post_reload_profiles_io_error() {
   let root = "build/test-workspaces/api-reload-io-error"
   reset_profiles_source(root)
 
-  let base_url = start_sad_with_profile_source_dir(root)
+  let base_url = start_saar_with_profile_source_dir(root)
 
   // Simulate IO error by removing the source directory.
   let _ = simplifile.delete(file_or_dir_at: root)
@@ -286,7 +286,7 @@ pub fn post_reload_profiles_invalid_json() {
   simplifile.write(to: root <> "/profiles/broken.json", contents: "{not json")
   |> assert_ok
 
-  let base_url = start_sad_with_profile_source_dir(root)
+  let base_url = start_saar_with_profile_source_dir(root)
 
   let resp =
     http_client.request_sync_string(
@@ -306,7 +306,7 @@ pub fn post_reload_profiles_keeps_old_on_error() {
   let root = "build/test-workspaces/api-reload-keeps-old"
   reset_profiles_source(root)
 
-  let base_url = start_sad_with_profile_source_dir(root)
+  let base_url = start_saar_with_profile_source_dir(root)
 
   // Ensure the initial profile set is visible.
   let before =
@@ -360,7 +360,7 @@ pub fn post_reload_profiles_does_not_affect_existing_instances() {
   let root = "build/test-workspaces/api-reload-existing"
   reset_profiles_source(root)
 
-  let base_url = start_sad_with_profile_source_dir(root)
+  let base_url = start_saar_with_profile_source_dir(root)
 
   let instance_id = "inst-reload-existing-1"
   create_agent(base_url, "echo_cli", instance_id)
@@ -399,7 +399,7 @@ pub fn post_reload_profiles_does_not_affect_existing_instances() {
 }
 
 pub fn get_sys_profiles_returns_meta() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let resp =
     http_client.request_sync_string(
@@ -421,7 +421,7 @@ pub fn get_sys_profiles_returns_meta() {
 }
 
 pub fn get_agent_capabilities() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-cap-1"
   create_agent(base_url, "echo_cli", instance_id)
@@ -445,7 +445,7 @@ pub fn get_agent_capabilities() {
 }
 
 pub fn post_agents_interact_transient() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-transient-1"
   create_agent(base_url, "echo_cli", instance_id)
@@ -475,7 +475,7 @@ pub fn post_agents_interact_transient() {
 }
 
 pub fn post_agents_interact_streaming_defaults_to_agui() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-stream-1"
   create_agent(base_url, "streaming_echo", instance_id)
@@ -508,7 +508,7 @@ pub fn post_agents_interact_streaming_defaults_to_agui() {
 }
 
 pub fn post_agents_interact_continuous() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-continuous-1"
   create_agent(base_url, "echo_server", instance_id)
@@ -537,7 +537,7 @@ pub fn post_agents_interact_continuous() {
 }
 
 pub fn post_agents_interact_timeout() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-timeout-1"
   create_agent(base_url, "echo_cli", instance_id)
@@ -565,7 +565,7 @@ pub fn post_agents_interact_timeout() {
 }
 
 pub fn post_agents_interact_timeout_then_next_request_ok() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let timed_out_id = "inst-timeout-then-ok-1"
   create_agent(base_url, "echo_cli", timed_out_id)
@@ -619,7 +619,7 @@ pub fn post_agents_interact_timeout_then_next_request_ok() {
 }
 
 pub fn post_agents_interact_streaming_a2ui_message_shape() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-a2ui-1"
   create_agent(base_url, "streaming_echo", instance_id)
@@ -638,7 +638,7 @@ pub fn post_agents_interact_streaming_a2ui_message_shape() {
   let headers =
     auth_headers()
     |> dict.insert("content-type", "application/json")
-    |> dict.insert("x-sad-ui-protocol", "a2ui/v0.8")
+    |> dict.insert("x-saar-ui-protocol", "a2ui/v0.8")
 
   let conn =
     http_client.open_sse(http.Post, url, headers, Some(body), 2000) |> assert_ok
@@ -652,7 +652,7 @@ pub fn post_agents_interact_streaming_a2ui_message_shape() {
 }
 
 pub fn post_agents_interact_streaming_a2ui_disconnect_is_terminal() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-a2ui-terminal-1"
   create_agent(base_url, "streaming_echo", instance_id)
@@ -671,7 +671,7 @@ pub fn post_agents_interact_streaming_a2ui_disconnect_is_terminal() {
   let headers =
     auth_headers()
     |> dict.insert("content-type", "application/json")
-    |> dict.insert("x-sad-ui-protocol", "a2ui/v0.8")
+    |> dict.insert("x-saar-ui-protocol", "a2ui/v0.8")
 
   let conn =
     http_client.open_sse(http.Post, url, headers, Some(body), 2000) |> assert_ok
@@ -711,7 +711,7 @@ fn wait_a2ui_and_then_close(
 }
 
 pub fn get_agent_card_auth_required() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let url =
     base_url <> "/instances/inst-agent-card-auth-1/.well-known/agent-card.json"
@@ -731,7 +731,7 @@ pub fn get_agent_card_auth_required() {
 }
 
 pub fn post_a2a_send_auth_required() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let url = base_url <> "/instances/inst-a2a-send-auth-1/a2a/message:send"
 
@@ -750,7 +750,7 @@ pub fn post_a2a_send_auth_required() {
 }
 
 pub fn post_a2a_stream_auth_required() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let url = base_url <> "/instances/inst-a2a-stream-auth-1/a2a/message:stream"
 
@@ -769,7 +769,7 @@ pub fn post_a2a_stream_auth_required() {
 }
 
 pub fn post_a2a_message_send_unknown_instance_404() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-a2a-send-missing-1"
 
@@ -803,7 +803,7 @@ pub fn post_a2a_message_send_unknown_instance_404() {
 }
 
 pub fn post_a2a_message_send_ok() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-a2a-send-1"
   create_agent(base_url, "echo_cli", instance_id)
@@ -838,7 +838,7 @@ pub fn post_a2a_message_send_ok() {
 }
 
 pub fn post_a2a_message_stream_ok() {
-  let base_url = start_sad_with_sse_keep_alive_interval_ms(50)
+  let base_url = start_saar_with_sse_keep_alive_interval_ms(50)
 
   let instance_id = "inst-a2a-stream-1"
   create_agent(base_url, "streaming_echo", instance_id)
@@ -873,7 +873,7 @@ pub fn post_a2a_message_stream_ok() {
 }
 
 pub fn post_a2a_message_stream_a2ui_extension() {
-  let base_url = start_sad_with_sse_keep_alive_interval_ms(50)
+  let base_url = start_saar_with_sse_keep_alive_interval_ms(50)
 
   let instance_id = "inst-a2a-a2ui-1"
   create_agent(base_url, "streaming_echo", instance_id)
@@ -934,12 +934,12 @@ fn wait_sse_contains(
   }
 }
 
-fn load_cfg0() -> types_config.SadConfig {
+fn load_cfg0() -> types_config.SaarConfig {
   config_loader.load_from_path(
     "./test/fixtures/config/test_config.toml",
     fn(name) {
       case name {
-        "SAD_TEST_API_KEY" -> Ok(api_key)
+        "SAAR_TEST_API_KEY" -> Ok(api_key)
         _ -> Error(Nil)
       }
     },
@@ -948,8 +948,8 @@ fn load_cfg0() -> types_config.SadConfig {
   |> assert_ok
 }
 
-fn start_sad_with_cfg_and_profiles(
-  cfg0: types_config.SadConfig,
+fn start_saar_with_cfg_and_profiles(
+  cfg0: types_config.SaarConfig,
   initial_profiles: dict.Dict(types_core.ProfileId, types_profile.Profile),
 ) -> String {
   port_helpers.ensure_wrapper_path()
@@ -959,7 +959,7 @@ fn start_sad_with_cfg_and_profiles(
 
   let names = supervisor_names.new_names_with_suffix(int.to_string(port))
 
-  let cfg = types_config.SadConfig(..cfg0, server_port: port)
+  let cfg = types_config.SaarConfig(..cfg0, server_port: port)
 
   let state =
     app_state.AppState(config: cfg, initial_profiles: initial_profiles)
@@ -969,53 +969,53 @@ fn start_sad_with_cfg_and_profiles(
   "http://" <> host <> ":" <> int.to_string(port)
 }
 
-fn start_sad_with_profiles(
+fn start_saar_with_profiles(
   initial_profiles: dict.Dict(types_core.ProfileId, types_profile.Profile),
 ) -> String {
-  start_sad_with_cfg_and_profiles(load_cfg0(), initial_profiles)
+  start_saar_with_cfg_and_profiles(load_cfg0(), initial_profiles)
 }
 
 fn cfg_with_sse_keep_alive_interval_ms(
-  cfg0: types_config.SadConfig,
+  cfg0: types_config.SaarConfig,
   keep_alive_ms: Int,
-) -> types_config.SadConfig {
-  let types_config.SadConfig(stream: stream0, ..) = cfg0
+) -> types_config.SaarConfig {
+  let types_config.SaarConfig(stream: stream0, ..) = cfg0
   let stream1 =
     types_config.StreamConfig(
       ..stream0,
       sse_keep_alive_interval_ms: keep_alive_ms,
     )
 
-  types_config.SadConfig(..cfg0, stream: stream1)
+  types_config.SaarConfig(..cfg0, stream: stream1)
 }
 
-fn start_sad_with_sse_keep_alive_interval_ms(keep_alive_ms: Int) -> String {
+fn start_saar_with_sse_keep_alive_interval_ms(keep_alive_ms: Int) -> String {
   let cfg0 = load_cfg0()
   let cfg1 = cfg_with_sse_keep_alive_interval_ms(cfg0, keep_alive_ms)
   let profiles = profiles_sources.load_profiles_from_sources(cfg1) |> assert_ok
-  start_sad_with_cfg_and_profiles(cfg1, profiles)
+  start_saar_with_cfg_and_profiles(cfg1, profiles)
 }
 
-fn start_sad() -> String {
+fn start_saar() -> String {
   let cfg0 = load_cfg0()
   let profiles = profiles_sources.load_profiles_from_sources(cfg0) |> assert_ok
-  start_sad_with_cfg_and_profiles(cfg0, profiles)
+  start_saar_with_cfg_and_profiles(cfg0, profiles)
 }
 
-fn start_sad_with_profile_source_dir(root: String) -> String {
+fn start_saar_with_profile_source_dir(root: String) -> String {
   let cfg0 = load_cfg0()
 
-  let types_config.SadConfig(profiles: profiles0, ..) = cfg0
+  let types_config.SaarConfig(profiles: profiles0, ..) = cfg0
 
   let profiles_cfg =
     types_config.ProfilesConfig(..profiles0, sources: [
       types_config.ProfileSourceDir(path: root),
     ])
 
-  let cfg1 = types_config.SadConfig(..cfg0, profiles: profiles_cfg)
+  let cfg1 = types_config.SaarConfig(..cfg0, profiles: profiles_cfg)
 
   let profiles = profiles_sources.load_profiles_from_sources(cfg1) |> assert_ok
-  start_sad_with_cfg_and_profiles(cfg1, profiles)
+  start_saar_with_cfg_and_profiles(cfg1, profiles)
 }
 
 fn reset_profiles_source(root: String) -> Nil {

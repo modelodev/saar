@@ -2,7 +2,7 @@
 api_key = "ok"
 
 [workspaces]
-directory = "/tmp/sad-landlock-test-workspaces"
+directory = "/tmp/saar-landlock-test-workspaces"
 
 [security]
 landlock_mode = "enforced"

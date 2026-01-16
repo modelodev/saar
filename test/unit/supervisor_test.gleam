@@ -6,17 +6,17 @@ import gleam/otp/actor
 import gleam/otp/factory_supervisor
 import gleeunit
 import gleeunit/should
-import sad/app_state
-import sad/core/agent
-import sad/core/agent_factory_supervisor
-import sad/core/messages
-import sad/core/root_supervisor
-import sad/core/supervisor_names
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/types/enums as types_enums
-import sad/types/profile as types_profile
-import sad/types/runner as types_runner
+import saar/app_state
+import saar/core/agent
+import saar/core/agent_factory_supervisor
+import saar/core/messages
+import saar/core/root_supervisor
+import saar/core/supervisor_names
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/types/enums as types_enums
+import saar/types/profile as types_profile
+import saar/types/runner as types_runner
 
 pub fn main() {
   gleeunit.main()
@@ -84,7 +84,7 @@ pub fn deps_discovered_by_name_not_passed_by_hand() {
 
 pub fn root_supervisor_start_fail_fast() {
   let cfg0 = agent_helpers.default_config()
-  let types_config.SadConfig(runner: runner0, ..) = cfg0
+  let types_config.SaarConfig(runner: runner0, ..) = cfg0
   let types_config.RunnerSystemConfig(..) = runner0
 
   // Invalid range: min > max.
@@ -95,7 +95,7 @@ pub fn root_supervisor_start_fail_fast() {
       port_range_max: 0,
     )
 
-  let cfg = types_config.SadConfig(..cfg0, runner: bad_runner)
+  let cfg = types_config.SaarConfig(..cfg0, runner: bad_runner)
 
   let names = supervisor_names.new_names()
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
@@ -197,7 +197,7 @@ fn test_profile(lifecycle: types_enums.Lifecycle) -> types_profile.Profile {
 }
 
 fn start_args(
-  cfg: types_config.SadConfig,
+  cfg: types_config.SaarConfig,
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
 ) -> messages.StartArgs {
@@ -257,7 +257,7 @@ pub fn agent_factory_restart_strategy_temporary() {
 }
 
 fn start_root(
-  config: types_config.SadConfig,
+  config: types_config.SaarConfig,
 ) -> #(root_supervisor.SupervisorRef, supervisor_names.RootNames, process.Pid) {
   let names = supervisor_names.new_names()
   let state = app_state.AppState(config: config, initial_profiles: dict.new())

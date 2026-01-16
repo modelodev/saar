@@ -4,9 +4,9 @@ import gleam/json
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/adapters/a2ui
-import sad/types/core as types_core
-import sad/types/stream
+import saar/adapters/a2ui
+import saar/types/core as types_core
+import saar/types/stream
 
 pub fn main() {
   gleeunit.main()

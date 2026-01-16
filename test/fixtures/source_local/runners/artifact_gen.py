@@ -12,7 +12,7 @@ def emit(event):
 
 def main():
     input_json = json.loads(sys.stdin.read())
-    workspace = os.environ.get("SAD_WORKSPACE", "/tmp")
+    workspace = os.environ.get("SAAR_WORKSPACE", "/tmp")
 
     output_path = os.path.join(workspace, "outputs", "report.pdf")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)

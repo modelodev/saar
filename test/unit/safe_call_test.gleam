@@ -1,7 +1,7 @@
 import gleam/erlang/process
 import gleeunit
 import gleeunit/should
-import sad/otp/safe_call
+import saar/otp/safe_call
 
 pub fn main() {
   gleeunit.main()

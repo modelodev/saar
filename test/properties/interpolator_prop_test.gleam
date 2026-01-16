@@ -2,9 +2,9 @@ import gleam/dict
 import gleam/option.{None}
 import gleeunit/should
 import qcheck
-import sad/bridge/interpolator
-import sad/types/core as types_core
-import sad/types/input as types_input
+import saar/bridge/interpolator
+import saar/types/core as types_core
+import saar/types/input as types_input
 
 const test_count: Int = 200
 

@@ -70,7 +70,7 @@ pub fn request(
   }
 
   // Ejecutar con `httpp` (basado en hackney) y mapear errores al ADT
-  // v0: imponer límite de tamaño al body de respuesta (`SadConfig.max_http_response_bytes`) para evitar OOM.
+  // v0: imponer límite de tamaño al body de respuesta (`SaarConfig.max_http_response_bytes`) para evitar OOM.
   case send.send(req) {
     Error(hackney.TimedOut) -> Error(Timeout)
     Error(hackney.ConnectionClosed(_)) ->

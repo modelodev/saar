@@ -2,10 +2,10 @@
 // Source: arquitectura/bridge.md:899
 // Purpose: documentation-only; may not compile as-is.
 
-// En sad/bridge/runner.gleam
-import sad/bridge/bridge.{type BridgeCtx}
-import sad/streams/sink as stream_sink
-import sad/streams/sink.{type StreamSink}
+// En saar/bridge/runner.gleam
+import saar/bridge/bridge.{type BridgeCtx}
+import saar/streams/sink as stream_sink
+import saar/streams/sink.{type StreamSink}
 
 /// Lanza worker que ejecuta el runner y envía mensajes al actor.
 /// Retorna el PID del worker para que el actor lo monitoree.
@@ -43,7 +43,7 @@ pub fn start_interaction(
 ///    - `t="log"` -> `agent.internal_ingest_log` con metadata (ts_ms, trace_id, instance_id)
 ///    - `t="chunk"` (si streaming=true) -> `ContentChunk`
 ///    - `t="result"` -> resultado final (`RunnerResponse`)
-/// 4. En streaming, envía batches al `sad/streams/sink.StreamSink` (gateway); siempre notifica `interaction_done` al actor
+/// 4. En streaming, envía batches al `saar/streams/sink.StreamSink` (gateway); siempre notifica `interaction_done` al actor
 fn run_interaction_worker(
   ctx: BridgeCtx,
   req: AgentRequest,
@@ -57,7 +57,7 @@ fn run_interaction_worker(
   let control_line =
     json.object([
       #("t", json.string("input")),
-      #("payload", sad_input_to_json(input)),
+      #("payload", saar_input_to_json(input)),
     ])
     |> json.to_string
 
@@ -187,7 +187,7 @@ fn interaction_read_loop(
 ) -> Nil {
   let selector =
     process.new_selector()
-    // PortEvent: data/exit (source: port). SAD no depende de stderr (fuera de contrato).
+    // PortEvent: data/exit (source: port). SAAR no depende de stderr (fuera de contrato).
     |> port.select(port, fn(ev) { FromPort(ev) })
 
   // `selector_receive` devuelve `Error(Nil)` en timeout; lo usamos para:

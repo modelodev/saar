@@ -2,7 +2,7 @@ import gleam/list
 import gleam/string
 import gleeunit/should
 import qcheck
-import sad/workspace
+import saar/workspace
 
 const test_count: Int = 200
 
@@ -67,7 +67,7 @@ pub fn prop_to_absolute_starts_with_root_test() {
   qcheck.run(config, qcheck.string(), fn(raw) {
     case workspace.workspace_path_validate(raw) {
       Ok(path) -> {
-        let root = "/tmp/sad-workspace-prop"
+        let root = "/tmp/saar-workspace-prop"
 
         workspace.workspace_path_to_absolute(root, path)
         |> string.starts_with(root)

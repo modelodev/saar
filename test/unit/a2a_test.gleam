@@ -5,15 +5,15 @@ import gleam/option.{None, Some}
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/adapters/a2a
-import sad/types/agent as types_agent
-import sad/types/core as types_core
-import sad/types/enums as types_enums
-import sad/types/input as types_input
-import sad/types/output as types_output
-import sad/types/profile as types_profile
-import sad/types/runner as types_runner
-import sad/types/stream
+import saar/adapters/a2a
+import saar/types/agent as types_agent
+import saar/types/core as types_core
+import saar/types/enums as types_enums
+import saar/types/input as types_input
+import saar/types/output as types_output
+import saar/types/profile as types_profile
+import saar/types/runner as types_runner
+import saar/types/stream
 
 pub fn main() {
   gleeunit.main()
@@ -154,27 +154,27 @@ pub fn agent_card_uses_meta_id() {
 
   json.to_string(card)
   |> should.equal(
-    "{\"name\":\"aider\",\"description\":\"AI pair programmer\",\"url\":\"http://localhost:8080/instances/inst-1/a2a\",\"version\":\"1.0.0\",\"protocolVersion\":\"1.0\",\"capabilities\":{\"streaming\":true,\"pushNotifications\":false},\"extensions\":[\"urn:sad:extensions:files-semantics:v1\"],\"skills\":[]}",
+    "{\"name\":\"aider\",\"description\":\"AI pair programmer\",\"url\":\"http://localhost:8080/instances/inst-1/a2a\",\"version\":\"1.0.0\",\"protocolVersion\":\"1.0\",\"capabilities\":{\"streaming\":true,\"pushNotifications\":false},\"extensions\":[\"urn:saar:extensions:files-semantics:v1\"],\"skills\":[]}",
   )
 }
 
-pub fn sad_error_to_a2a_error() {
+pub fn saar_error_to_a2a_error() {
   let trace_id = types_core.trace_id("trace-1")
 
-  let bad = types_output.sad_error(trace_id, types_enums.BadRequest, "bad")
-  let #(status1, json1) = a2a.sad_error_to_a2a_error(bad)
+  let bad = types_output.saar_error(trace_id, types_enums.BadRequest, "bad")
+  let #(status1, json1) = a2a.saar_error_to_a2a_error(bad)
   status1 |> should.equal(400)
   json.to_string(json1)
   |> should.equal(
     "{\"type\":\"https://a2a-protocol.org/errors/invalid-request\",\"status\":400,\"title\":\"Bad Request\",\"detail\":\"bad\"}",
   )
 
-  let agent = types_output.sad_error(trace_id, types_enums.AgentError, "no")
-  let #(status2, _) = a2a.sad_error_to_a2a_error(agent)
+  let agent = types_output.saar_error(trace_id, types_enums.AgentError, "no")
+  let #(status2, _) = a2a.saar_error_to_a2a_error(agent)
   status2 |> should.equal(422)
 
-  let infra = types_output.sad_error(trace_id, types_enums.InfraError, "boom")
-  let #(status3, _) = a2a.sad_error_to_a2a_error(infra)
+  let infra = types_output.saar_error(trace_id, types_enums.InfraError, "boom")
+  let #(status3, _) = a2a.saar_error_to_a2a_error(infra)
   status3 |> should.equal(500)
 }
 

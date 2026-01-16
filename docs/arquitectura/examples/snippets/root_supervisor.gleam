@@ -9,20 +9,20 @@ import gleam/otp/factory_supervisor
 import gleam/otp/static_supervisor.{type Supervisor} as supervisor
 import gleam/otp/supervision
 import gleam/result
-import sad/app_state.{type AppState}
-import sad/bridge/bridge
-import sad/core/agent
-import sad/core/agent_manager
-import sad/core/artifact_registry
-import sad/core/messages.{
+import saar/app_state.{type AppState}
+import saar/bridge/bridge
+import saar/core/agent
+import saar/core/agent_manager
+import saar/core/artifact_registry
+import saar/core/messages.{
   type AgentManagerMsg, type ArtifactRegistryMsg, type PortPoolMsg,
   type ProfilesMsg, type RegistryMsg, type StartArgs,
 }
-import sad/core/port_pool_actor
-import sad/core/profiles
-import sad/core/registry
-import sad/gateway/http_server
-import sad/types.{type Profile, type ProfileId}
+import saar/core/port_pool_actor
+import saar/core/profiles
+import saar/core/registry
+import saar/gateway/http_server
+import saar/types.{type Profile, type ProfileId}
 
 /// Nombres de procesos (átomos) a crear una única vez en el arranque.
 ///
@@ -41,12 +41,12 @@ pub type RootNames {
 
 pub fn new_names() -> RootNames {
   RootNames(
-    registry: process.new_name("sad_registry"),
-    artifact_registry: process.new_name("sad_artifact_registry"),
-    port_pool: process.new_name("sad_port_pool"),
-    profiles: process.new_name("sad_profiles"),
-    agent_factory: process.new_name("sad_agent_factory"),
-    agent_manager: process.new_name("sad_agent_manager"),
+    registry: process.new_name("saar_registry"),
+    artifact_registry: process.new_name("saar_artifact_registry"),
+    port_pool: process.new_name("saar_port_pool"),
+    profiles: process.new_name("saar_profiles"),
+    agent_factory: process.new_name("saar_agent_factory"),
+    agent_manager: process.new_name("saar_agent_manager"),
   )
 }
 

@@ -2,7 +2,7 @@
 /// Los params ya vienen resueltos en input.
 pub fn start_server(
   runner: Runner,
-  input: SadInput,
+  input: SaarInput,
   host: String,
   port: Int,
   workspace: String,
@@ -12,11 +12,11 @@ pub fn start_server(
   let control_line =
     json.object([
       #("t", json.string("input")),
-      #("payload", sad_input_to_json(input)),
+      #("payload", saar_input_to_json(input)),
     ])
     |> json.to_string
 
-  // host/port provienen del port pool (ManagedPort): SAD reserva un puerto libre
+  // host/port provienen del port pool (ManagedPort): SAAR reserva un puerto libre
   // (rango configurable) y lo inyecta en env vars del runner.
   // Configurar env con host/port
   let env = build_server_env(runner, host, port)

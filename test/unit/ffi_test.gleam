@@ -3,7 +3,7 @@ import gleam/erlang/process
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/ffi
+import saar/ffi
 import test_assertions
 
 pub fn main() {

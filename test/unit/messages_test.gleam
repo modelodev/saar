@@ -3,12 +3,12 @@ import gleam/erlang/process
 import gleam/option
 import gleeunit
 import gleeunit/should
-import sad/core/messages
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/types/enums as types_enums
-import sad/types/profile as types_profile
-import sad/types/runner as types_runner
+import saar/core/messages
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/types/enums as types_enums
+import saar/types/profile as types_profile
+import saar/types/runner as types_runner
 
 pub fn main() {
   gleeunit.main()
@@ -51,7 +51,7 @@ pub fn start_args_contains_snapshot_fields() {
   let assert Ok(instance_id) = types_core.instance_id("inst-2")
   let params = dict.new()
   let workspace = "/tmp/workspace"
-  let config = types_config.default_sad_config()
+  let config = types_config.default_saar_config()
   let artifact_registry = process.new_subject()
 
   let args =

@@ -3,8 +3,8 @@
 // Purpose: documentation-only; may not compile as-is.
 
 import gleam/erlang/process.{type Subject}
-import sad/port_pool.{type PortPoolError}
-import sad/types.{type InstanceId}
+import saar/port_pool.{type PortPoolError}
+import saar/types.{type InstanceId}
 
 /// Protocolo de mensajes del PortPoolActor (SSOT de reservas).
 pub type PortPoolMsg {

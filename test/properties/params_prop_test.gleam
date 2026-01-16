@@ -5,11 +5,11 @@ import gleam/option.{None}
 import gleam/string
 import gleeunit/should
 import qcheck
-import sad/params
-import sad/types/core as types_core
-import sad/types/profile as types_profile
-import sad/types/resolved_params
-import sad/validation/params as param_validation
+import saar/params
+import saar/types/core as types_core
+import saar/types/profile as types_profile
+import saar/types/resolved_params
+import saar/validation/params as param_validation
 
 const test_count: Int = 200
 

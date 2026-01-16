@@ -2,7 +2,7 @@
 // Source: arquitectura/tipos.md (first code block)
 // Purpose: documentation-only; may not compile as-is.
 
-// FILE: sad/types.gleam (dominio + wire; 0 imports OTP)
+// FILE: saar/types.gleam (dominio + wire; 0 imports OTP)
 import gleam/dict.{type Dict}
 import gleam/float
 import gleam/http.{type Method}
@@ -12,7 +12,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
-import sad/ffi
+import saar/ffi
 import youid/uuid
 
 // Timestamp y FFI centralizada
@@ -273,7 +273,7 @@ pub fn lifecycle_from_string(s: String) -> Result(Lifecycle, String) {
 /// Definición de un parámetro del perfil.
 /// Transparente porque la validación (ej: secret sin default) ocurre en el decoder.
 /// 
-/// La resolución de estos parámetros ocurre en `sad/params.gleam`, no aquí.
+/// La resolución de estos parámetros ocurre en `saar/params.gleam`, no aquí.
 /// El actor nunca ve Parameter; solo ve ResolvedParams.
 pub type Parameter {
   /// Valor fijo embebido en el perfil. No requiere resolución externa.
@@ -370,10 +370,10 @@ pub fn default_runtime_config() -> RuntimeConfig {
 /// Modo de red del runner.
 /// Sin fallback UnknownMode: el decoder falla ante valores desconocidos.
 ///
-/// `ManagedPort` usa el port pool de SAD: reserva un puerto libre en el rango configurado
-/// (`SadConfig.port_range_min/max`, con defaults) y lo inyecta en el runner via env vars.
+/// `ManagedPort` usa el port pool de SAAR: reserva un puerto libre en el rango configurado
+/// (`SaarConfig.port_range_min/max`, con defaults) y lo inyecta en el runner via env vars.
 pub type NetworkMode {
-  /// SAD asigna un puerto del pool configurado
+  /// SAAR asigna un puerto del pool configurado
   ManagedPort
   /// El runner no necesita red (CLI puro)
   NoNetwork
@@ -420,7 +420,7 @@ pub fn default_artifact_config() -> ArtifactConfig {
 /// Configuración del stream de logs (SSE de instancia).
 ///
 /// v0: logs son best-effort (drop/coalesce permitido) y se protegen con:
-/// - ring buffer (`SadConfig.log_buffer_bytes`) en memoria,
+/// - ring buffer (`SaarConfig.log_buffer_bytes`) en memoria,
 /// - batching (para no saturar el socket),
 /// - y ausencia de buffers infinitos.
 pub type LogStreamConfig {
@@ -434,7 +434,7 @@ pub type LogStreamConfig {
 
 /// Configuración del stream de interacción (SSE por request).
 ///
-/// v0: el backpressure real lo impone el `sad/streams/sink.StreamSink` vía ack (call).
+/// v0: el backpressure real lo impone el `saar/streams/sink.StreamSink` vía ack (call).
 /// El worker solo bufferiza hasta `batch_byte_size` (y flushea por tamaño/intervalo).
 pub type InteractionStreamConfig {
   InteractionStreamConfig(
@@ -443,7 +443,7 @@ pub type InteractionStreamConfig {
     /// Tiempo máximo de espera antes de enviar lo que haya (ms).
     flush_interval_ms: Int,
     /// Tiempo máximo que el producer espera a que el `StreamSink` acepte/escriba (ms).
-    /// Si expira o el cliente se desconecta, SAD corta el streaming (discard) y continúa hasta `InteractionDone`.
+    /// Si expira o el cliente se desconecta, SAAR corta el streaming (discard) y continúa hasta `InteractionDone`.
     /// Recomendación v0: mantenerlo pequeño (p.ej. 100–500ms) para detectar SSE lento/disconnect y degradar rápido.
     push_timeout_ms: Int,
   )
@@ -487,7 +487,7 @@ pub type HealthCheck {
 }
 
 /// Límites configurables por capability.
-/// Permite sobrescribir defaults de SadConfig para operaciones específicas.
+/// Permite sobrescribir defaults de SaarConfig para operaciones específicas.
 pub type CapabilityLimits {
   CapabilityLimits(
     /// Timeout para esta capability (sobrescribe config.call_timeout_ms)
@@ -497,7 +497,7 @@ pub type CapabilityLimits {
 
 // --- HTTP request body (JSON / multipart) ---
 
-/// En capabilities HTTP, SAD puede construir el request body en dos modos:
+/// En capabilities HTTP, SAAR puede construir el request body en dos modos:
 /// - JSON: template Json con inserciones `$from` (JSON Pointer) + strings con `{{...}}` (strict).
 /// - Multipart: form fields (strings interpoladas) + file parts (tomados del input).
 pub type HttpRequestBody {
@@ -520,7 +520,7 @@ pub type MultipartFilePart {
   MultipartFilePart(
     /// Nombre del campo (ej: "file")
     field: String,
-    /// De dónde tomar el archivo (v0: puntero a `SAD_INPUT_JSON`).
+    /// De dónde tomar el archivo (v0: puntero a `SAAR_INPUT_JSON`).
     source_pointer: String,
   )
 }
@@ -543,15 +543,15 @@ pub type HttpCapability {
     description: Option(String),
     /// Hint para renderizado en UI (Json libre, interpretado por frontend)
     ui_hint: Option(Json),
-    /// Si true, SAD puede emitir eventos de streaming y el gateway abre SSE.
+    /// Si true, SAAR puede emitir eventos de streaming y el gateway abre SSE.
     /// En HTTP (continuous), el agente debe exponer una respuesta SSE con este contrato v0:
     /// - El request usa el mismo método + headers + body definido por la capability.
     ///   Para chat streaming lo normal es `POST` con body JSON y respuesta `text/event-stream`.
     ///   Si el método es `GET`, el body debe ser `None`.
     /// - Cada evento SSE incluye `data: <json>` donde `<json>` es **un objeto** con la misma forma
     ///   que el contrato de runners (`t="log"|"chunk"|"result"`).
-    /// - El stream termina cuando SAD recibe `t="result"` (y el agente debe cerrar la conexión).
-    /// - Si la conexión se cierra sin `t="result"`, SAD trata la interacción como `InfraError`.
+    /// - El stream termina cuando SAAR recibe `t="result"` (y el agente debe cerrar la conexión).
+    /// - Si la conexión se cierra sin `t="result"`, SAAR trata la interacción como `InfraError`.
     /// - Se aplican los mismos límites por línea/evento que en runners (ver `protocolos_runner.md`).
     /// Default: False
     streaming: Bool,
@@ -571,12 +571,12 @@ pub type RunnerCapability {
     ui_hint: Option(Json),
     /// Si true, el runner emite chunks de streaming y el gateway abre SSE.
     /// Contrato (v0, BEAM/OTP-friendly):
-    /// - SAD consume un único canal capturado por `open_port` (STDOUT del wrapper/runner).
+    /// - SAAR consume un único canal capturado por `open_port` (STDOUT del wrapper/runner).
     /// - El runner emite eventos JSONL (1 JSON por línea) con `t`:
     ///   - `t="log"` (opcional) para logs,
     ///   - `t="chunk"` (opcional; si streaming=true) para deltas incrementales,
     ///   - `t="result"` (obligatorio; exactamente uno) con forma `RunnerResponse`.
-    /// - STDERR está fuera de contrato (diagnóstico local); SAD no depende de capturarlo.
+    /// - STDERR está fuera de contrato (diagnóstico local); SAAR no depende de capturarlo.
     /// Default: False
     streaming: Bool,
     /// Límites específicos para esta capability
@@ -648,7 +648,7 @@ pub type ResponseMapping {
 
 // UiHint eliminado: usar Option(Json) directamente en HttpCapability/RunnerCapability.
 //
-// SAD es solo mensajero de hints; no los interpreta ni valida su estructura.
+// SAAR es solo mensajero de hints; no los interpreta ni valida su estructura.
 // El frontend es responsable de:
 // 1. Interpretar el JSON según el campo "kind" (web_component, ag-ui, etc.)
 // 2. Implementar fallback para hints desconocidos (formulario genérico)
@@ -661,7 +661,7 @@ pub type ResponseMapping {
 // AG-UI:
 // {"kind": "ag-ui", "entrypoint": "/agents/{{instance_id}}/ui/agui", "protocol": "sse"}
 //
-// Nota: mantener el contrato de `ui_hint` minimalista; SAD no lo interpreta.
+// Nota: mantener el contrato de `ui_hint` minimalista; SAAR no lo interpreta.
 
 // ============================================================================
 // SECCIÓN 4: PAYLOAD DE ENTRADA (TIPADO)
@@ -714,7 +714,7 @@ pub type FileRef {
   FileRef(
     /// URL accesible por el runner.
     /// Puede ser externa (S3/GCS/HTTP) o interna del despliegue (URL pre-firmada, proxy, etc.).
-    /// SAD v0 no transporta bytes inline en protocolos (p.ej. A2A `file.bytes`).
+    /// SAAR v0 no transporta bytes inline en protocolos (p.ej. A2A `file.bytes`).
     url: String,
     /// Tipo MIME del archivo
     mime: String,
@@ -770,7 +770,7 @@ pub fn derive_helpers(payload: InputPayload) -> SadHelpers {
 /// Contexto de una request (modelo interno).
 /// trace_id siempre presente (el gateway lo genera si falta en wire).
 /// 
-/// SAD es stateless puro: no maneja conceptos de tenant ni user.
+/// SAAR es stateless puro: no maneja conceptos de tenant ni user.
 pub type RequestContext {
   RequestContext(
     trace_id: TraceId,
@@ -780,15 +780,15 @@ pub type RequestContext {
 }
 
 // ============================================================================
-// SECCIÓN 6: CONTRATO RUNNER (SAD ↔ SCRIPTS)
+// SECCIÓN 6: CONTRATO RUNNER (SAAR ↔ SCRIPTS)
 // ============================================================================
-// Los tipos del contrato runner están en sad/bridge/runner_contract.gleam
+// Los tipos del contrato runner están en saar/bridge/runner_contract.gleam
 // Ver `arquitectura/protocolos_runner.md` para documentación completa.
 //
 // Importar como:
-//   import sad/bridge/runner_contract.{
-//     type SadInput, type RunnerResponse, type ArtifactRef,
-//     validate_response, sad_input_to_json,
+//   import saar/bridge/runner_contract.{
+//     type SaarInput, type RunnerResponse, type ArtifactRef,
+//     validate_response, saar_input_to_json,
 //   }
 //
 // El módulo runner_contract.gleam es PURO (sin IO).
@@ -797,10 +797,10 @@ pub type RequestContext {
 // en el módulo bridge/serialization.gleam, no con tipos Wire separados.
 
 /// Input completo enviado al runner vía STDIN.
-/// Modelo interno rico. Se serializa a JSON con sad_input_to_json().
-pub type SadInput {
-  SadInput(
-    meta: SadInputMeta,
+/// Modelo interno rico. Se serializa a JSON con saar_input_to_json().
+pub type SaarInput {
+  SaarInput(
+    meta: SaarInputMeta,
     /// Parámetros resueltos (incluye secretos como SecretVal).
     /// Producido por params.resolve(), nunca por el actor.
     /// NOTA: Al serializar a JSON, los secretos se incluyen (van al runner).
@@ -817,9 +817,9 @@ pub type SadInput {
 }
 
 /// Metadatos del input para el runner.
-/// Se serializa a JSON con sad_input_meta_to_json().
-pub type SadInputMeta {
-  SadInputMeta(
+/// Se serializa a JSON con saar_input_meta_to_json().
+pub type SaarInputMeta {
+  SaarInputMeta(
     spec_version: String,
     profile_id: ProfileId,
     /// None en transient puro sin instancia persistente
@@ -1045,11 +1045,11 @@ pub fn error_kind_to_string(kind: ErrorKind) -> String {
 // Tipos para la frontera HTTP. Solo mantenemos tipos Wire cuando hay
 // diferencia estructural real (inputs opaco vs tipado, opcionalidad diferente).
 //
-// NOTA: Estos son tipos internos de SAD. El gateway expone una API compatible
+// NOTA: Estos son tipos internos de SAAR. El gateway expone una API compatible
 // con el protocolo A2A (ver protocolos.md), pero los tipos aquí son para uso interno.
-// La conversión A2A wire ↔ SAD interno ocurre en el módulo sad/a2a.gleam.
+// La conversión A2A wire ↔ SAAR interno ocurre en el módulo saar/a2a.gleam.
 
-/// Request tal como llega del cliente (wire format interno de SAD).
+/// Request tal como llega del cliente (wire format interno de SAAR).
 /// 
 /// NOTA: Este tipo Wire se mantiene porque `inputs` es Json opaco aquí
 /// pero InputPayload tipado en AgentInteractionRequest. Diferencia estructural real.
@@ -1158,7 +1158,7 @@ pub fn interaction_result_to_json(result: InteractionResult) -> Json {
 }
 
 /// Serializa InteractionError como RFC 7807 (Problem Details).
-/// En SAD v0, *errores* HTTP (nativo y A2A) usan RFC 7807; el formato
+/// En SAAR v0, *errores* HTTP (nativo y A2A) usan RFC 7807; el formato
 /// `{"status":"error", ...}` no se usa ya para respuestas HTTP.
 ///
 /// Campos mínimos:
@@ -1172,15 +1172,15 @@ pub fn interaction_error_to_problem_details(
 ) -> Json {
   let kind = error_kind_to_string(err.kind)
   let #(status, type_url, title) = case err.kind {
-    BadRequest -> #(400, "https://sad/errors/invalid-request", "Bad Request")
+    BadRequest -> #(400, "https://saar/errors/invalid-request", "Bad Request")
     AgentError -> #(
       422,
-      "https://sad/errors/upstream-error",
+      "https://saar/errors/upstream-error",
       "Unprocessable Entity",
     )
     InfraError -> #(
       500,
-      "https://sad/errors/infra-error",
+      "https://saar/errors/infra-error",
       "Internal Server Error",
     )
   }
@@ -1247,7 +1247,7 @@ pub type ResolvedValue {
 
 /// Parámetros resueltos listos para usar.
 /// 
-/// Producido por `sad/params.resolve()`, consumido por AgentActor.
+/// Producido por `saar/params.resolve()`, consumido por AgentActor.
 /// El actor nunca ve Parameter; solo ve este tipo ya resuelto.
 /// 
 /// IMPORTANTE: Usar `resolved_value_to_env()` para convertir a string.
@@ -1275,7 +1275,7 @@ pub fn resolved_value_inspect(value: ResolvedValue) -> String {
 
 /// Errores posibles durante la resolución de parámetros.
 /// Definido aquí para que sea accesible desde cualquier módulo.
-/// La lógica de resolución está en `sad/params.gleam`.
+/// La lógica de resolución está en `saar/params.gleam`.
 pub type ParamResolutionError {
   /// Clave no encontrada en config.toml y sin default
   MissingConfig(param_name: String, config_key: String)
@@ -1349,7 +1349,7 @@ pub fn value_type_to_string(vt: ValueType) -> String {
 // ============================================================================
 // SECCIÓN: VISTA DE ESTADO (WIRE/DIAGNÓSTICO; sin secretos ni recursos)
 // ============================================================================
-// Ubicación: `sad/types.gleam`
+// Ubicación: `saar/types.gleam`
 //
 // Nota: el estado runtime del actor incluye `ResolvedParams` y recursos BEAM (Port), por lo que
 // no es serializable ni seguro de exponer. El gateway solo serializa estos tipos "view".
@@ -1405,7 +1405,7 @@ pub type AgentInfoView {
 }
 
 // ============================================================================
-// FILE: sad/core/agent.gleam (estado runtime; puede usar tipos OTP como Port)
+// FILE: saar/core/agent.gleam (estado runtime; puede usar tipos OTP como Port)
 // ============================================================================
 import gleam/erlang/port.{type Port}
 
@@ -1571,20 +1571,20 @@ pub fn get_params(state: AgentState) -> Option(ResolvedParams) {
 }
 
 // ============================================================================
-// SECCIÓN 8.1: CONFIGURACIÓN DEL SISTEMA (SadConfig)
+// SECCIÓN 8.1: CONFIGURACIÓN DEL SISTEMA (SaarConfig)
 // ============================================================================
-// Configuración global de SAD cargada desde config.toml.
+// Configuración global de SAAR cargada desde config.toml.
 // Transparente porque no tiene invariantes complejos.
 
-/// Configuración global del sistema SAD.
+/// Configuración global del sistema SAAR.
 /// Cargada desde config.toml al arranque.
 pub type ProfileSource {
   ProfileSourceDir(path: String)
   ProfileSourceGit(url: String, ref: Option(String))
 }
 
-pub type SadConfig {
-  SadConfig(
+pub type SaarConfig {
+  SaarConfig(
     // --- Server ---
     /// Host donde escuchar (ej: "0.0.0.0")
     server_host: String,
@@ -1622,13 +1622,13 @@ pub type SadConfig {
     max_stdout_bytes: Int,
     /// Límite duro por línea JSONL (runner/streaming).
     max_runner_event_bytes: Int,
-    /// Límite duro del body que SAD acepta en requests entrantes (bytes).
+    /// Límite duro del body que SAAR acepta en requests entrantes (bytes).
     /// Se aplica al leer/parsing de JSON en gateway (Mist: `read_body`).
     max_request_body_bytes: Int,
-    /// Límite duro del body que SAD acepta desde agentes HTTP en modo non-streaming (bytes).
+    /// Límite duro del body que SAAR acepta desde agentes HTTP en modo non-streaming (bytes).
     /// Evita OOM si un agente devuelve respuestas enormes.
     max_http_response_bytes: Int,
-    /// Límite duro de bytes que SAD descargará al construir multipart desde `FileRef` (SAD → agente).
+    /// Límite duro de bytes que SAAR descargará al construir multipart desde `FileRef` (SAAR → agente).
     /// Protege de URLs que devuelven ficheros gigantes.
     max_file_fetch_bytes: Int,
     /// Puerto mínimo para asignar a agentes continuous
@@ -1647,10 +1647,10 @@ pub type SadConfig {
   )
 }
 
-/// Valores por defecto para SadConfig.
+/// Valores por defecto para SaarConfig.
 /// Usados cuando config.toml no especifica un valor.
-pub fn default_sad_config() -> SadConfig {
-  SadConfig(
+pub fn default_saar_config() -> SaarConfig {
+  SaarConfig(
     server_host: "0.0.0.0",
     server_port: 8080,
     api_key: "",
@@ -1661,7 +1661,7 @@ pub fn default_sad_config() -> SadConfig {
     health_check_timeout_ms: 10_000,
     shutdown_timeout_ms: 10_000,
     profiles_sources: [ProfileSourceDir(path: ".")],
-    profiles_git_cache_dir: "./.sad/cache/git",
+    profiles_git_cache_dir: "./.saar/cache/git",
     runners_python_bin: "python3",
     workspaces_directory: "./workspaces",
     log_buffer_bytes: 1_048_576,
@@ -1691,7 +1691,7 @@ pub fn default_sad_config() -> SadConfig {
 /// Resuelve el timeout efectivo para una interacción.
 /// Prioridad: capability limits > config default
 pub fn resolve_call_timeout(
-  config: SadConfig,
+  config: SaarConfig,
   limits: Option(CapabilityLimits),
 ) -> Int {
   case limits {
@@ -1703,7 +1703,7 @@ pub fn resolve_call_timeout(
 /// Resuelve el timeout efectivo para una interacción, a partir de la Interface y el nombre
 /// de la capability (lookup + delegación a `resolve_call_timeout/2`).
 pub fn resolve_call_timeout_for(
-  config: SadConfig,
+  config: SaarConfig,
   interface: Interface,
   capability_name: String,
 ) -> Int {
@@ -1726,7 +1726,7 @@ pub fn resolve_call_timeout_for(
 }
 
 // ============================================================================
-// FILE: sad/core/messages.gleam (mensajería OTP; Subject/Pid/Monitor/Selector)
+// FILE: saar/core/messages.gleam (mensajería OTP; Subject/Pid/Monitor/Selector)
 // ============================================================================
 import gleam/erlang/process.{
   type Down, type Monitor, type Pid, type Selector, type Subject,
@@ -1738,7 +1738,7 @@ import gleam/erlang/process.{
 // El actor usa un ADT para su modo operativo, no flags Option.
 // Esto hace estructuralmente imposible estados inválidos.
 //
-// Ubicación: `sad/core/agent.gleam` (estado del actor) + `sad/core/messages.gleam` (handles/canales).
+// Ubicación: `saar/core/agent.gleam` (estado del actor) + `saar/core/messages.gleam` (handles/canales).
 
 /// Modo operativo del actor. ADT explícito en lugar de Option(InFlight).
 pub type ActorMode {
@@ -1772,7 +1772,7 @@ pub type AgentRequest {
 /// Alias semántico para el canal de respuesta.
 /// No es opaco porque no tiene invariantes - es simplemente un Subject tipado.
 /// El tipo largo se documenta aquí para claridad; usar ReplyChannel en firmas.
-// Ubicación: sad/core/messages.gleam
+// Ubicación: saar/core/messages.gleam
 
 pub type ReplyChannel =
   Subject(Result(InteractionResult, InteractionError))
@@ -1780,7 +1780,7 @@ pub type ReplyChannel =
 /// Handle para una interacción en curso.
 /// Incluye el PID del worker y un monitor para detectar si muere.
 /// Opaco para encapsular detalles de implementación.
-// Ubicación: sad/core/messages.gleam
+// Ubicación: saar/core/messages.gleam
 
 pub opaque type InteractionHandle {
   InteractionHandle(
@@ -1792,21 +1792,21 @@ pub opaque type InteractionHandle {
 }
 
 /// Crea un handle de interacción con su monitor.
-// Ubicación: sad/core/messages.gleam
+// Ubicación: saar/core/messages.gleam
 
 pub fn interaction_handle(pid: Pid, monitor: Monitor) -> InteractionHandle {
   InteractionHandle(pid, monitor)
 }
 
 /// Obtiene el PID del worker.
-// Ubicación: sad/core/messages.gleam
+// Ubicación: saar/core/messages.gleam
 
 pub fn interaction_handle_pid(handle: InteractionHandle) -> Pid {
   handle.pid
 }
 
 /// Obtiene el monitor del worker.
-// Ubicación: sad/core/messages.gleam
+// Ubicación: saar/core/messages.gleam
 
 pub fn interaction_handle_monitor(handle: InteractionHandle) -> Monitor {
   handle.monitor
@@ -1822,9 +1822,9 @@ pub type StopReason {
 }
 
 // Introspección externa/wire:
-// - `AgentStatusView` y `AgentInfoView` viven en `sad/types.gleam` y son serializables (sin OTP/secrets).
+// - `AgentStatusView` y `AgentInfoView` viven en `saar/types.gleam` y son serializables (sin OTP/secrets).
 // Introspección interna:
-// - `AgentRuntimeState` (record de estado del actor) + `ActorMode` viven en `sad/core/agent.gleam` y NO se exponen por HTTP.
+// - `AgentRuntimeState` (record de estado del actor) + `ActorMode` viven en `saar/core/agent.gleam` y NO se exponen por HTTP.
 
 // ============================================================================
 // SECCIÓN 10: LOGGING
@@ -1836,7 +1836,7 @@ pub type LogSource {
   StdErr
   /// Log de aplicación (archivos declarados)
   AppLog
-  /// Eventos del sistema SAD (tipados via SystemLogKind)
+  /// Eventos del sistema SAAR (tipados via SystemLogKind)
   SystemLog
 }
 
@@ -1952,7 +1952,7 @@ pub fn system_log(
 // ============================================================================
 // SECCIÓN 11: STREAMING (GENÉRICO)
 // ============================================================================
-// Tipos genéricos de streaming para el core de SAD.
+// Tipos genéricos de streaming para el core de SAAR.
 // El core emite eventos agnósticos del protocolo de presentación.
 // Los adapters (agui.gleam, a2a.gleam) traducen a formatos específicos.
 //
@@ -2088,12 +2088,12 @@ pub fn generate_message_id() -> String {
 // SECCIÓN 12: UTILIDADES DE TIEMPO
 // ============================================================================
 // 
-// NOTA: now_ms() vive en sad/ffi.gleam (SSOT para toda la FFI).
+// NOTA: now_ms() vive en saar/ffi.gleam (SSOT para toda la FFI).
 // Aquí solo re-exportamos para conveniencia de los módulos de dominio.
 // Ver `bridge.md` §FFI para la implementación.
 
 /// Obtiene timestamp actual en milliseconds since epoch.
-/// Delegado a sad/ffi.now_ms() para mantener SSOT.
+/// Delegado a saar/ffi.now_ms() para mantener SSOT.
 pub fn now_ms() -> Int {
   ffi.now_ms()
 }

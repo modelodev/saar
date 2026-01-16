@@ -10,9 +10,9 @@ import time
 
 class Handler(BaseHTTPRequestHandler):
     # Silence default access logs to keep test output clean.
-    # Set SAD_ECHO_SERVER_VERBOSE=1 to re-enable.
+    # Set SAAR_ECHO_SERVER_VERBOSE=1 to re-enable.
     def log_message(self, format, *args):
-        if os.environ.get("SAD_ECHO_SERVER_VERBOSE"):
+        if os.environ.get("SAAR_ECHO_SERVER_VERBOSE"):
             super().log_message(format, *args)
     def _send_json(self, payload: dict, status: int = 200):
         body = json.dumps(payload).encode("utf-8")
@@ -35,7 +35,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/env":
-            keys = ["SAD_HOST", "SAD_PORT", "TEST_HOST", "TEST_PORT"]
+            keys = ["SAAR_HOST", "SAAR_PORT", "TEST_HOST", "TEST_PORT"]
             self._send_json({k: os.environ.get(k) for k in keys})
             return
 
@@ -138,14 +138,14 @@ def main():
         print(json.dumps({"t": "provision_result", "status": "success", "log_files": []}))
         return 0
 
-    host = os.environ.get("SAD_HOST", "127.0.0.1")
-    port = int(os.environ.get("SAD_PORT", os.environ.get("PORT", "8080")))
+    host = os.environ.get("SAAR_HOST", "127.0.0.1")
+    port = int(os.environ.get("SAAR_PORT", os.environ.get("PORT", "8080")))
 
     try:
         server = ThreadingHTTPServer((host, port), Handler)
     except OSError as exc:
         # Tests may intentionally trigger binding errors.
-        if os.environ.get("SAD_ECHO_SERVER_VERBOSE"):
+        if os.environ.get("SAAR_ECHO_SERVER_VERBOSE"):
             print(
                 f"echo_server failed to bind {host}:{port}: {exc}",
                 file=sys.stderr,

@@ -1,7 +1,7 @@
 // Extracted reference snippet (v0)
 // Purpose: documentation-only; may not compile as-is.
 //
-// sad/gateway/sse_stream_sink.gleam
+// saar/gateway/sse_stream_sink.gleam
 //
 // StreamSink de interacción implementado como loop SSE de Mist (1 por request).
 // Backpressure real: el bridge llama `sink.push_batch(...)` como operación tipo call
@@ -10,8 +10,8 @@
 import gleam/erlang/process.{type Subject}
 import gleam/erlang/process
 import mist
-import sad/otp/safe_call.{type CallError}
-import sad/types.{
+import saar/otp/safe_call.{type CallError}
+import saar/types.{
   type InteractionError, type InteractionResult, type StreamEvent,
 }
 

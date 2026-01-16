@@ -1,6 +1,6 @@
 # Bridge (interpolador, runner y cliente HTTP)
 
-El bridge encapsula IO y contratos externos (`SAD_INPUT_JSON`, ports, HTTP). 
+El bridge encapsula IO y contratos externos (`SAAR_INPUT_JSON`, ports, HTTP). 
 El `AgentActor` solo ve tipos de dominio y el protocolo unificado de mensajes.
 
 **Principio clave:** El actor nunca hace IO. El bridge traduce eventos de bajo nivel 
@@ -45,11 +45,11 @@ import gleam/list
 import gleam/int
 import gleam/erlang/process.{type Subject, type Pid}
 
-import sad/core/agent.{type AgentRef}
-import sad/core/agent_internal
-import sad/core/messages.{type InteractionHandle, interaction_handle, interaction_handle_pid}
+import saar/core/agent.{type AgentRef}
+import saar/core/agent_internal
+import saar/core/messages.{type InteractionHandle, interaction_handle, interaction_handle_pid}
 
-import sad/types.{
+import saar/types.{
   // Configuración + contexto
   type SadConfig,
   type InteractionStreamConfig,
@@ -83,7 +83,7 @@ import sad/types.{
 parámetros. Recibe `ResolvedParams` del actor, que a su vez los recibió ya resueltos
 de `sys.gleam` vía `params.resolve()`.
 
-## 2. Serialización (`sad/bridge/serialization.gleam`)
+## 2. Serialización (`saar/bridge/serialization.gleam`)
 
 Funciones para convertir tipos internos a JSON wire format.
 Reemplaza los tipos `*Wire` redundantes con funciones explícitas.
@@ -93,7 +93,7 @@ Referencia completa (v0): `arquitectura/examples/snippets/bridge_serialization.g
 Extracto (v0):
 
 ```gleam
-pub fn sad_input_meta_to_json(meta: SadInputMeta) -> Json {
+pub fn saar_input_meta_to_json(meta: SaarInputMeta) -> Json {
   ...
 }
 
@@ -102,7 +102,7 @@ pub fn request_context_to_json(ctx: RequestContext) -> Json {
 }
 ```
 
-## 3. Interpolador (`sad/bridge/interpolator.gleam`)
+## 3. Interpolador (`saar/bridge/interpolator.gleam`)
 
 ### 3.1 Contexto de interpolación
 
@@ -227,13 +227,13 @@ fn resolve_placeholder(namespace: String, key: String, ctx: InterpContext) -> Re
 - Filtros/defaults `{{a.b | default:x}}`
 - Keys con caracteres fuera de `[A-Za-z0-9_-]`
 
-## 4. Runner (`sad/bridge/runner.gleam`)
+## 4. Runner (`saar/bridge/runner.gleam`)
 
 ### 4.1 Tipos
 
 ```gleam
 /// Handle para un servidor continuous.
-/// v0: el core almacena un `AgentResource` (opaco) definido en `sad/core/agent.gleam`,
+/// v0: el core almacena un `AgentResource` (opaco) definido en `saar/core/agent.gleam`,
 /// que envuelve el `Port` de Erlang y evita que capas externas manipulen el recurso.
 ```
 
@@ -247,8 +247,8 @@ El core no ejecuta provisioning: el `Bridge` lo arranca como un worker y luego n
 
 ```gleam
 import gleam/erlang/process
-import sad/core/agent_internal
-import sad/bridge/bridge.{type BridgeCtx}
+import saar/core/agent_internal
+import saar/bridge/bridge.{type BridgeCtx}
 
 /// Arranca provisioning en un worker BEAM y notifica al actor con `ProvisioningDone(...)`.
 pub fn start_provisioning(ctx: BridgeCtx, agent: AgentRef) -> Pid {
@@ -263,7 +263,7 @@ pub fn start_provisioning(ctx: BridgeCtx, agent: AgentRef) -> Pid {
 ### 4.2 Construcción de SadInput
 
 ```gleam
-import sad/bridge/serialization.{sad_input_to_json}
+import saar/bridge/serialization.{saar_input_to_json}
 
 /// Construye el input interno rico.
 /// Los params ya vienen resueltos; aquí solo se empaquetan.
@@ -278,7 +278,7 @@ pub fn build_input(
   runner: Runner,
 ) -> SadInput {
   SadInput(
-    meta: SadInputMeta(
+    meta: SaarInputMeta(
       spec_version: "3.0",
       profile_id: profile_id,
       instance_id: instance_id,
@@ -306,7 +306,7 @@ pub fn provision(
   let control_line =
     json.object([
       #("t", json.string("input")),
-      #("payload", sad_input_to_json(input)),
+      #("payload", saar_input_to_json(input)),
     ])
     |> json.to_string
   
@@ -343,7 +343,7 @@ pub fn start_interaction(ctx: BridgeCtx, req: AgentRequest, agent: AgentRef, tim
 }
 ```
 
-**`StreamSink` vive bajo `sad/streams/`.** El bridge lo usa únicamente como data-plane
+**`StreamSink` vive bajo `saar/streams/`.** El bridge lo usa únicamente como data-plane
 (batches con ack y timeout). El gateway crea un `StreamSink` por request streaming (SSE writer).
 
 **Definición canónica (v0):** un *batch* es `List(StreamEvent)` (eventos tipados), **no** líneas SSE ni strings.
@@ -352,7 +352,7 @@ El `StreamSink` es el único responsable de serializar esos eventos al wire SSE 
 **Implementación recomendada (v0):** el gateway implementa el writer SSE con `mist.server_sent_events(...)` y envía eventos con
 `mist.send_event(...)`. El bridge permanece agnóstico del servidor HTTP y solo empuja batches **con ack** (safe-call).
 
-Referencia completa (v0): `arquitectura/examples/snippets/streams_sink_safe_call.gleam` (usa `sad/otp/safe_call.call_within`).
+Referencia completa (v0): `arquitectura/examples/snippets/streams_sink_safe_call.gleam` (usa `saar/otp/safe_call.call_within`).
 Implementación del loop SSE (Mist) como sink: `arquitectura/examples/snippets/gateway_sse_stream_sink_mist.gleam`.
 
 Extracto (v0):
@@ -366,7 +366,7 @@ pub fn push_batch(sink: StreamSink, events: List(StreamEvent), timeout_ms: Int) 
 ```
 
 
-**Fail-fast (v0) — contrato JSONL del runner:** la capa `sad/bridge/port_process.gleam` valida cada línea recibida:
+**Fail-fast (v0) — contrato JSONL del runner:** la capa `saar/bridge/port_process.gleam` valida cada línea recibida:
 - JSON válido bajo límites (`max_stdout_bytes`, límite por línea/evento)
 - `t` conocido (`log`/`chunk`/`result`/`provision_result`)
 - forma mínima por evento
@@ -391,11 +391,11 @@ No se usa `process.monitor` para el servidor porque el Port de Erlang ya provee
 notificación de muerte vía `PortExit`. El bridge traduce este evento a `ServerDied`
 que el actor procesa para transitar a estado `Failed`.
 
-## 5. Cliente HTTP (`sad/bridge/client.gleam`)
+## 5. Cliente HTTP (`saar/bridge/client.gleam`)
 
 ### 5.0 Dependencias y tipos HTTP
 
-SAD usa `httpp` como cliente HTTP (sync + streaming SSE). Los tipos de esta sección encapsulan
+SAAR usa `httpp` como cliente HTTP (sync + streaming SSE). Los tipos de esta sección encapsulan
 la interacción con el cliente para mantener el bridge agnóstico de la implementación.
 
 #### Dependencia
@@ -474,8 +474,8 @@ pub fn build_interp_context(
 
 ## 5.1 Port pool (`managed_port`) — contrato mínimo
 
-SAD asigna puertos para agentes `continuous` con `network_mode=managed_port` usando:
-- un helper puro `sad/port_pool.gleam` (lógica de allocate/release),
+SAAR asigna puertos para agentes `continuous` con `network_mode=managed_port` usando:
+- un helper puro `saar/port_pool.gleam` (lógica de allocate/release),
 - un `PortPoolActor` (OTP) como SSOT de reservas (InstanceId → port), construido desde `SadConfig.port_range_min/max`.
 
 **Contrato v0 (simple y testeable):**
@@ -537,7 +537,7 @@ El bridge emite **únicamente** estos mensajes al actor:
 
 **Mapeo a SSE (gateway):**
 - `IngestLog(LogEvent)` → SSE de logs de instancia (`GET /sys/agents/:instance_id/logs/stream`): ring buffer + live.
-- En streaming, el flujo canónico de datos es worker → `sad/streams/sink.StreamSink` (gateway, 1 por request) con ack (ver §7.2).
+- En streaming, el flujo canónico de datos es worker → `saar/streams/sink.StreamSink` (gateway, 1 por request) con ack (ver §7.2).
 - Son flujos distintos: logs (ciclo de vida de instancia) vs streaming de interacción (ciclo de vida de request).
 
 **Invariante canónica:** el actor **nunca** debe finalizar una interacción solo por recibir `StreamFinished`/`StreamError`.
@@ -545,7 +545,7 @@ El único evento terminal de la interacción es `InteractionDone(...)` (para evi
 
 ## 7. Streaming y backpressure (v0)
 
-SAD separa explícitamente dos flujos:
+SAAR separa explícitamente dos flujos:
 
 - **Logs (instancia):** observabilidad best-effort (drop/coalesce permitido).
 - **Streaming de interacción:** datos de respuesta (AG-UI/A2A) ligados al lifecycle del request.
@@ -555,7 +555,7 @@ Regla de simplicidad: el `AgentActor` es **control-plane** (estado/artefactos) y
 ### 7.1 Flujo canónico (capability `streaming: true`)
 
 En el camino canónico, el bridge **no** envía chunks al actor.
-Los chunks van directamente a un `sad/streams/sink.StreamSink` creado por el gateway para esa request.
+Los chunks van directamente a un `saar/streams/sink.StreamSink` creado por el gateway para esa request.
 
 ```
 ┌─────────────┐     ┌────────────────┐     ┌────────────────┐     ┌──────────────┐
@@ -687,8 +687,8 @@ Esto evita propagación de exits indeseada (que un `kill` del worker tumbe al ac
 
 | Tipo eliminado | Función de reemplazo | Ubicación |
 |----------------|---------------------|-----------|
-| `SadInputMetaWire` | `sad_input_meta_to_json()` | `bridge/serialization.gleam` |
-| `SadInputWire` | `sad_input_to_json()` | `bridge/serialization.gleam` |
+| `SaarInputMetaWire` | `saar_input_meta_to_json()` | `bridge/serialization.gleam` |
+| `SadInputWire` | `saar_input_to_json()` | `bridge/serialization.gleam` |
 
 ## 11. Uso de Timeouts
 
@@ -729,7 +729,7 @@ El bridge los usa para:
 
 ---
 
-## 13. FFI (`sad/ffi.gleam`)
+## 13. FFI (`saar/ffi.gleam`)
 
 Centraliza la interoperabilidad con Erlang que **no está cubierta** por librerías hex.pm.
 
@@ -752,14 +752,14 @@ Centraliza la interoperabilidad con Erlang que **no está cubierta** por librer�
 
 Para que el resto del bridge y el core sean testeables y no “se enteren” de Erlang, toda interacción con ports debe pasar por un único módulo frontera:
 
-- `sad/bridge/port_process.gleam`: API de alto nivel para arrancar y controlar el proceso externo (runner/wrapper).
+- `saar/bridge/port_process.gleam`: API de alto nivel para arrancar y controlar el proceso externo (runner/wrapper).
 
-Implementación (v0): **FFI mínima** (`sad/ffi.gleam` + `sad_ffi.erl`) para `open_port`/send/close/receive.
+Implementación (v0): **FFI mínima** (`saar/ffi.gleam` + `saar_ffi.erl`) para `open_port`/send/close/receive.
 
 ### 13.2 API FFI
 
 ```gleam
-// sad/ffi.gleam
+// saar/ffi.gleam
 
 /// Timestamp actual en monotonic milliseconds.
 pub fn now_ms() -> Int
@@ -783,15 +783,15 @@ pub fn port_close(port: Port) -> Nil
 pub fn port_receive(port: Port, timeout_ms: Int) -> Result(PortMessage, Nil)
 ```
 
-### 13.3 Módulo Erlang (`sad_ffi.erl`)
+### 13.3 Módulo Erlang (`saar_ffi.erl`)
 
 ```erlang
--module(sad_ffi).
+-module(saar_ffi).
 -export([now_ms/0, open_port/5, port_send/2, port_close/1, port_receive/2]).
 
 open_port(Command, Args, Env, Cd, MaxRunnerEventBytes) ->
-    %% Contrato runner: STDOUT es JSONL (1 evento por línea). SAD hace framing propio por '\n'.
-    %% STDERR queda fuera de contrato (diagnóstico local); SAD no depende de capturarlo.
+    %% Contrato runner: STDOUT es JSONL (1 evento por línea). SAAR hace framing propio por '\n'.
+    %% STDERR queda fuera de contrato (diagnóstico local); SAAR no depende de capturarlo.
     %% El port usa opción `line` para aplicar el límite por evento.
     %% MaxRunnerEventBytes viene de SadConfig.limits.max_runner_event_bytes (default 262144).
     Opts = [
@@ -812,7 +812,7 @@ open_port(Command, Args, Env, Cd, MaxRunnerEventBytes) ->
 
 ---
 
-## 14. Decoders (`sad/decoders.gleam`)
+## 14. Decoders (`saar/decoders.gleam`)
 
 Parsers JSON para perfiles, requests y responses.
 

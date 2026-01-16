@@ -5,17 +5,17 @@ import gleam/option
 import gleam/otp/actor
 import gleeunit
 import gleeunit/should
-import sad/core/agent
-import sad/otp/safe_call
-import sad/streams/sink
-import sad/types/agent as types_agent
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/types/enums as types_enums
-import sad/types/input as types_input
-import sad/types/log as types_log
-import sad/types/output as types_output
-import sad/types/profile as types_profile
+import saar/core/agent
+import saar/otp/safe_call
+import saar/streams/sink
+import saar/types/agent as types_agent
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/types/enums as types_enums
+import saar/types/input as types_input
+import saar/types/log as types_log
+import saar/types/output as types_output
+import saar/types/profile as types_profile
 
 pub fn main() {
   gleeunit.main()
@@ -32,7 +32,7 @@ pub fn phase_failure_reason_exposes_failed_reason() {
 }
 
 pub fn status_view_uses_phase_and_mode() {
-  let config = types_config.default_sad_config()
+  let config = types_config.default_saar_config()
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
   let assert Ok(instance_id) = types_core.instance_id("inst-status")
 
@@ -60,7 +60,7 @@ pub fn run_mode_matches_actor_mode() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_call_timeout_ms(5000)
 
   let assert Ok(instance_id) = types_core.instance_id("inst-mode")
@@ -113,7 +113,7 @@ pub fn interact_while_busy_rejected() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_call_timeout_ms(5000)
 
   let assert Ok(instance_id) = types_core.instance_id("inst-busy")
@@ -243,7 +243,7 @@ pub fn logs_attach_sends_history() {
   let assert Ok(instance_id) = types_core.instance_id("inst-attach")
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_log_buffer_bytes(1024)
 
   let assert Ok(actor.Started(data: agent_ref, ..)) =
@@ -291,7 +291,7 @@ pub fn logs_attach_preserves_metadata() {
   let assert Ok(instance_id) = types_core.instance_id("inst-meta")
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_log_buffer_bytes(1024)
 
   let assert Ok(actor.Started(data: agent_ref, ..)) =
@@ -338,7 +338,7 @@ pub fn attach_logs_takeover() {
   let assert Ok(instance_id) = types_core.instance_id("inst-takeover")
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_log_buffer_bytes(1024)
 
   let assert Ok(actor.Started(data: agent_ref, ..)) =
@@ -378,7 +378,7 @@ pub fn attach_logs_sends_message() {
   let assert Ok(instance_id) = types_core.instance_id("inst-live")
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_log_buffer_bytes(1024)
 
   let assert Ok(actor.Started(data: agent_ref, ..)) =
@@ -410,7 +410,7 @@ pub fn interact_delegates_to_actor() {
   let assert Ok(instance_id) = types_core.instance_id("inst-delegate")
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_call_timeout_ms(5000)
 
   let deps =
@@ -473,7 +473,7 @@ pub fn interact_respects_timeout() {
     )
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_call_timeout_ms(5000)
 
   let assert Ok(instance_id) = types_core.instance_id("inst-timeout")
@@ -507,7 +507,7 @@ pub fn interact_respects_timeout() {
 }
 
 pub fn status_uses_status_timeout() {
-  let cfg0 = types_config.default_sad_config()
+  let cfg0 = types_config.default_saar_config()
 
   let cfg =
     cfg0
@@ -523,7 +523,7 @@ pub fn killing_worker_does_not_crash_actor() {
   let assert Ok(instance_id) = types_core.instance_id("inst-worker")
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_call_timeout_ms(5000)
 
   let deps =
@@ -579,7 +579,7 @@ pub fn worker_down_without_done_is_handled() {
   let assert Ok(instance_id) = types_core.instance_id("inst-worker-down")
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_call_timeout_ms(5000)
 
   let deps =
@@ -637,7 +637,7 @@ pub fn timeout_does_not_crash_actor() {
   let assert Ok(instance_id) = types_core.instance_id("inst-hard")
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_call_timeout_ms(20)
 
   let assert Ok(actor.Started(data: agent_ref, ..)) =
@@ -670,7 +670,7 @@ pub fn hard_timeout_not_extended_by_output() {
   let assert Ok(instance_id) = types_core.instance_id("inst-output")
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_call_timeout_ms(30)
     |> agent_helpers.with_log_buffer_bytes(1024)
 
@@ -719,7 +719,7 @@ pub fn stop_instance_idempotent() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
   let assert Ok(instance_id) = types_core.instance_id("inst-stop")
 
-  let config = types_config.default_sad_config()
+  let config = types_config.default_saar_config()
 
   let assert Ok(actor.Started(data: agent_ref, ..)) =
     agent.start_link(
@@ -746,7 +746,7 @@ pub fn stop_instance_user_requested() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
   let assert Ok(instance_id) = types_core.instance_id("inst-stop-user")
 
-  let config = types_config.default_sad_config()
+  let config = types_config.default_saar_config()
 
   let assert Ok(actor.Started(data: agent_ref, ..)) =
     agent.start_link(
@@ -772,7 +772,7 @@ pub fn stop_instance_idle_timeout() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
   let assert Ok(instance_id) = types_core.instance_id("inst-stop-idle")
 
-  let config = types_config.default_sad_config()
+  let config = types_config.default_saar_config()
 
   let assert Ok(actor.Started(data: agent_ref, ..)) =
     agent.start_link(
@@ -799,7 +799,7 @@ pub fn stop_expected_uses_actor_stop() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
   let assert Ok(instance_id) = types_core.instance_id("inst-stop-expected")
 
-  let config = types_config.default_sad_config()
+  let config = types_config.default_saar_config()
 
   let assert Ok(actor.Started(data: agent_ref, ..)) =
     agent.start_link(
@@ -822,7 +822,7 @@ pub fn terminate_node_shutting_down() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
   let assert Ok(instance_id) = types_core.instance_id("inst-term")
 
-  let config = types_config.default_sad_config()
+  let config = types_config.default_saar_config()
 
   let assert Ok(actor.Started(data: agent_ref, ..)) =
     agent.start_link(
@@ -850,7 +850,7 @@ pub fn no_cancel_endpoint() {
   let profile = agent_helpers.test_profile(types_enums.Transient, dict.new())
 
   let config =
-    types_config.default_sad_config()
+    types_config.default_saar_config()
     |> agent_helpers.with_call_timeout_ms(5000)
 
   let assert Ok(instance_id) = types_core.instance_id("inst-no-cancel")
@@ -901,13 +901,13 @@ pub fn no_cancel_endpoint() {
 }
 
 fn with_status_timeout_ms(
-  cfg: types_config.SadConfig,
+  cfg: types_config.SaarConfig,
   ms: Int,
-) -> types_config.SadConfig {
-  let types_config.SadConfig(timeouts: timeouts, ..) = cfg
+) -> types_config.SaarConfig {
+  let types_config.SaarConfig(timeouts: timeouts, ..) = cfg
   let next_timeouts =
-    types_config.SadTimeouts(..timeouts, status_timeout_ms: ms)
-  types_config.SadConfig(..cfg, timeouts: next_timeouts)
+    types_config.SaarTimeouts(..timeouts, status_timeout_ms: ms)
+  types_config.SaarConfig(..cfg, timeouts: next_timeouts)
 }
 
 fn test_request(

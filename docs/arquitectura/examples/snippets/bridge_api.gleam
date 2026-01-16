@@ -1,12 +1,12 @@
-// Ubicación: sad/bridge/bridge.gleam
+// Ubicación: saar/bridge/bridge.gleam
 import gleam/erlang/process.{type Pid, type Subject}
 import gleam/option.{type Option}
-import sad/core/agent.{type AgentRef}
-import sad/core/messages.{type ArtifactRegistryMsg, type InteractionHandle}
-import sad/streams/sink.{type StreamSink}
-import sad/types.{
+import saar/core/agent.{type AgentRef}
+import saar/core/messages.{type ArtifactRegistryMsg, type InteractionHandle}
+import saar/streams/sink.{type StreamSink}
+import saar/types.{
   type AgentRequest, type AgentResource, type InstanceId, type Profile,
-  type ResolvedParams, type SadConfig,
+  type ResolvedParams, type SaarConfig,
 }
 
 /// Contexto mínimo que el bridge necesita para ejecutar IO.
@@ -18,7 +18,7 @@ pub type BridgeCtx {
     params: ResolvedParams,
     workspace: String,
     assigned_port: Option(Int),
-    config: SadConfig,
+    config: SaarConfig,
     artifact_registry: Subject(ArtifactRegistryMsg),
   )
 }

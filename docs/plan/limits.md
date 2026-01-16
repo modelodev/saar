@@ -18,7 +18,7 @@ Regenerate: `make docs-limits`.
 | server.port | int | 8080 | S02/S13 | bind HTTP |
 | auth.api_key | string | "" | S02/S13 | auth middleware (required en loader) |
 | profiles.sources | array | [{type="dir", path="."}] | S02/S13 | cargar perfiles/runners |
-| profiles.git_cache_dir | string | ./.sad/cache/git | S02/S13 | checkout repos |
+| profiles.git_cache_dir | string | ./.saar/cache/git | S02/S13 | checkout repos |
 | runners.python_bin | string | python3 | S02/S13 | ejecutar scripts .py |
 | workspaces.directory | string | ./workspaces | S02/S04/S13 | cwd runner + cleanup |
 | limits.call_timeout_ms | int | 30000 | S02/S14 | timeout interaccion |

@@ -2,7 +2,7 @@
 // Source: arquitectura/actores.md:664
 // Purpose: documentation-only; may not compile as-is.
 
-import sad/types
+import saar/types
 
 fn to_status_view(state: AgentRuntimeState) -> types.AgentStatusView {
   let phase = case state.state {

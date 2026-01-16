@@ -139,7 +139,7 @@ sources = [
   {type = "dir", path = "./profiles"},
   {type = "git", url = "https://example.com/profiles.git", ref = "main"}
 ]
-git_cache_dir = "./.sad/cache/git"
+git_cache_dir = "./.saar/cache/git"
 ```
 
 ---
@@ -235,7 +235,7 @@ Cualquier path que un runner reporte debe estar **dentro** de este directorio.
 
 ### 3.3 Operaciones de Limpieza
 
-> **Nota:** Estas funciones viven en `sad/workspace.gleam` (módulo de IO).
+> **Nota:** Estas funciones viven en `saar/workspace.gleam` (módulo de IO).
 > Los tipos están en `tipos.md` pero las operaciones de filesystem están separadas.
 
 ```gleam
@@ -269,12 +269,12 @@ pub fn cleanup(workspace_path: String) -> Result(Nil, String)
 
 ### 3.6 Retención (artefactos y logs)
 
-- **Artefactos:** el `artifact_registry` mantiene una whitelist en memoria `ArtifactId → #(InstanceId, WorkspacePath, mime)` para servir `/artifacts/:artifact_id`. SAD v0 no implementa TTL/GC automático: los artefactos se eliminan al hacer `/delete` (stop ≠ delete).
-- **Logs:** buffer en memoria acotado por `log_buffer_bytes` (para SSE). SAD v0 no persiste logs a disco.
+- **Artefactos:** el `artifact_registry` mantiene una whitelist en memoria `ArtifactId → #(InstanceId, WorkspacePath, mime)` para servir `/artifacts/:artifact_id`. SAAR v0 no implementa TTL/GC automático: los artefactos se eliminan al hacer `/delete` (stop ≠ delete).
+- **Logs:** buffer en memoria acotado por `log_buffer_bytes` (para SSE). SAAR v0 no persiste logs a disco.
 
 ### 3.6.1 Decisión v0: no hacer “sweep” de huérfanos por PID
 
-SAD v0 **no** implementa cleanup automático de workspaces “huérfanos” basado en PID/`ps`/señales del sistema operativo.
+SAAR v0 **no** implementa cleanup automático de workspaces “huérfanos” basado en PID/`ps`/señales del sistema operativo.
 Esto reduce complejidad y evita comportamientos no portables (contenedores, PID reuse, permisos, OS distintos).
 
 **Contrato v0:**
@@ -290,32 +290,32 @@ Defaults canonicos: `docs/plan/limits.toml` (tabla generada en `docs/plan/limits
 | `server.host` / `server.port` | Bind HTTP del gateway. | `0.0.0.0` / `8080` |
 | `auth.api_key` | API key (Bearer). | requerido (loader) |
 | `profiles.sources` | Fuentes de perfiles/runners (dir/git). | `[{type="dir", path="."}]` |
-| `profiles.git_cache_dir` | Cache de repos git. | `./.sad/cache/git` |
+| `profiles.git_cache_dir` | Cache de repos git. | `./.saar/cache/git` |
 | `runners.python_bin` | Ejecutar scripts `.py`. | `python3` |
 | `workspaces.directory` | Base de workspaces por instancia. | `./workspaces` |
 | `limits.port_range_min` / `limits.port_range_max` | Rango para port pool (`managed_port`). | `9000` / `9999` |
 | `limits.log_buffer_bytes` | Límite del buffer en memoria para SSE. | `1_048_576` (1MB) |
 | `limits.max_stdout_bytes` | Límite duro de bytes de STDOUT JSONL por interacción (protección OOM). | `10_485_760` (10MB) |
 | `limits.max_runner_event_bytes` | Límite duro por linea JSONL (runner/streaming). | `262_144` |
-| `limits.max_request_body_bytes` | Límite duro del body que SAD acepta en requests entrantes (Mist `read_body`). | `1_048_576` (1MB) |
-| `limits.max_http_response_bytes` | Límite duro del body que SAD acepta desde agentes HTTP non-streaming. | `10_485_760` (10MB) |
-| `limits.max_file_fetch_bytes` | Límite duro para descargas al construir multipart desde `FileRef` (SAD → agente). | `52_428_800` (50MB) |
+| `limits.max_request_body_bytes` | Límite duro del body que SAAR acepta en requests entrantes (Mist `read_body`). | `1_048_576` (1MB) |
+| `limits.max_http_response_bytes` | Límite duro del body que SAAR acepta desde agentes HTTP non-streaming. | `10_485_760` (10MB) |
+| `limits.max_file_fetch_bytes` | Límite duro para descargas al construir multipart desde `FileRef` (SAAR → agente). | `52_428_800` (50MB) |
 | `limits.shutdown_timeout_ms` | Tiempo de gracia para SIGTERM→SIGKILL en stop/delete. | `10_000` |
 | `limits.sse_keep_alive_interval_ms` | Intervalo de keep-alive SSE (comentarios) para conexiones largas. `0` desactiva. | `15_000` |
 | `log_stream.*` | Streaming de logs (batching; best-effort; sin buffers infinitos). | ver defaults |
-| `interaction_stream.*` | Streaming de interacción (batching + ack hacia `sad/streams/sink.StreamSink` + timeout; sin buffers infinitos). | ver defaults |
+| `interaction_stream.*` | Streaming de interacción (batching + ack hacia `saar/streams/sink.StreamSink` + timeout; sin buffers infinitos). | ver defaults |
 | `network.managed_port_host` | Host inyectado en runners HTTP (managed_port). | `127.0.0.1` |
 
 #### 3.7.1 Port pool (`managed_port`) — semántica v0
 
-- SAD mantiene un **port pool en memoria** basado en el rango `[limits.port_range_min, limits.port_range_max]`.
+- SAAR mantiene un **port pool en memoria** basado en el rango `[limits.port_range_min, limits.port_range_max]`.
 - El helper puro es *best-effort* respecto al SO; para garantía real se usa `allocate_checked` con bind-check.
 - En agentes `continuous` con `network_mode=managed_port`, el puerto se **reserva durante provisioning** y se expone en `AgentStatusView.assigned_port`.
 - **Release (v0):** el puerto reservado se libera en `stop`, `delete`, `rollback` y `terminate` (idempotente).
 - **Exhaustión:** si no hay puertos libres, el provisioning falla con un error estable `port_pool_exhausted` y la instancia transita a `Failed` (visible en status). La mitigación es ampliar el rango o ejecutar deletes de instancias antiguas/paradas.
 - **Puerto ocupado:** si el bind-check detecta que el puerto está en uso, el provisioning falla con `port_in_use` (fail-fast, sin reintentos).
 - **Bind-check fallido:** si el bind-check falla por un error real del sistema, el provisioning falla con `port_bind_failed`.
-- **No persistencia (v0):** el pool no se persiste entre reinicios. Aunque hay bind-check, se recomienda que el rango esté dedicado a SAD.
+- **No persistencia (v0):** el pool no se persiste entre reinicios. Aunque hay bind-check, se recomienda que el rango esté dedicado a SAAR.
 
 #### Ejemplo `config.toml`
 
@@ -325,7 +325,7 @@ host = "0.0.0.0"
 port = 8080
 
 [auth]
-api_key = "${SAD_API_KEY}"
+api_key = "${SAAR_API_KEY}"
 
 [limits]
 call_timeout_ms = 30000
@@ -356,7 +356,7 @@ push_timeout_ms = 250
 sources = [
   {type = "dir", path = "./profiles"}
 ]
-git_cache_dir = "./.sad/cache/git"
+git_cache_dir = "./.saar/cache/git"
 
 [runners]
 python_bin = "python3"

@@ -7,10 +7,10 @@ import gleam/erlang/process.{type Name, type Subject}
 import gleam/option.{type Option}
 import gleam/option
 import gleam/otp/actor
-import sad/core/messages.{
+import saar/core/messages.{
   type ProfilesMsg, GetProfile, ListProfiles, SetProfiles,
 }
-import sad/types.{type Profile, type ProfileId}
+import saar/types.{type Profile, type ProfileId}
 
 type State =
   Dict(ProfileId, Profile)

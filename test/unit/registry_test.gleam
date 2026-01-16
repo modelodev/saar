@@ -6,13 +6,13 @@ import gleam/option
 import gleam/otp/actor
 import gleeunit
 import gleeunit/should
-import sad/core/agent
-import sad/core/messages
-import sad/core/registry
-import sad/otp/safe_call
-import sad/types/agent as types_agent
-import sad/types/core as types_core
-import sad/types/enums as types_enums
+import saar/core/agent
+import saar/core/messages
+import saar/core/registry
+import saar/otp/safe_call
+import saar/types/agent as types_agent
+import saar/types/core as types_core
+import saar/types/enums as types_enums
 
 pub fn main() {
   gleeunit.main()

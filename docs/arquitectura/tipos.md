@@ -1,6 +1,6 @@
 # Tipos y modelos en Gleam
 
-Este documento concentra las definiciones de tipos usadas en SAD. Sigue los principios:
+Este documento concentra las definiciones de tipos usadas en SAAR. Sigue los principios:
 - **Tipos opacos** solo para invariantes reales (IDs, paths seguros, estados con reglas)
 - **Tipos transparentes** para "bolsas de datos" sin invariantes
 - **Dynamic solo en fronteras** (wire format)
@@ -11,17 +11,17 @@ Contrato de IDs:
 
 **Nota de alcance (importante):** este documento incluye tanto tipos de **dominio/wire** (sin tipos OTP)
 como tipos de **mensajería OTP interna** (que sí usan `Subject`/`Pid`). En el repo:
-- `sad/types.gleam`: dominio + wire (sin `Subject`/`Pid`/`Monitor`)
-- `sad/core/messages.gleam`: mensajes OTP internos (con `Subject`, etc.)
+- `saar/types.gleam`: dominio + wire (sin `Subject`/`Pid`/`Monitor`)
+- `saar/core/messages.gleam`: mensajes OTP internos (con `Subject`, etc.)
 Las secciones marcadas como `FILE: ...` indican el archivo real donde deben implementarse.
 
 ## Referencia de implementación (v0)
 
-El cuerpo completo de referencia de `sad/types.gleam` vive en `arquitectura/examples/snippets/types.gleam`.
+El cuerpo completo de referencia de `saar/types.gleam` vive en `arquitectura/examples/snippets/types.gleam`.
 Este documento mantiene el **contrato** y extractos clave (regla: evitar bloques de código largos; ~40 líneas máx por bloque).
 
 
-**Nota sobre FFI:** La función `now_ms()` está implementada en `sad/ffi.gleam`.
+**Nota sobre FFI:** La función `now_ms()` está implementada en `saar/ffi.gleam`.
 Ver `bridge.md` §FFI para detalles de la implementación.
 
 ## 12. Vistas de instancia (wire)
@@ -48,13 +48,13 @@ La API pública del actor NO expone `Subject(AgentMsg)` ni constructores: expone
 ## 13.1 AgentMsg - Protocolo del AgentActor
 
 ```gleam
-// Ubicación: sad/core/agent.gleam
+// Ubicación: saar/core/agent.gleam
 import gleam/erlang/process.{type Subject, type Down}
-import sad/streams/sink.{type StreamSink}
+import saar/streams/sink.{type StreamSink}
 
 /// Protocolo interno de mensajes del AgentActor (no exportado).
 type AgentMsg {
-  // Comandos públicos (solo vía funciones de sad/core/agent.gleam)
+  // Comandos públicos (solo vía funciones de saar/core/agent.gleam)
   /// Si `stream_sink` es `Some`, el bridge entrega chunks al `StreamSink` (request-scoped)
   /// y el actor solo recibe `InteractionDone` (no es proxy de chunks).
   Interact(
@@ -91,7 +91,7 @@ pub opaque type AgentRef {
 }
 ```
 
-**Nota importante:** `AgentRef` no cruza HTTP (no existe fuera del nodo SAD). SAM opera con `instance_id`;
+**Nota importante:** `AgentRef` no cruza HTTP (no existe fuera del nodo SAAR). SAM opera con `instance_id`;
 el gateway resuelve `instance_id → AgentRef` vía `Registry`.
 
 ### Invariantes AgentMsg
@@ -115,10 +115,10 @@ el gateway resuelve `instance_id → AgentRef` vía `Registry`.
 
 ### API interna (agent_internal)
 
-Además de la API pública (`sad/core/agent.gleam`), SAD define una API **interna** para inyectar
+Además de la API pública (`saar/core/agent.gleam`), SAAR define una API **interna** para inyectar
 eventos desde bridge/workers sin exponer constructores de `AgentMsg`.
 
-Ubicación: `sad/core/agent_internal.gleam` (solo para código interno de SAD).
+Ubicación: `saar/core/agent_internal.gleam` (solo para código interno de SAAR).
 
 Contrato (funciones expuestas):
 
@@ -139,8 +139,8 @@ pub fn server_died(agent: AgentRef, exit_code: Int) -> Nil
 ## 13.2 RegistryMsg - Protocolo del Registry
 
 ```gleam
-// Ubicación: sad/core/messages.gleam
-import sad/core/agent.{type AgentRef}
+// Ubicación: saar/core/messages.gleam
+import saar/core/agent.{type AgentRef}
 
 /// Clave compuesta para identificar una instancia.
 /// Nota v0: `instance_id` es unico globalmente (independiente de `profile_id`).
@@ -177,8 +177,8 @@ Referencia completa (v0): `arquitectura/examples/snippets/core_messages_agent_ma
 Extracto (v0):
 
 ```gleam
-// Ubicación: sad/core/messages.gleam
-import sad/core/agent as agent
+// Ubicación: saar/core/messages.gleam
+import saar/core/agent as agent
 
 pub type StartArgs {
   StartArgs(
@@ -277,11 +277,11 @@ pub type ArtifactRegistryMsg {
 en `DeleteAgent` (y por tanto en DELETE de la instancia). Esto garantiza que
 los artefactos existen mientras el cliente no haga delete, dándole tiempo para descargarlos.
 
-**Retención (v0):** SAD no implementa TTL/GC automático. Los artefactos viven mientras la instancia exista.
-En `DeleteAgent`, SAD hace `purge_by_instance` de forma determinista; el cleanup de filesystem es best-effort
+**Retención (v0):** SAAR no implementa TTL/GC automático. Los artefactos viven mientras la instancia exista.
+En `DeleteAgent`, SAAR hace `purge_by_instance` de forma determinista; el cleanup de filesystem es best-effort
 (si falla, la instancia puede permanecer, pero los ArtifactIds dejan de resolverse: rollback de seguridad).
 
-**Operabilidad:** si el cliente no llama a delete, workspaces/artefactos se acumulan. SAD no hace GC automático;
+**Operabilidad:** si el cliente no llama a delete, workspaces/artefactos se acumulan. SAAR no hace GC automático;
 la mitigación es tooling administrativo (fuera del core) que liste instancias `Stopped`/antiguas y ejecute deletes en lote.
 
 ## 13.5 ProfilesMsg - Protocolo del ProfilesActor
@@ -291,7 +291,7 @@ Referencia completa (v0): `arquitectura/examples/snippets/core_messages_profiles
 Extracto (v0):
 
 ```gleam
-// Ubicación: sad/core/messages.gleam
+// Ubicación: saar/core/messages.gleam
 pub type ProfilesMsg {
   SetProfiles(Dict(ProfileId, Profile), Subject(Int))
   GetProfile(ProfileId, Subject(Option(Profile)))
@@ -299,7 +299,7 @@ pub type ProfilesMsg {
 }
 ```
 
-## 13.6 Port pool (`sad/port_pool.gleam`)
+## 13.6 Port pool (`saar/port_pool.gleam`)
 
 El port pool es un helper **puro** (sin procesos OTP) que reserva puertos dentro de un rango dedicado
 para agentes `continuous` con `network_mode=managed_port`.
@@ -334,14 +334,14 @@ pub fn release(pool: PortPool, instance_id: InstanceId) -> PortPool
 ## 13.7 PortPoolMsg - Protocolo del PortPoolActor (si `managed_port`)
 
 El port pool es un recurso compartido (reservas únicas por `InstanceId`). En v0 se modela como un actor dedicado
-(`PortPoolActor`) que encapsula el helper puro `sad/port_pool.gleam` y actúa como SSOT de reservas.
+(`PortPoolActor`) que encapsula el helper puro `saar/port_pool.gleam` y actúa como SSOT de reservas.
 
 Referencia completa (v0): `arquitectura/examples/snippets/core_messages_port_pool.gleam`.
 
 Extracto (v0):
 
 ```gleam
-// Ubicación: sad/core/messages.gleam
+// Ubicación: saar/core/messages.gleam
 import gleam/erlang/process.{type Subject}
 
 pub type PortPoolMsg {
@@ -357,10 +357,10 @@ pub type PortPoolMsg {
 - Si el puerto se ocupa entre el bind-check y el arranque real, el provisioning falla **rápido** con `port_in_use` (sin reintentos).
 - En v0, el puerto reservado se libera en `delete` (y en rollback/terminate), no en `stop`.
 
-## 14. SSE (`sad/sse.gleam`)
+## 14. SSE (`saar/sse.gleam`)
 
 Helpers mínimos y estables para formateo SSE, usados por gateway/adapters.
-Nota: esto NO vive en `sad/types.gleam` para mantener el dominio libre de tipos OTP.
+Nota: esto NO vive en `saar/types.gleam` para mantener el dominio libre de tipos OTP.
 
 ## 14.1 API SSE
 
@@ -387,15 +387,15 @@ pub fn comment(text: String) -> String {
 ## 14.2 Uso en adapters
 
 ```gleam
-// En sad/adapters/agui.gleam
-import sad/sse.{line}
+// En saar/adapters/agui.gleam
+import saar/sse.{line}
 
 pub fn to_sse(event: AgUiEvent) -> String {
   event |> to_json |> line
 }
 
-// En sad/adapters/a2a.gleam
-import sad/sse.{line}
+// En saar/adapters/a2a.gleam
+import saar/sse.{line}
 
 pub fn to_sse(event: A2AStreamEvent) -> String {
   event |> to_json |> line

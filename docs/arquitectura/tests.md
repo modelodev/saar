@@ -1,4 +1,4 @@
-# Estrategia de Tests SAD v3
+# Estrategia de Tests SAAR v3
 
 **Este documento es el SSOT (Single Source of Truth) para todos los tests del proyecto.**
 
@@ -35,7 +35,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ### 2.1. `echo_cli` (Transient, CLI)
 
-**Comportamiento:** Lee `SAD_INPUT_JSON` por stdin, espera ~100ms, devuelve `RunnerResponse` con `status=success` y `data` = eco del input.
+**Comportamiento:** Lee `SAAR_INPUT_JSON` por stdin, espera ~100ms, devuelve `RunnerResponse` con `status=success` y `data` = eco del input.
 
 **Valida:**
 - Flujo transient básico: construcción de `SadInput`, paso por stdin, parseo de `RunnerResponse`
@@ -113,7 +113,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ## 3. Core - módulos puros
 
-### 3.1. `sad/types.gleam`
+### 3.1. `saar/types.gleam`
 
 **Frameworks:** gleeunit + gleam_qcheck
 
@@ -146,7 +146,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `resolved_value_to_env_normal` | `resolved_value_to_env(NormalValue(StringVal("x")))` → `"x"` |
 | `resolved_value_to_env_secret` | `resolved_value_to_env(SecretVal(secret_value("key")))` → `"key"` |
 
-**Nota (seguridad):** SAD solo puede garantizar “no leak” para datos que **él mismo** produce (Problem Details, logs de sistema, mensajes de error). Si un runner imprime secretos en `t="log"` o en su `result`, SAD no intenta redactarlo (sería complejo y daría falsa seguridad).
+**Nota (seguridad):** SAAR solo puede garantizar “no leak” para datos que **él mismo** produce (Problem Details, logs de sistema, mensajes de error). Si un runner imprime secretos en `t="log"` o en su `result`, SAAR no intenta redactarlo (sería complejo y daría falsa seguridad).
 | `stream_context_initial_phase` | `new_stream_context(...)` → `phase: BeforeFirstChunk` |
 | `stream_context_enter_message` | `enter_message(ctx, "msg-1")` → `phase: InMessage("msg-1")` |
 | `stream_context_end_message` | `end_message(ctx_in_message)` → `phase: BeforeFirstChunk` |
@@ -165,7 +165,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.2. `sad/workspace.gleam`
+### 3.2. `saar/workspace.gleam`
 
 **Frameworks:** gleeunit + gleam_qcheck
 
@@ -203,7 +203,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.3. `sad/bridge/runner_contract.gleam`
+### 3.3. `saar/bridge/runner_contract.gleam`
 
 **Frameworks:** gleeunit + gleam_qcheck
 
@@ -215,7 +215,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `validate_response_error_with_error` | `StatusError` + `error=Some(_)` → `Ok` |
 | `validate_response_error_without_error` | `StatusError` + `error=None` → `Error` |
 | `validate_response_invalid_artifact_path` | Artifact con path inválido → `Error` |
-| `sad_input_to_json_structure` | JSON contiene `meta`, `params`, `input`, `context`, `helpers`, `runner_def` |
+| `saar_input_to_json_structure` | JSON contiene `meta`, `params`, `input`, `context`, `helpers`, `runner_def` |
 | `provision_response_success` | `--provision` → `{"status":"success","log_files":[]}` |
 | `provision_response_with_log_files` | Provision con log_files declarados |
 | `provision_response_error` | Provision fallido → `{"status":"error",...}` |
@@ -242,7 +242,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.4. `sad/params.gleam`
+### 3.4. `saar/params.gleam`
 
 **Frameworks:** gleeunit + gleam_qcheck
 
@@ -270,7 +270,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.5. `sad/decoders.gleam`
+### 3.5. `saar/decoders.gleam`
 
 **Frameworks:** gleeunit + gleam_qcheck
 
@@ -316,7 +316,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.6. `sad/core/agent_internal.gleam`
+### 3.6. `saar/core/agent_internal.gleam`
 
 **Framework:** gleeunit
 
@@ -329,7 +329,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.7. `sad/core/agent.gleam`
+### 3.7. `saar/core/agent.gleam`
 
 **Framework:** gleeunit con `Bridge` fake (inyectado)
 
@@ -358,7 +358,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.8. `sad/core/agent.gleam`
+### 3.8. `saar/core/agent.gleam`
 
 **Framework:** gleeunit
 
@@ -371,7 +371,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.9. `sad/core/registry.gleam` y `registry_api.gleam`
+### 3.9. `saar/core/registry.gleam` y `registry_api.gleam`
 
 **Framework:** gleeunit
 
@@ -391,7 +391,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.10. `sad/core/supervisor.gleam` y `agent_manager.gleam` (AgentManagerActor)
+### 3.10. `saar/core/supervisor.gleam` y `agent_manager.gleam` (AgentManagerActor)
 
 **Framework:** gleeunit
 
@@ -403,7 +403,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `agent_factory_restart_strategy_temporary` | Factory supervisor arranca children con `restart=Temporary` (sin auto-restart) |
 | `deps_discovered_by_name_not_passed_by_hand` | Root usa `Name` + `get_by_name` (sin “returning chain” ni subjects inventados) |
 | `agent_crash_does_not_crash_manager` | Caída de un agente no tumba al manager (no están linkados) |
-| `agent_crash_does_not_restart_automatically` | Si un agente cae, SAD no lo reinicia; SAM decide recreación |
+| `agent_crash_does_not_restart_automatically` | Si un agente cae, SAAR no lo reinicia; SAM decide recreación |
 | `start_agent_same_key_one_wins` | Dos `StartAgent` concurrentes con misma `instance_id` → exactamente uno Ok; el otro `RegistrationFailed(AlreadyExists)` sin leaks |
 | `start_agent_registration_failed_rolls_back` | Si `registry.register` falla, el agente arrancado se termina (`Terminate(SupervisorCleanup)`) |
 | `list_agents_returns_summaries` | `ListAgents` devuelve summaries cacheados (sin N+1) |
@@ -411,7 +411,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.11. `sad/core/profiles.gleam` (ProfilesActor)
+### 3.11. `saar/core/profiles.gleam` (ProfilesActor)
 
 **Framework:** gleeunit
 
@@ -426,7 +426,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `list_profiles_returns_all_ids` | Devuelve lista de todos los ProfileIds |
 
 ---
-### 3.12. `sad/adapters/agui.gleam`
+### 3.12. `saar/adapters/agui.gleam`
 
 **Framework:** gleeunit + gleam_qcheck
 
@@ -453,7 +453,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.12.1. `sad/adapters/a2ui.gleam`
+### 3.12.1. `saar/adapters/a2ui.gleam`
 
 **Framework:** gleeunit
 
@@ -464,7 +464,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.12.2. `sad/adapters/a2a.gleam`
+### 3.12.2. `saar/adapters/a2a.gleam`
 
 **Framework:** gleeunit + gleam_qcheck
 
@@ -478,7 +478,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `message_to_payload_empty` | Sin parts → `PayloadChat([])` |
 | `interaction_result_to_task` | Genera `A2ATask` con `Completed` |
 | `agent_card_uses_meta_id` | `name` = `profile_id_to_string(meta.id)` |
-| `sad_error_to_a2a_error` | `BadRequest→400`, `AgentError→422`, `InfraError→500` + `type` A2A |
+| `saar_error_to_a2a_error` | `BadRequest→400`, `AgentError→422`, `InfraError→500` + `type` A2A |
 | `to_sse_line_format` | Usa `sse.line` |
 | `decode_a2a_message_missing_parts` | A2A Message sin `parts` → `Error` |
 | `decode_a2a_message_invalid_role` | `role="alien"` → `Error(InvalidRole)` |
@@ -504,7 +504,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.13. `sad/sse.gleam`
+### 3.13. `saar/sse.gleam`
 
 **Framework:** gleeunit
 
@@ -516,7 +516,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 3.14. `sad/ffi.gleam`
+### 3.14. `saar/ffi.gleam`
 
 **Framework:** gleeunit
 
@@ -534,7 +534,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ## 4. Bordes - módulos con IO
 
-### 4.1. `sad/config.gleam`
+### 4.1. `saar/config.gleam`
 
 **Framework:** gleeunit (FS temporal)
 
@@ -547,7 +547,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 4.2. `sad/bridge/serialization.gleam`
+### 4.2. `saar/bridge/serialization.gleam`
 
 **Frameworks:** gleeunit + gleam_qcheck
 
@@ -555,7 +555,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 | Test | Descripción |
 |------|-------------|
-| `sad_input_to_json` | Estructura JSON correcta |
+| `saar_input_to_json` | Estructura JSON correcta |
 | `input_payload_chat_json` | `PayloadChat` → JSON con `messages` |
 | `input_payload_files_json` | `PayloadFiles` → JSON con `files` |
 | `input_payload_mixed_json` | `PayloadMixed` → JSON con `messages` + `files` |
@@ -569,7 +569,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 4.3. `sad/bridge/interpolator.gleam`
+### 4.3. `saar/bridge/interpolator.gleam`
 
 **Frameworks:** gleeunit + gleam_qcheck
 
@@ -594,7 +594,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 4.4. `sad/bridge/runner.gleam`
+### 4.4. `saar/bridge/runner.gleam`
 
 **Framework:** gleeunit con zoo
 
@@ -617,7 +617,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 4.5. `sad/bridge/client.gleam`
+### 4.5. `saar/bridge/client.gleam`
 
 **Framework:** gleeunit con zoo
 
@@ -635,7 +635,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 4.6. `sad/gateway/api.gleam`
+### 4.6. `saar/gateway/api.gleam`
 
 **Framework:** gleeunit
 
@@ -653,10 +653,10 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `post_agents_interact_agent_down` | Agente caído → `safe_call.call_within` devuelve error HTTP sin tumbar handler |
 | `post_agents_interact_timeout` | Timeout → `safe_call.call_within` devuelve 504/timeout, proceso sigue vivo |
 | `post_agents_interact_timeout_then_next_request_ok` | Continuous: tras un timeout, el servidor sigue atendiendo requests (el handler no queda muerto ni el router inconsistente) |
-| `post_agents_interact_streaming_a2ui_header_switches_wire` | Con `X-SAD-UI-Protocol: a2ui/v0.8`, el SSE entrega JSONL A2UI (sin envelope AG-UI) |
+| `post_agents_interact_streaming_a2ui_header_switches_wire` | Con `X-SAAR-UI-Protocol: a2ui/v0.8`, el SSE entrega JSONL A2UI (sin envelope AG-UI) |
 | `post_agents_interact_streaming_a2ui_disconnect_is_terminal` | En modo A2UI “puro”, el fin del stream se observa por cierre de conexión (sin evento terminal adicional) |
-| `problem_details_mapping_native` | `ErrorKind` → RFC7807 nativo vía `sad/gateway/problem.gleam` + status (400/422/500) |
-| `problem_details_mapping_a2a` | `ErrorKind` → RFC7807 A2A vía `sad/gateway/problem.gleam` (type A2A) + status (400/422/500) |
+| `problem_details_mapping_native` | `ErrorKind` → RFC7807 nativo vía `saar/gateway/problem.gleam` + status (400/422/500) |
+| `problem_details_mapping_a2a` | `ErrorKind` → RFC7807 A2A vía `saar/gateway/problem.gleam` (type A2A) + status (400/422/500) |
 | `problem_details_does_not_leak_secrets` | Errores por interpolación/headers no incluyen valores sensibles (API keys, Authorization, secretos) en `detail` |
 | `interact_uses_capability_timeout` | Timeout de capability sobrescribe default |
 | `interact_uses_config_call_timeout_ms` | Sin timeout en capability → usa `config.call_timeout_ms` |
@@ -676,7 +676,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 4.6.1. `sad/otp/safe_call.gleam` (`test/unit/safe_call_test.gleam` - agregar)
+### 4.6.1. `saar/otp/safe_call.gleam` (`test/unit/safe_call_test.gleam` - agregar)
 
 **Framework:** gleeunit (tests de procesos; sin IO externo)
 
@@ -686,7 +686,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `call_within_disconnected_when_callee_down` | Callee muere antes de responder → `Error(Disconnected)` |
 | `call_within_timed_out_when_no_reply` | No reply dentro del timeout → `Error(TimedOut)` y el proceso caller sigue vivo |
 
-### 4.6.2. `sad/streams/sink.gleam` (StreamSink) (`test/unit/streams_sink_test.gleam` - agregar)
+### 4.6.2. `saar/streams/sink.gleam` (StreamSink) (`test/unit/streams_sink_test.gleam` - agregar)
 
 **Framework:** gleeunit
 
@@ -695,7 +695,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `stream_sink_push_batch_is_ack_backpressure` | `push_batch` espera ack del loop SSE; `process.send` sin ack está prohibido en interacción |
 | `stream_sink_finish_closes_stream` | `finish` emite terminal (AG-UI/A2A) y cierra conexión SSE |
 
-### 4.7. `sad/gateway/proxy.gleam`
+### 4.7. `saar/gateway/proxy.gleam`
 
 **Framework:** gleeunit
 
@@ -709,7 +709,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 ---
 
-### 4.8. `sad/gateway/ui_proxy.gleam`
+### 4.8. `saar/gateway/ui_proxy.gleam`
 
 **Framework:** gleeunit
 
@@ -722,14 +722,14 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `proxy_ui_server_down` | `crasher` | → error HTTP |
 | `ui_proxy_upstream_not_client_controlled` | - | No permite host/port/scheme desde el cliente (solo por estado del agente) |
 | `ui_proxy_does_not_forward_authorization` | - | No forwardea `Authorization`/`Cookie` al runner UI |
-| `ui_proxy_does_not_add_cors_headers` | - | No agrega headers `Access-Control-*` (CORS se gestiona fuera de SAD) |
+| `ui_proxy_does_not_add_cors_headers` | - | No agrega headers `Access-Control-*` (CORS se gestiona fuera de SAAR) |
 | `ui_proxy_problem_details_does_not_leak_secrets` | - | Si el upstream cae o hay error de proxy, el RFC7807 no incluye valores sensibles (headers/config/Authorization) |
 | `ui_proxy_rejects_path_traversal` | - | Rechaza `..` (incluyendo `%2e%2e`) en el path bajo `/ui/*` |
 | `ui_proxy_rejects_websocket_upgrade` | - | Request con `Upgrade: websocket` → error (v0 HTTP-only) |
 
 ---
 
-### 4.9. `sad.gleam` (Entrypoint)
+### 4.9. `saar.gleam` (Entrypoint)
 
 **Framework:** gleeunit
 
@@ -737,19 +737,19 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 |------|-------------|
 | `start_initializes_supervisors` | `RootSupervisor`, `Registry`, `ProfilesActor`, `AgentManagerActor`, `AgentFactorySupervisor`, `HttpServer` vivos |
 | `start_fails_without_config` | Sin `config.toml` → error descriptivo |
-| `start_fails_without_api_key` | Sin `SAD_API_KEY` → error |
+| `start_fails_without_api_key` | Sin `SAAR_API_KEY` → error |
 | `health_endpoint_responds` | `GET /health` → 200 |
 | `ready_endpoint_when_healthy` | `GET /health/ready` → 200 cuando supervisores OK y profiles_count > 0 |
 | `ready_endpoint_when_unhealthy` | `GET /health/ready` → 503 si supervisor caído o no hay perfiles cargados |
 | `routes_respond` | `/sys` y `/agents` responden (smoke test) |
 | `graceful_shutdown_stops_agents` | `SIGTERM` → agentes reciben `Terminate(NodeShuttingDown)` |
 | `shutdown_respects_timeout` | Agentes lentos se terminan después de timeout |
-| `serve_background_creates_pid_file` | `sad serve -b` → crea `~/.sad/sad.pid` |
-| `serve_background_forks_process` | `sad serve -b` → proceso padre termina, hijo corre |
-| `serve_kill_stops_running` | `sad serve -k` con servidor corriendo → termina |
-| `serve_kill_no_server` | `sad serve -k` sin servidor → mensaje "not running" |
-| `serve_status_running` | `sad serve --status` → muestra PID y puerto |
-| `serve_status_not_running` | `sad serve --status` sin servidor → "not running" |
+| `serve_background_creates_pid_file` | `saar serve -b` → crea `~/.saar/saar.pid` |
+| `serve_background_forks_process` | `saar serve -b` → proceso padre termina, hijo corre |
+| `serve_kill_stops_running` | `saar serve -k` con servidor corriendo → termina |
+| `serve_kill_no_server` | `saar serve -k` sin servidor → mensaje "not running" |
+| `serve_status_running` | `saar serve --status` → muestra PID y puerto |
+| `serve_status_not_running` | `saar serve --status` sin servidor → "not running" |
 
 ---
 
@@ -803,7 +803,7 @@ Estos checks existen para que el plan TDD sea ejecutable: el doc no puede sugeri
 | `gateway/api.gleam` | endpoints | echo_cli, echo_server | 13 |
 | `gateway/proxy.gleam` | artefactos | artifact_gen | 4 |
 | `gateway/ui_proxy.gleam` | ui proxy (HTTP-only) | crasher | 6 |
-| `sad.gleam` | smoke, daemon flags | - | 8 |
+| `saar.gleam` | smoke, daemon flags | - | 8 |
 | `system_log.gleam` | emisión de logs estructurados | echo_cli | 8 |
 | `shutdown.gleam` | graceful shutdown | echo_server | 8 |
 
@@ -856,15 +856,15 @@ test/
 
 | Test | Descripción |
 |------|-------------|
-| `parse_dry_run_valid` | `sad dry-run --profile aider --input file.json --capability chat` parsea correctamente |
+| `parse_dry_run_valid` | `saar dry-run --profile aider --input file.json --capability chat` parsea correctamente |
 | `parse_dry_run_missing_profile` | Sin `--profile` → error descriptivo |
 | `parse_dry_run_missing_capability` | Sin `--capability` → error descriptivo |
-| `parse_version` | `sad --version` → `Command::Version` |
-| `parse_help` | `sad --help` → `Command::Help` |
-| `parse_help_subcommand` | `sad serve --help` → help de serve |
-| `parse_unknown_command` | `sad unknown` → error con sugerencias |
-| `parse_conflicting_flags` | `sad serve -b -k` → error (no puede background y kill) |
-| `parse_duplicate_flags` | `sad serve -p 8080 -p 9090` → usa último o error |
+| `parse_version` | `saar --version` → `Command::Version` |
+| `parse_help` | `saar --help` → `Command::Help` |
+| `parse_help_subcommand` | `saar serve --help` → help de serve |
+| `parse_unknown_command` | `saar unknown` → error con sugerencias |
+| `parse_conflicting_flags` | `saar serve -b -k` → error (no puede background y kill) |
+| `parse_duplicate_flags` | `saar serve -p 8080 -p 9090` → usa último o error |
 
 ---
 
@@ -970,7 +970,7 @@ test/
 | `shutdown_sends_terminate_to_all_agents` | Todos los agentes reciben `Terminate(NodeShuttingDown)` |
 | `shutdown_waits_for_agents` | Espera hasta `shutdown_timeout_ms` |
 | `shutdown_force_kills_after_timeout` | Agentes lentos se matan tras timeout |
-| `shutdown_cleans_pid_file` | `sad.pid` se elimina al cerrar |
+| `shutdown_cleans_pid_file` | `saar.pid` se elimina al cerrar |
 | `shutdown_continuous_stops_server` | Servidor continuous se detiene (wrapper aplica SIGTERM→SIGKILL) |
 | `shutdown_returns_zero_on_success` | Exit code 0 si shutdown limpio |
 
@@ -1087,7 +1087,7 @@ test/
 
 ### 7.14 WorkspacePath: casos agresivos (incluidos)
 
-Los casos “agresivos” de traversal (Windows separators, `%2e%2e`, null bytes y symlink escape) están cubiertos como parte de los tests unitarios de `sad/workspace.gleam` (ver §3.2). No se crea un fichero de tests separado para esto.
+Los casos “agresivos” de traversal (Windows separators, `%2e%2e`, null bytes y symlink escape) están cubiertos como parte de los tests unitarios de `saar/workspace.gleam` (ver §3.2). No se crea un fichero de tests separado para esto.
 
 ---
 
@@ -1100,11 +1100,11 @@ Los casos “agresivos” de traversal (Windows separators, `%2e%2e`, null bytes
 | Test | Descripción |
 |------|-------------|
 | `logs_drop_under_pressure` | Logs a alta tasa + consumer lento → no OOM; se observan drops/coalesce |
-| `interaction_backpressure_or_discard_under_pressure` | Streaming de interacción + SSE lento → el producer aplica backpressure hacia el `sad/streams/sink.StreamSink` hasta `push_timeout_ms` y luego degrada a discard (sin OOM) |
+| `interaction_backpressure_or_discard_under_pressure` | Streaming de interacción + SSE lento → el producer aplica backpressure hacia el `saar/streams/sink.StreamSink` hasta `push_timeout_ms` y luego degrada a discard (sin OOM) |
 | `slow_ack_applies_backpressure` | `StreamSink.push_batch` con ack artificialmente lento → el worker no acumula eventos sin límite (no OOM) |
 | `mailbox_does_not_grow_unbounded` | Bajo carga sostenida, `message_queue_len` del actor/stream pump se mantiene acotado |
 | `disconnect_does_not_cancel` | Cortar SSE no cancela la ejecución; solo detiene la entrega |
-| `sink_disconnect_switches_to_discard` | Si el `sad/streams/sink.StreamSink` muere (cliente desconectado), el worker deja de empujar batches y aun así emite `InteractionDone` al actor |
+| `sink_disconnect_switches_to_discard` | Si el `saar/streams/sink.StreamSink` muere (cliente desconectado), el worker deja de empujar batches y aun así emite `InteractionDone` al actor |
 | `disconnect_still_emits_interaction_done` | Cliente SSE desconecta temprano → el actor recibe `InteractionDone` igualmente (resultado completo) |
 
 ---
@@ -1117,7 +1117,7 @@ Los casos “agresivos” de traversal (Windows separators, `%2e%2e`, null bytes
 |------|-------------|
 | `port_process_delivers_stdout_lines` | Runner emite 2 líneas JSONL → 2 `PortStdout` (sin merges/splits) |
 | `port_process_exit_status_propagated` | Proceso sale con código !=0 → `PortExit(code)` correcto |
-| `stderr_noise_does_not_break_stdout` | Runner escribe mucho en STDERR + stdout válido → SAD no lo bufferiza ni falla por ello |
+| `stderr_noise_does_not_break_stdout` | Runner escribe mucho en STDERR + stdout válido → SAAR no lo bufferiza ni falla por ello |
 | `port_process_rejects_oversized_event_line` | Runner emite 1 evento JSONL > 262_144 bytes → error de contrato (InfraError) claro |
 | `port_process_noeol_fragmentation_is_contract_error` | Runner emite línea sin `\\n` y termina → error de contrato claro (sin reensamblar) |
 | `port_process_invalid_json_line_is_contract_error` | Runner emite una línea con `\\n` pero JSON inválido → error de contrato estable (no panic; no intenta “adivinar”) |
@@ -1180,7 +1180,7 @@ Los casos “agresivos” de traversal (Windows separators, `%2e%2e`, null bytes
 
 ### Etapa 11: Gateway + adapters + E2E
 16. `test/unit/agui_test.gleam`, `test/unit/a2a_test.gleam`
-17. `test/integration/config_test.gleam`, `test/integration/sad_test.gleam`, `test/integration/api_test.gleam`, `test/integration/proxy_test.gleam`, `test/integration/ui_proxy_test.gleam`
+17. `test/integration/config_test.gleam`, `test/integration/saar_test.gleam`, `test/integration/api_test.gleam`, `test/integration/proxy_test.gleam`, `test/integration/ui_proxy_test.gleam`
 18. `test/integration/stop_delete_semantics_test.gleam`, `test/integration/streaming_terminal_test.gleam`
 
 ### Post-v0: Properties
@@ -1420,7 +1420,7 @@ import os
 
 def main():
     input_json = json.loads(sys.stdin.read())
-    workspace = os.environ.get("SAD_WORKSPACE", "/tmp")
+    workspace = os.environ.get("SAAR_WORKSPACE", "/tmp")
     
     # Crear archivo
     output_path = os.path.join(workspace, "outputs", "report.pdf")

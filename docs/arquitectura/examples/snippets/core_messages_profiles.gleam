@@ -2,7 +2,7 @@
 // Source: arquitectura/actores.md
 // Purpose: documentation-only; may not compile as-is.
 
-// Ubicación: sad/core/messages.gleam
+// Ubicación: saar/core/messages.gleam
 
 /// Protocolo del SSOT de perfiles en memoria (ProfilesActor).
 pub type ProfilesMsg {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generic UVX runner for SAD transient profiles.
+"""Generic UVX runner for SAAR transient profiles.
 
 This runner executes a one-shot command using uvx and returns the result.
 It handles:
@@ -7,10 +7,10 @@ It handles:
 - Execution: runs the command with resolved args/env
 - Artifact collection: gathers output files matching patterns
 
-SAD validates input against closed schemas (std:chat, std:files, chat extended)
+SAAR validates input against closed schemas (std:chat, std:files, chat extended)
 before invoking this runner. The runner receives already-validated payloads and
 doesn't need to understand schema structure. Templates in args/env_map are
-resolved by SAD (strict) before invoking runners.
+resolved by SAAR (strict) before invoking runners.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def emit(event: Dict[str, Any]) -> None:
 def normalize_args(values: Iterable[Any]) -> List[str]:
     """Convert runner_def.args to strings.
 
-    Contract: templates are resolved by SAD before invoking runners.
+    Contract: templates are resolved by SAAR before invoking runners.
     """
     return [str(v) for v in values]
 
@@ -64,7 +64,7 @@ def collect_artifacts(workspace: Path, config: Dict[str, Any]) -> List[Dict[str,
 
 
 def load_input() -> Dict[str, Any]:
-    """Load SAD_INPUT_JSON from stdin."""
+    """Load SAAR_INPUT_JSON from stdin."""
     try:
         return json.load(sys.stdin)
     except json.JSONDecodeError as exc:

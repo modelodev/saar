@@ -3,7 +3,7 @@ import gleam/string
 import gleeunit
 import gleeunit/should
 import port_helpers
-import sad/bridge/port_process
+import saar/bridge/port_process
 import simplifile
 import test_assertions
 import tom
@@ -22,7 +22,7 @@ pub fn version_command_runs_via_gleam_run() {
   let process =
     port_process.start(
       "gleam",
-      ["run", "-m", "sad", "--", "--version"],
+      ["run", "-m", "saar", "--", "--version"],
       env,
       ".",
       262_144,

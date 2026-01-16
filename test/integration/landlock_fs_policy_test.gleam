@@ -8,14 +8,14 @@ import gleam/string
 import gleeunit
 import gleeunit/should
 import port_helpers
-import sad/app_state
-import sad/bridge/http_client
-import sad/config_loader
-import sad/core/root_supervisor
-import sad/core/supervisor_names
-import sad/net/tcp_listener
-import sad/profiles_sources
-import sad/types/config as types_config
+import saar/app_state
+import saar/bridge/http_client
+import saar/config_loader
+import saar/core/root_supervisor
+import saar/core/supervisor_names
+import saar/net/tcp_listener
+import saar/profiles_sources
+import saar/types/config as types_config
 import simplifile
 import test_assertions
 
@@ -29,7 +29,7 @@ pub fn main() {
 
 pub fn landlock_enforced_allows_workspace_read_write_and_denies_outside_test() {
   port_helpers.ensure_wrapper_path()
-  envoy.set("SAD_TEST_API_KEY", api_key)
+  envoy.set("SAAR_TEST_API_KEY", api_key)
 
   let cfg0 =
     config_loader.load_from_path(
@@ -43,7 +43,7 @@ pub fn landlock_enforced_allows_workspace_read_write_and_denies_outside_test() {
   tcp_listener.close(listener)
 
   let names = supervisor_names.new_names_with_suffix(int.to_string(port))
-  let cfg = types_config.SadConfig(..cfg0, server_port: port)
+  let cfg = types_config.SaarConfig(..cfg0, server_port: port)
 
   let profiles =
     profiles_sources.load_profiles_from_sources(cfg)
@@ -55,7 +55,7 @@ pub fn landlock_enforced_allows_workspace_read_write_and_denies_outside_test() {
   let base_url = "http://" <> host <> ":" <> int.to_string(port)
 
   // Create an existing directory outside the instance workspace.
-  let types_config.SadConfig(storage: storage, ..) = cfg
+  let types_config.SaarConfig(storage: storage, ..) = cfg
   let types_config.StorageConfig(workspaces_directory: workspaces_dir, ..) =
     storage
 
@@ -137,11 +137,11 @@ pub fn landlock_enforced_allows_workspace_read_write_and_denies_outside_test() {
     False -> panic as { "Expected inside_ok=true, got: " <> resp.body }
   }
 
-  envoy.unset("SAD_TEST_API_KEY")
+  envoy.unset("SAAR_TEST_API_KEY")
 }
 
 pub fn landlock_enforced_policy_requires_absolute_paths_fails_early_test() {
-  envoy.set("SAD_TEST_API_KEY", api_key)
+  envoy.set("SAAR_TEST_API_KEY", api_key)
 
   let err =
     config_loader.load_from_path(
@@ -154,11 +154,11 @@ pub fn landlock_enforced_policy_requires_absolute_paths_fails_early_test() {
   string.contains(string.inspect(err), "LANDLOCK_POLICY_PATH_NOT_ABSOLUTE")
   |> should.equal(True)
 
-  envoy.unset("SAD_TEST_API_KEY")
+  envoy.unset("SAAR_TEST_API_KEY")
 }
 
 pub fn landlock_enforced_policy_rejects_root_path_fails_early_test() {
-  envoy.set("SAD_TEST_API_KEY", api_key)
+  envoy.set("SAAR_TEST_API_KEY", api_key)
 
   let err =
     config_loader.load_from_path(
@@ -171,11 +171,11 @@ pub fn landlock_enforced_policy_rejects_root_path_fails_early_test() {
   string.contains(string.inspect(err), "LANDLOCK_POLICY_PATH_IS_ROOT")
   |> should.equal(True)
 
-  envoy.unset("SAD_TEST_API_KEY")
+  envoy.unset("SAAR_TEST_API_KEY")
 }
 
 pub fn landlock_enforced_policy_rejects_dotdot_segments_fails_early_test() {
-  envoy.set("SAD_TEST_API_KEY", api_key)
+  envoy.set("SAAR_TEST_API_KEY", api_key)
 
   let err =
     config_loader.load_from_path(
@@ -188,17 +188,17 @@ pub fn landlock_enforced_policy_rejects_dotdot_segments_fails_early_test() {
   string.contains(string.inspect(err), "LANDLOCK_POLICY_PATH_HAS_DOT_SEGMENT")
   |> should.equal(True)
 
-  envoy.unset("SAD_TEST_API_KEY")
+  envoy.unset("SAAR_TEST_API_KEY")
 }
 
 pub fn landlock_enforced_policy_rejects_symlink_paths_fails_early_test() {
   // Create a symlink path used by the TOML.
-  let link = "/tmp/sad-landlock-symlink"
+  let link = "/tmp/saar-landlock-symlink"
   let target = "/tmp"
   let _ = simplifile.delete(file_or_dir_at: link)
   simplifile.create_symlink(to: target, from: link) |> test_assertions.assert_ok
 
-  envoy.set("SAD_TEST_API_KEY", api_key)
+  envoy.set("SAAR_TEST_API_KEY", api_key)
 
   let err =
     config_loader.load_from_path(
@@ -211,6 +211,6 @@ pub fn landlock_enforced_policy_rejects_symlink_paths_fails_early_test() {
   string.contains(string.inspect(err), "LANDLOCK_POLICY_PATH_IS_SYMLINK")
   |> should.equal(True)
 
-  envoy.unset("SAD_TEST_API_KEY")
+  envoy.unset("SAAR_TEST_API_KEY")
   let _ = simplifile.delete(file_or_dir_at: link)
 }

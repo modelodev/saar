@@ -1,7 +1,7 @@
 // Extracted reference snippet (v0)
 // Purpose: documentation-only; may not compile as-is.
 //
-// sad/otp/safe_call.gleam
+// saar/otp/safe_call.gleam
 //
 // Safe-call para bordes (HTTP/SSE/workers efímeros): nunca debe tumbar al caller.
 // Evita `process.call`/`actor.call` (fail-fast) y en su lugar usa:

@@ -1,9 +1,9 @@
-// En sad/streams/sink.gleam
+// En saar/streams/sink.gleam
 import gleam/erlang/process
 import gleam/erlang/process.{type Subject}
 import gleam/result
-import sad/otp/safe_call
-import sad/otp/safe_call.{type CallError}
+import saar/otp/safe_call
+import saar/otp/safe_call.{type CallError}
 
 pub type StreamSink =
   Subject(StreamSinkMsg)

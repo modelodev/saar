@@ -4,9 +4,9 @@ import gleam/list
 import gleeunit
 import gleeunit/should
 import port_helpers
-import sad/bridge/port_process
-import sad/bridge/runner_contract
-import sad/ffi
+import saar/bridge/port_process
+import saar/bridge/runner_contract
+import saar/ffi
 
 const max_event_bytes = 262_144
 
@@ -35,8 +35,8 @@ pub fn wrapper_stop_timing_respects_double_shutdown_test() {
   let post_kill_wait_ms = 80
   let env =
     port_helpers.base_env(shutdown_ms, [
-      #("SAD_WRAPPER_POST_KILL_WAIT_MS", int.to_string(post_kill_wait_ms)),
-      #("SAD_WRAPPER_POLL_MS", "10"),
+      #("SAAR_WRAPPER_POST_KILL_WAIT_MS", int.to_string(post_kill_wait_ms)),
+      #("SAAR_WRAPPER_POLL_MS", "10"),
     ])
   let process =
     port_helpers.start_process_with_env(
@@ -93,7 +93,7 @@ pub fn wrapper_enforces_stdout_byte_limit_test() {
 }
 
 pub fn wrapper_missing_path_errors_test() {
-  envoy.set("SAD_WRAPPER_PATH", "./priv/nope_wrapper")
+  envoy.set("SAAR_WRAPPER_PATH", "./priv/nope_wrapper")
   let env = port_helpers.base_env(500, [])
 
   let result =

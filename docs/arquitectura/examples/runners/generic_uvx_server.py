@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generic UVX Server runner for SAD continuous profiles.
+"""Generic UVX Server runner for SAAR continuous profiles.
 
 This runner starts a long-running server process using uvx.
 It handles:
@@ -7,10 +7,10 @@ It handles:
 - Execution: starts the server with configured host/port
 - Signal forwarding: propagates SIGTERM/SIGINT to child
 
-SAD validates input against closed schemas (std:chat, std:files, chat extended)
+SAAR validates input against closed schemas (std:chat, std:files, chat extended)
 before invoking this runner. The runner receives already-validated payloads and
 doesn't need to understand schema structure. Templates in args/env_map are
-resolved by SAD (strict) before invoking runners.
+resolved by SAAR (strict) before invoking runners.
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def fatal_provision(kind: str, message: str) -> None:
     sys.exit(1)
 
 def load_input(mode: str) -> Dict[str, Any]:
-    """Load SAD_INPUT_JSON from stdin."""
+    """Load SAAR_INPUT_JSON from stdin."""
     try:
         return json.load(sys.stdin)
     except json.JSONDecodeError as exc:
@@ -84,13 +84,13 @@ def require_runner_def(mode: str, data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def get_network_info(data: Dict[str, Any]) -> Dict[str, str]:
-    """Get network info from SAD_INPUT_JSON (preferred) or environment."""
+    """Get network info from SAAR_INPUT_JSON (preferred) or environment."""
     runner_block = data.get("runner") or {}
-    host = runner_block.get("host") or os.environ.get("SAD_HOST")
-    port = runner_block.get("port") or os.environ.get("SAD_PORT")
+    host = runner_block.get("host") or os.environ.get("SAAR_HOST")
+    port = runner_block.get("port") or os.environ.get("SAAR_PORT")
 
     if not host or not port:
-        emit_log("Missing host/port from SAD_INPUT_JSON and SAD_HOST/SAD_PORT", level="error")
+        emit_log("Missing host/port from SAAR_INPUT_JSON and SAAR_HOST/SAAR_PORT", level="error")
         sys.exit(1)
 
     return {"host": str(host), "port": str(port)}
@@ -131,7 +131,7 @@ def build_command(runner_def: Dict[str, Any]) -> list[str]:
         full_cmd.extend(["--with", pkg])
     full_cmd.extend(["--from", package, command])
 
-    # Add args (contract: templates are resolved by SAD before invoking runners)
+    # Add args (contract: templates are resolved by SAAR before invoking runners)
     raw_args = runner_def.get("args", [])
     for arg in raw_args:
         full_cmd.append(str(arg))
@@ -147,7 +147,7 @@ def configure_env(
     """Build environment variables for the server process."""
     env = os.environ.copy()
 
-    # env_map already resolved by SAD
+    # env_map already resolved by SAAR
     for key, value in runner_def.get("env_map", {}).items():
         env[key] = str(value)
 
@@ -200,7 +200,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, handle_signal)
 
     # Start the server process
-    # IMPORTANT: child stdout/stderr must NOT leak to our stdout, because SAD expects JSONL.
+    # IMPORTANT: child stdout/stderr must NOT leak to our stdout, because SAAR expects JSONL.
     # We capture both streams and re-emit them as `t="log"` events.
     try:
         CHILD_PROCESS = subprocess.Popen(

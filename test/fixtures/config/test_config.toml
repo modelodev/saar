@@ -3,7 +3,7 @@ host = "127.0.0.1"
 port = 0
 
 [auth]
-api_key = "${SAD_TEST_API_KEY}"
+api_key = "${SAAR_TEST_API_KEY}"
 
 [limits]
 call_timeout_ms = 5000

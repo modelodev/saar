@@ -1,15 +1,15 @@
 // Extracted reference snippet (v0)
 // Purpose: documentation-only; may not compile as-is.
 //
-// sad/core/artifact_registry_api.gleam
+// saar/core/artifact_registry_api.gleam
 
 import gleam/erlang/process.{type Subject}
-import sad/core/messages.{
+import saar/core/messages.{
   type ArtifactRegistryMsg, LookupArtifact, PurgeByInstance, RegisterArtifact,
 }
-import sad/otp/safe_call
-import sad/otp/safe_call.{type CallError}
-import sad/types.{type ArtifactId, type InstanceId, type WorkspacePath}
+import saar/otp/safe_call
+import saar/otp/safe_call.{type CallError}
+import saar/types.{type ArtifactId, type InstanceId, type WorkspacePath}
 
 pub type ArtifactEntry {
   ArtifactEntry(path: WorkspacePath, mime: String, instance_id: InstanceId)

@@ -10,7 +10,7 @@ D-003 wrapper silencio con DEBUG=1
 - Delta: wrapper silencioso en STDOUT; logs solo por STDERR si DEBUG=1.
 
 D-005 A2UI selector header
-- Delta: se fija X-SAD-UI-Protocol: a2ui/v0.8 para forzar A2UI en endpoint nativo.
+- Delta: se fija X-SAAR-UI-Protocol: a2ui/v0.8 para forzar A2UI en endpoint nativo.
 
 D-006 port range bajo limits.*
 - Delta: se mantiene el rango bajo limits.port_range_min/limits.port_range_max (SSOT).

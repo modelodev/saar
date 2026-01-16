@@ -1,7 +1,7 @@
 import gleam/option.{None, Some}
 import gleeunit
 import gleeunit/should
-import sad/cli
+import saar/cli
 
 pub fn main() {
   gleeunit.main()

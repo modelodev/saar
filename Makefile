@@ -21,7 +21,7 @@ ci:
 
 wrapper:
 	mkdir -p priv
-	cc -O2 -Wall -Wextra -o priv/sad_wrapper native/wrapper/sad_wrapper.c
+	cc -O2 -Wall -Wextra -o priv/saar_wrapper native/wrapper/saar_wrapper.c
 
 e2e-transient: wrapper
 	gleam test
@@ -29,10 +29,10 @@ e2e-transient: wrapper
 e2e-echo: e2e-transient
 
 e2e-continuous: wrapper
-	SAD_WRAPPER_FORCE_FALLBACK=1 gleam test
+	SAAR_WRAPPER_FORCE_FALLBACK=1 gleam test
 
 docs-limits:
-	(cd tools/docs_limits && gleam run -m sad/docs/limits_md)
+	(cd tools/docs_limits && gleam run -m saar/docs/limits_md)
 
 e2e-http-interact: wrapper
-	SAD_TEST_API_KEY=test-key gleam test
+	SAAR_TEST_API_KEY=test-key gleam test

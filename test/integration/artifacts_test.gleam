@@ -11,18 +11,18 @@ import gleam/string
 import gleeunit
 import gleeunit/should
 import port_helpers
-import sad/app_state
-import sad/bridge/http_client
-import sad/config_loader
-import sad/core/artifact_registry_protocol
-import sad/core/root_supervisor
-import sad/core/supervisor_names
-import sad/net/tcp_listener
-import sad/otp/safe_call
-import sad/profiles_sources
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/workspace
+import saar/app_state
+import saar/bridge/http_client
+import saar/config_loader
+import saar/core/artifact_registry_protocol
+import saar/core/root_supervisor
+import saar/core/supervisor_names
+import saar/net/tcp_listener
+import saar/otp/safe_call
+import saar/profiles_sources
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/workspace
 import simplifile
 
 const api_key = "test-key"
@@ -33,8 +33,8 @@ pub fn main() {
   gleeunit.main()
 }
 
-type SadEnv {
-  SadEnv(
+type SaarEnv {
+  SaarEnv(
     base_url: String,
     artifact_registry: process.Subject(
       artifact_registry_protocol.ArtifactRegistryMsg,
@@ -44,7 +44,7 @@ type SadEnv {
 }
 
 pub fn get_artifact_serves_file_test() {
-  let SadEnv(base_url: base_url, ..) = start_sad()
+  let SaarEnv(base_url: base_url, ..) = start_saar()
 
   let instance_id = "inst-artifacts-1"
   create_agent(base_url, "artifact_gen", instance_id)
@@ -94,7 +94,7 @@ pub fn get_artifact_serves_file_test() {
 }
 
 pub fn get_artifact_auth_required_test() {
-  let SadEnv(base_url: base_url, ..) = start_sad()
+  let SaarEnv(base_url: base_url, ..) = start_saar()
 
   let resp =
     http_client.request_sync_string(
@@ -111,11 +111,11 @@ pub fn get_artifact_auth_required_test() {
 }
 
 pub fn get_artifact_outside_workspace_test() {
-  let SadEnv(
+  let SaarEnv(
     base_url: base_url,
     artifact_registry: artifact_registry,
     workspaces_dir: workspaces_dir,
-  ) = start_sad()
+  ) = start_saar()
 
   let instance_raw = "inst-artifacts-escape-1"
   let assert Ok(instance_id) = types_core.instance_id(instance_raw)
@@ -163,7 +163,7 @@ pub fn get_artifact_outside_workspace_test() {
 }
 
 pub fn artifact_after_agent_stopped_test() {
-  let SadEnv(base_url: base_url, ..) = start_sad()
+  let SaarEnv(base_url: base_url, ..) = start_saar()
 
   let instance_id = "inst-artifacts-stop-1"
   create_agent(base_url, "artifact_gen", instance_id)
@@ -199,7 +199,7 @@ pub fn artifact_after_agent_stopped_test() {
 }
 
 pub fn artifact_after_agent_deleted_test() {
-  let SadEnv(base_url: base_url, ..) = start_sad()
+  let SaarEnv(base_url: base_url, ..) = start_saar()
 
   let instance_id = "inst-artifacts-del-1"
   create_agent(base_url, "artifact_gen", instance_id)
@@ -232,7 +232,7 @@ pub fn artifact_after_agent_deleted_test() {
   resp.status |> should.equal(404)
 }
 
-fn start_sad() -> SadEnv {
+fn start_saar() -> SaarEnv {
   port_helpers.ensure_wrapper_path()
 
   let cfg0 =
@@ -240,7 +240,7 @@ fn start_sad() -> SadEnv {
       "./test/fixtures/config/test_config.toml",
       fn(name) {
         case name {
-          "SAD_TEST_API_KEY" -> Ok(api_key)
+          "SAAR_TEST_API_KEY" -> Ok(api_key)
           _ -> Error(Nil)
         }
       },
@@ -253,7 +253,7 @@ fn start_sad() -> SadEnv {
 
   let names = supervisor_names.new_names_with_suffix(int.to_string(port))
 
-  let cfg = types_config.SadConfig(..cfg0, server_port: port)
+  let cfg = types_config.SaarConfig(..cfg0, server_port: port)
 
   let profiles = profiles_sources.load_profiles_from_sources(cfg) |> assert_ok
 
@@ -262,11 +262,11 @@ fn start_sad() -> SadEnv {
 
   let supervisor_names.RootNames(_registry, artifact_registry_name, ..) = names
 
-  let types_config.SadConfig(storage: storage, ..) = cfg
+  let types_config.SaarConfig(storage: storage, ..) = cfg
   let types_config.StorageConfig(workspaces_directory: workspaces_dir, ..) =
     storage
 
-  SadEnv(
+  SaarEnv(
     base_url: "http://" <> host <> ":" <> int.to_string(port),
     artifact_registry: process.named_subject(artifact_registry_name),
     workspaces_dir: workspaces_dir,

@@ -6,17 +6,17 @@ import gleam/option
 import gleam/otp/actor
 import gleeunit
 import gleeunit/should
-import sad/app_state
-import sad/core/agent
-import sad/core/messages
-import sad/core/root_supervisor
-import sad/core/supervisor_names
-import sad/otp/safe_call
-import sad/types/agent as types_agent
-import sad/types/core as types_core
-import sad/types/enums as types_enums
-import sad/types/profile as types_profile
-import sad/types/runner as types_runner
+import saar/app_state
+import saar/core/agent
+import saar/core/messages
+import saar/core/root_supervisor
+import saar/core/supervisor_names
+import saar/otp/safe_call
+import saar/types/agent as types_agent
+import saar/types/core as types_core
+import saar/types/enums as types_enums
+import saar/types/profile as types_profile
+import saar/types/runner as types_runner
 import test_assertions
 
 pub fn main() {

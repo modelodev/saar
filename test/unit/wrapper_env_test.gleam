@@ -3,9 +3,9 @@ import gleam/option
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/bridge/wrapper_env
-import sad/types/config as types_config
-import sad/types/enums as types_enums
+import saar/bridge/wrapper_env
+import saar/types/config as types_config
+import saar/types/enums as types_enums
 
 pub fn main() {
   gleeunit.main()
@@ -40,7 +40,7 @@ pub fn wrapper_env_includes_landlock_policy_json_with_workspace_test() {
   // Ensure workspace is appended into allow lists.
   let json =
     env
-    |> list.filter(fn(pair) { pair.0 == "SAD_LANDLOCK_POLICY_JSON" })
+    |> list.filter(fn(pair) { pair.0 == "SAAR_LANDLOCK_POLICY_JSON" })
     |> list.first
     |> option.from_result
     |> option.map(fn(pair) { pair.1 })

@@ -3,11 +3,11 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleeunit
 import gleeunit/should
-import sad/response_mapping
-import sad/types/core as types_core
-import sad/types/enums as types_enums
-import sad/types/output as types_output
-import sad/types/profile as types_profile
+import saar/response_mapping
+import saar/types/core as types_core
+import saar/types/enums as types_enums
+import saar/types/output as types_output
+import saar/types/profile as types_profile
 
 fn trace_id() -> types_core.TraceId {
   types_core.trace_id("trace-1")

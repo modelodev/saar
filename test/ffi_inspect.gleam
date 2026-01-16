@@ -8,7 +8,7 @@
 //// - Any production runtime behavior.
 ////
 //// Relationships:
-//// - Uses `sad_ffi` Erlang module functions.
+//// - Uses `saar_ffi` Erlang module functions.
 
 import gleam/erlang/process.{type Pid}
 
@@ -19,5 +19,5 @@ pub fn message_queue_len(pid: Pid) -> Int {
   message_queue_len_ffi(pid)
 }
 
-@external(erlang, "sad_ffi", "message_queue_len")
+@external(erlang, "saar_ffi", "message_queue_len")
 fn message_queue_len_ffi(pid: Pid) -> Int

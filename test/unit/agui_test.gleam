@@ -3,11 +3,11 @@ import gleam/option.{None}
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/adapters/agui
-import sad/types/core as types_core
-import sad/types/enums as types_enums
-import sad/types/output as types_output
-import sad/types/stream
+import saar/adapters/agui
+import saar/types/core as types_core
+import saar/types/enums as types_enums
+import saar/types/output as types_output
+import saar/types/stream
 
 pub fn main() {
   gleeunit.main()

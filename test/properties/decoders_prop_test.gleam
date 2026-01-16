@@ -6,9 +6,9 @@ import gleam/list
 import gleam/string
 import gleeunit/should
 import qcheck
-import sad/decoders
-import sad/types/core as types_core
-import sad/types/profile as types_profile
+import saar/decoders
+import saar/types/core as types_core
+import saar/types/profile as types_profile
 
 const test_count: Int = 200
 

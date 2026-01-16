@@ -8,19 +8,19 @@ import gleam/otp/actor
 import gleeunit
 import gleeunit/should
 import port_helpers
-import sad/app_state
-import sad/core/agent
-import sad/core/messages
-import sad/core/root_supervisor
-import sad/core/supervisor_names
-import sad/decoders
-import sad/net/tcp_listener
-import sad/otp/safe_call
-import sad/types/agent as types_agent
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/types/profile as types_profile
-import sad/types/runner as types_runner
+import saar/app_state
+import saar/core/agent
+import saar/core/messages
+import saar/core/root_supervisor
+import saar/core/supervisor_names
+import saar/decoders
+import saar/net/tcp_listener
+import saar/otp/safe_call
+import saar/types/agent as types_agent
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/types/profile as types_profile
+import saar/types/runner as types_runner
 import simplifile
 import test_assertions
 
@@ -93,11 +93,11 @@ fn pick_free_port() -> Int {
 }
 
 fn config_with_port_range(
-  cfg: types_config.SadConfig,
+  cfg: types_config.SaarConfig,
   min_port: Int,
   max_port: Int,
-) -> types_config.SadConfig {
-  let types_config.SadConfig(runner: runner_cfg, ..) = cfg
+) -> types_config.SaarConfig {
+  let types_config.SaarConfig(runner: runner_cfg, ..) = cfg
 
   let next_runner =
     types_config.RunnerSystemConfig(
@@ -107,7 +107,7 @@ fn config_with_port_range(
       managed_port_host: "127.0.0.1",
     )
 
-  types_config.SadConfig(..cfg, runner: next_runner)
+  types_config.SaarConfig(..cfg, runner: next_runner)
 }
 
 fn echo_server_profile_managed_port() -> types_profile.Profile {
@@ -139,7 +139,7 @@ fn echo_server_profile_managed_port() -> types_profile.Profile {
 fn start_until_ready_continuous(
   manager: process.Subject(messages.AgentManagerMsg),
   profile: types_profile.Profile,
-  cfg: types_config.SadConfig,
+  cfg: types_config.SaarConfig,
   retries: Int,
 ) -> Nil {
   case retries {
@@ -217,7 +217,7 @@ fn start_instance(
   manager: process.Subject(messages.AgentManagerMsg),
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
-  cfg: types_config.SadConfig,
+  cfg: types_config.SaarConfig,
 ) -> agent.AgentRef {
   let artifact_registry = process.new_subject()
 

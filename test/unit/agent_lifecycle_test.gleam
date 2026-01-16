@@ -2,8 +2,8 @@ import gleam/dict
 import gleam/option
 import gleeunit
 import gleeunit/should
-import sad/core/agent_lifecycle as lifecycle
-import sad/types/agent as types_agent
+import saar/core/agent_lifecycle as lifecycle
+import saar/types/agent as types_agent
 
 pub fn main() {
   gleeunit.main()

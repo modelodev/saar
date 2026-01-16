@@ -3,7 +3,7 @@ host = "0.0.0.0"
 port = 8080
 
 [auth]
-api_key = "${SAD_API_KEY}"
+api_key = "${SAAR_API_KEY}"
 
 [limits]
 call_timeout_ms = 30000
@@ -25,7 +25,7 @@ sse_keep_alive_interval_ms = 15000
 sources = [
   {type = "dir", path = "./profiles"}
 ]
-git_cache_dir = "./.sad/cache/git"
+git_cache_dir = "./.saar/cache/git"
 
 [runners]
 python_bin = "python3"

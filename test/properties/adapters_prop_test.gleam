@@ -2,12 +2,12 @@ import gleam/json
 import gleam/string
 import gleeunit/should
 import qcheck
-import sad/adapters/a2a
-import sad/adapters/a2ui
-import sad/adapters/agui
-import sad/sse
-import sad/types/core as types_core
-import sad/types/stream
+import saar/adapters/a2a
+import saar/adapters/a2ui
+import saar/adapters/agui
+import saar/sse
+import saar/types/core as types_core
+import saar/types/stream
 
 const test_count: Int = 200
 

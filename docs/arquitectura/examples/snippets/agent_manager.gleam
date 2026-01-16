@@ -11,22 +11,22 @@ import gleam/list
 import gleam/option.{type Option}
 import gleam/otp/actor
 import gleam/otp/factory_supervisor
-import sad/app_state.{type AppState}
-import sad/bridge/bridge.{type Bridge, default_bridge}
-import sad/core/agent
-import sad/core/artifact_registry_api
-import sad/core/messages.{
+import saar/app_state.{type AppState}
+import saar/bridge/bridge.{type Bridge, default_bridge}
+import saar/core/agent
+import saar/core/artifact_registry_api
+import saar/core/messages.{
   type AgentManagerMsg, type AgentMsg, type ArtifactRegistryMsg,
   type DeleteError, type InstanceId, type RegistryMsg, type StartArgs,
   type StartError, type StopError, DeleteAgent, DeleteWorkerDone,
   DeleteWorkerDown, ListAgents, StartAgent, StopAgent,
 }
-import sad/core/registry_api
-import sad/types.{
-  type AgentPhase, type AgentRunMode, type AgentStatusView, type SadConfig,
+import saar/core/registry_api
+import saar/types.{
+  type AgentPhase, type AgentRunMode, type AgentStatusView, type SaarConfig,
   Provisioning, RunIdle, Stopped,
 }
-import sad/workspace
+import saar/workspace
 
 /// Estado interno del AgentManagerActor.
 /// Gestiona instancias; los perfiles cargados viven en `ProfilesActor`.
@@ -46,7 +46,7 @@ import sad/workspace
 ///   un agente vivo pero no registrado.
 type State {
   State(
-    config: SadConfig,
+    config: SaarConfig,
     registry: Subject(RegistryMsg),
     /// Registro de artefactos (para purge en DeleteAgent)
     artifact_registry: Subject(ArtifactRegistryMsg),

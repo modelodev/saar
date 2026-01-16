@@ -1,8 +1,8 @@
 import filepath
 import gleeunit
 import gleeunit/should
-import sad/types/core as types_core
-import sad/workspace
+import saar/types/core as types_core
+import saar/workspace
 import simplifile
 
 pub fn main() {
@@ -46,7 +46,7 @@ pub fn normalizes_double_slash_test() {
 }
 
 pub fn to_absolute_joins_root() {
-  let root = "/tmp/sad-workspace"
+  let root = "/tmp/saar-workspace"
   let assert Ok(path) = workspace.workspace_path_validate("outputs/report.txt")
 
   workspace.workspace_path_to_absolute(root, path)
@@ -54,7 +54,7 @@ pub fn to_absolute_joins_root() {
 }
 
 pub fn join_valid() {
-  let root = "/tmp/sad-workspace"
+  let root = "/tmp/saar-workspace"
 
   workspace.workspace_path_join(root, "outputs/report.txt")
   |> should.equal(Ok(filepath.join(root, "outputs/report.txt")))

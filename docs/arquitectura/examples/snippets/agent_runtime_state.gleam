@@ -5,12 +5,12 @@ pub type LogBuffer {
   LogBuffer(lines: Deque(LogEvent), total_bytes: Int)
 }
 
-// SadConfig está definido en tipos.md §8.1
+// SaarConfig está definido en tipos.md §8.1
 // Es el SSOT para la configuración del sistema.
 //
 // Importar como:
-//   import sad/types.{
-//     type SadConfig,
+//   import saar/types.{
+//     type SaarConfig,
 //     resolve_call_timeout,
 //   }
 
@@ -29,7 +29,7 @@ pub type AgentRuntimeState {
     mode: ActorMode,
     log_buffer: LogBuffer,
     log_subscriber: Option(Subject(LogEvent)),
-    config: SadConfig,
+    config: SaarConfig,
     /// Dependencias internas (inyectadas por AgentManagerActor).
     /// El core depende de un record (`Bridge`) en lugar de módulos concretos del bridge.
     deps: AgentDeps,

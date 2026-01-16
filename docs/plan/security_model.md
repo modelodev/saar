@@ -22,9 +22,9 @@ Plan version: v2.1
    - Controla permisos de lectura/escritura/ejecucion por path.
    - No modifica mounts; solo aplica restricciones.
 
-Nota: estas restricciones aplican al **runner**, no al proceso SAD. El servicio SAD
-puede necesitar paths de sistema para config y logs (p.ej. `/etc/sad/config.toml`,
-`/var/log/sad`), pero eso no forma parte del sandbox del runner.
+Nota: estas restricciones aplican al **runner**, no al proceso SAAR. El servicio SAAR
+puede necesitar paths de sistema para config y logs (p.ej. `/etc/saar/config.toml`,
+`/var/log/saar`), pero eso no forma parte del sandbox del runner.
 
 ## Landlock modes
 Config key: `security.landlock_mode`
@@ -66,7 +66,7 @@ Cuando el runner proviene de `profiles.sources`:
 - `<source_root>/profiles` (R)
 
 Nota: en v0 el wrapper deriva `<source_root>` desde el directorio actual del runner
-(`SAD_WORKSPACE` / `workspaces.directory`). Eso cubre `profiles.sources = dir`.
+(`SAAR_WORKSPACE` / `workspaces.directory`). Eso cubre `profiles.sources = dir`.
 
 ## Efectos esperados
 - El runner puede leer certificados y resolucion DNS del sistema.

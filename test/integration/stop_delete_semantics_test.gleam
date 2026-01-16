@@ -8,25 +8,25 @@ import gleam/otp/actor
 import gleeunit
 import gleeunit/should
 import port_helpers
-import sad/app_state
-import sad/core/agent
-import sad/core/artifact_registry_protocol
-import sad/core/messages
-import sad/core/root_supervisor
-import sad/core/supervisor_names
-import sad/decoders
-import sad/net/tcp_listener
-import sad/otp/safe_call
-import sad/streams/sink
-import sad/types/agent as types_agent
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/types/enums as types_enums
-import sad/types/input as types_input
-import sad/types/output as types_output
-import sad/types/profile as types_profile
-import sad/types/runner as types_runner
-import sad/workspace
+import saar/app_state
+import saar/core/agent
+import saar/core/artifact_registry_protocol
+import saar/core/messages
+import saar/core/root_supervisor
+import saar/core/supervisor_names
+import saar/decoders
+import saar/net/tcp_listener
+import saar/otp/safe_call
+import saar/streams/sink
+import saar/types/agent as types_agent
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/types/enums as types_enums
+import saar/types/input as types_input
+import saar/types/output as types_output
+import saar/types/profile as types_profile
+import saar/types/runner as types_runner
+import saar/workspace
 import simplifile
 import test_assertions
 
@@ -523,14 +523,14 @@ pub fn delete_cleanup_failure_still_purges_artifacts_test() {
 }
 
 fn start_root(
-  cfg: types_config.SadConfig,
+  cfg: types_config.SaarConfig,
 ) -> #(
   supervisor_names.RootNames,
   process.Subject(messages.AgentManagerMsg),
   process.Subject(messages.RegistryMsg),
   process.Subject(artifact_registry_protocol.ArtifactRegistryMsg),
 ) {
-  let cfg = types_config.SadConfig(..cfg, server_port: 0)
+  let cfg = types_config.SaarConfig(..cfg, server_port: 0)
 
   let names = supervisor_names.new_names()
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
@@ -562,7 +562,7 @@ fn start_instance(
   ),
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
-  cfg: types_config.SadConfig,
+  cfg: types_config.SaarConfig,
 ) -> agent.AgentRef {
   let args =
     messages.StartArgs(
@@ -607,10 +607,10 @@ fn wait_for_phase(
   }
 }
 
-fn config_with_port_range(port: Int) -> types_config.SadConfig {
-  let cfg0 = types_config.default_sad_config()
+fn config_with_port_range(port: Int) -> types_config.SaarConfig {
+  let cfg0 = types_config.default_saar_config()
 
-  let types_config.SadConfig(runner: runner0, timeouts: timeouts0, ..) = cfg0
+  let types_config.SaarConfig(runner: runner0, timeouts: timeouts0, ..) = cfg0
 
   let runner =
     types_config.RunnerSystemConfig(
@@ -621,25 +621,25 @@ fn config_with_port_range(port: Int) -> types_config.SadConfig {
     )
 
   // Keep stop tests fast.
-  let timeouts = types_config.SadTimeouts(..timeouts0, shutdown_timeout_ms: 250)
+  let timeouts = types_config.SaarTimeouts(..timeouts0, shutdown_timeout_ms: 250)
 
-  types_config.SadConfig(..cfg0, runner: runner, timeouts: timeouts)
+  types_config.SaarConfig(..cfg0, runner: runner, timeouts: timeouts)
 }
 
-fn config_with_workspace_dir(dir: String) -> types_config.SadConfig {
-  let cfg0 = types_config.default_sad_config()
-  let types_config.SadConfig(storage: storage0, ..) = cfg0
+fn config_with_workspace_dir(dir: String) -> types_config.SaarConfig {
+  let cfg0 = types_config.default_saar_config()
+  let types_config.SaarConfig(storage: storage0, ..) = cfg0
 
   let storage =
     types_config.StorageConfig(..storage0, workspaces_directory: dir)
-  types_config.SadConfig(..cfg0, storage: storage)
+  types_config.SaarConfig(..cfg0, storage: storage)
 }
 
 fn workspace_for(
-  cfg: types_config.SadConfig,
+  cfg: types_config.SaarConfig,
   instance_id: types_core.InstanceId,
 ) -> String {
-  let types_config.SadConfig(storage: storage, ..) = cfg
+  let types_config.SaarConfig(storage: storage, ..) = cfg
   let types_config.StorageConfig(workspaces_directory: base, ..) = storage
   workspace.workspace_for_instance(base, instance_id)
 }

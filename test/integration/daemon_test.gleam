@@ -2,8 +2,8 @@ import gleam/int
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/daemon_control
-import sad/ffi/daemon
+import saar/daemon_control
+import saar/ffi/daemon
 import simplifile
 
 pub fn main() {
@@ -12,8 +12,8 @@ pub fn main() {
 
 pub fn serve_background_forks_process() {
   let root = "./build/test-workspaces/daemon-background"
-  let pidfile = root <> "/sad.pid"
-  let logfile = root <> "/sad.log"
+  let pidfile = root <> "/saar.pid"
+  let logfile = root <> "/saar.log"
   let assert Ok(_) = simplifile.create_directory_all(root)
 
   let pid =
@@ -32,8 +32,8 @@ pub fn serve_background_forks_process() {
 
 pub fn serve_kill_stops_running() {
   let root = "./build/test-workspaces/daemon-kill"
-  let pidfile = root <> "/sad.pid"
-  let logfile = root <> "/sad.log"
+  let pidfile = root <> "/saar.pid"
+  let logfile = root <> "/saar.log"
   let assert Ok(_) = simplifile.create_directory_all(root)
 
   let pid =
@@ -61,7 +61,7 @@ pub fn serve_kill_stops_running() {
 
 pub fn serve_kill_no_server() {
   let root = "./build/test-workspaces/daemon-kill-no-server"
-  let pidfile = root <> "/sad.pid"
+  let pidfile = root <> "/saar.pid"
   let assert Ok(_) = simplifile.create_directory_all(root)
 
   let kill_result = daemon_control.kill(pidfile, 50)
@@ -75,8 +75,8 @@ pub fn serve_kill_no_server() {
 
 pub fn serve_status_running() {
   let root = "./build/test-workspaces/daemon-status-running"
-  let pidfile = root <> "/sad.pid"
-  let logfile = root <> "/sad.log"
+  let pidfile = root <> "/saar.pid"
+  let logfile = root <> "/saar.log"
   let assert Ok(_) = simplifile.create_directory_all(root)
 
   let pid =
@@ -93,7 +93,7 @@ pub fn serve_status_running() {
 
   should.equal(
     daemon_control.status_message(status, 8080),
-    "SAD running on port 8080 (PID " <> int.to_string(pid) <> ")",
+    "SAAR running on port 8080 (PID " <> int.to_string(pid) <> ")",
   )
 
   daemon.kill_process(pid, 500) |> assert_ok_nil
@@ -101,8 +101,8 @@ pub fn serve_status_running() {
 
 pub fn serve_status_not_running() {
   let root = "./build/test-workspaces/daemon-status-not-running"
-  let pidfile = root <> "/sad.pid"
-  let logfile = root <> "/sad.log"
+  let pidfile = root <> "/saar.pid"
+  let logfile = root <> "/saar.log"
   let assert Ok(_) = simplifile.create_directory_all(root)
 
   let pid =
@@ -125,7 +125,7 @@ pub fn serve_status_not_running() {
     _ -> panic as "Expected pidfile deleted"
   }
 
-  should.equal(daemon_control.status_message(status, 8080), "SAD not running")
+  should.equal(daemon_control.status_message(status, 8080), "SAAR not running")
 }
 
 pub fn serve_background_forks_process_test() {

@@ -10,22 +10,22 @@ import gleeunit
 import gleeunit/should
 import port_helpers
 import runner_fixtures
-import sad/app_state
-import sad/bridge/http_client
-import sad/bridge/runner
-import sad/core/agent
-import sad/core/messages
-import sad/core/root_supervisor
-import sad/core/supervisor_names
-import sad/decoders
-import sad/net/tcp_listener
-import sad/otp/safe_call
-import sad/types/agent as types_agent
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/types/input as types_input
-import sad/types/profile as types_profile
-import sad/types/runner as types_runner
+import saar/app_state
+import saar/bridge/http_client
+import saar/bridge/runner
+import saar/core/agent
+import saar/core/messages
+import saar/core/root_supervisor
+import saar/core/supervisor_names
+import saar/decoders
+import saar/net/tcp_listener
+import saar/otp/safe_call
+import saar/types/agent as types_agent
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/types/input as types_input
+import saar/types/profile as types_profile
+import saar/types/runner as types_runner
 import simplifile
 import test_assertions
 
@@ -115,23 +115,23 @@ pub fn port_injected_into_env_test() {
   let assert Ok(dynamic_env) = json.parse(resp.body, decode.dynamic)
 
   let decoder = {
-    use sad_host <- decode.field("SAD_HOST", decode.optional(decode.string))
-    use sad_port <- decode.field("SAD_PORT", decode.optional(decode.string))
+    use saar_host <- decode.field("SAAR_HOST", decode.optional(decode.string))
+    use saar_port <- decode.field("SAAR_PORT", decode.optional(decode.string))
     use test_host <- decode.field("TEST_HOST", decode.optional(decode.string))
     use test_port <- decode.field("TEST_PORT", decode.optional(decode.string))
-    decode.success(#(sad_host, sad_port, test_host, test_port))
+    decode.success(#(saar_host, saar_port, test_host, test_port))
   }
 
   let assert Ok(#(
-    Some(sad_host),
-    Some(sad_port),
+    Some(saar_host),
+    Some(saar_port),
     Some(test_host),
     Some(test_port),
   )) = decode.run(dynamic_env, decoder)
 
-  sad_host |> should.equal(host)
+  saar_host |> should.equal(host)
   test_host |> should.equal(host)
-  sad_port |> should.equal(int.to_string(port))
+  saar_port |> should.equal(int.to_string(port))
   test_port |> should.equal(int.to_string(port))
 }
 
@@ -218,9 +218,9 @@ pub fn managed_port_race_fails_fast_test() {
 }
 
 fn start_root(
-  cfg: types_config.SadConfig,
+  cfg: types_config.SaarConfig,
 ) -> process.Subject(messages.AgentManagerMsg) {
-  let cfg = types_config.SadConfig(..cfg, server_port: 0)
+  let cfg = types_config.SaarConfig(..cfg, server_port: 0)
 
   let names = supervisor_names.new_names()
   let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
@@ -235,7 +235,7 @@ fn start_instance(
   manager: process.Subject(messages.AgentManagerMsg),
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
-  cfg: types_config.SadConfig,
+  cfg: types_config.SaarConfig,
 ) -> agent.AgentRef {
   let artifact_registry = process.new_subject()
 
@@ -374,10 +374,10 @@ fn pick_free_port() -> Int {
   port
 }
 
-fn config_with_port_range(port: Int) -> types_config.SadConfig {
-  let cfg0 = types_config.default_sad_config()
+fn config_with_port_range(port: Int) -> types_config.SaarConfig {
+  let cfg0 = types_config.default_saar_config()
 
-  let types_config.SadConfig(runner: runner0, timeouts: timeouts0, ..) = cfg0
+  let types_config.SaarConfig(runner: runner0, timeouts: timeouts0, ..) = cfg0
 
   let runner =
     types_config.RunnerSystemConfig(
@@ -388,19 +388,19 @@ fn config_with_port_range(port: Int) -> types_config.SadConfig {
     )
 
   // Keep these tests fast.
-  let timeouts = types_config.SadTimeouts(..timeouts0, shutdown_timeout_ms: 250)
+  let timeouts = types_config.SaarTimeouts(..timeouts0, shutdown_timeout_ms: 250)
 
-  types_config.SadConfig(..cfg0, runner: runner, timeouts: timeouts)
+  types_config.SaarConfig(..cfg0, runner: runner, timeouts: timeouts)
 }
 
 fn config_with_managed_host(
-  cfg0: types_config.SadConfig,
+  cfg0: types_config.SaarConfig,
   managed_host: String,
-) -> types_config.SadConfig {
-  let types_config.SadConfig(runner: runner0, ..) = cfg0
+) -> types_config.SaarConfig {
+  let types_config.SaarConfig(runner: runner0, ..) = cfg0
   let runner =
     types_config.RunnerSystemConfig(..runner0, managed_port_host: managed_host)
-  types_config.SadConfig(..cfg0, runner: runner)
+  types_config.SaarConfig(..cfg0, runner: runner)
 }
 
 fn echo_server_profile_managed_port() -> types_profile.Profile {
@@ -431,7 +431,7 @@ fn start_echo_server_with_runtime(
   let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
   tcp_listener.close(listener)
 
-  let config = types_config.default_sad_config()
+  let config = types_config.default_saar_config()
   let input = base_input_with_runtime(runtime)
 
   let env = port_helpers.base_env(500, [])
@@ -459,14 +459,14 @@ fn start_echo_server_with_runtime(
 
 fn base_input_with_runtime(
   runtime: types_runner.RuntimeConfig,
-) -> types_input.SadInput {
+) -> types_input.SaarInput {
   let base_input =
     runner_fixtures.base_input(
       runner_fixtures.default_chat_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
 
-  types_input.SadInput(
+  types_input.SaarInput(
     ..base_input,
     runner_def: types_runner.Runner(..base_input.runner_def, runtime: runtime),
   )

@@ -5,14 +5,14 @@ import gleam/http
 import gleam/int
 import gleam/list
 import gleam/option
-import sad/bridge/http_client
-import sad/bridge/port_process
+import saar/bridge/http_client
+import saar/bridge/port_process
 import test_assertions
 
 pub const default_read_timeout_ms = 200
 
 pub fn ensure_wrapper_path() {
-  envoy.set("SAD_WRAPPER_PATH", "./priv/sad_wrapper")
+  envoy.set("SAAR_WRAPPER_PATH", "./priv/saar_wrapper")
 }
 
 pub fn base_env(
@@ -25,8 +25,8 @@ pub fn base_env(
   }
 
   list.append(path_env, [
-    #("SAD_SHUTDOWN_MS", int.to_string(shutdown_ms)),
-    #("SAD_WRAPPER_FORCE_FALLBACK", "1"),
+    #("SAAR_SHUTDOWN_MS", int.to_string(shutdown_ms)),
+    #("SAAR_WRAPPER_FORCE_FALLBACK", "1"),
     ..extra
   ])
 }
@@ -35,7 +35,7 @@ pub fn env_with_workspace(
   shutdown_ms: Int,
   workspace: String,
 ) -> List(#(String, String)) {
-  base_env(shutdown_ms, [#("SAD_WORKSPACE", workspace)])
+  base_env(shutdown_ms, [#("SAAR_WORKSPACE", workspace)])
 }
 
 pub fn start_process(

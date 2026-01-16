@@ -12,14 +12,14 @@ import gleam/string
 import gleeunit
 import gleeunit/should
 import port_helpers
-import sad/app_state
-import sad/bridge/http_client
-import sad/config_loader
-import sad/core/root_supervisor
-import sad/core/supervisor_names
-import sad/net/tcp_listener
-import sad/profiles_sources
-import sad/types/config as types_config
+import saar/app_state
+import saar/bridge/http_client
+import saar/config_loader
+import saar/core/root_supervisor
+import saar/core/supervisor_names
+import saar/net/tcp_listener
+import saar/profiles_sources
+import saar/types/config as types_config
 import simplifile
 
 const api_key = "test-key"
@@ -31,7 +31,7 @@ pub fn main() {
 }
 
 pub fn proxy_ui_agui_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-ui-health-1"
   create_agent(base_url, "echo_server", instance_id)
@@ -53,7 +53,7 @@ pub fn proxy_ui_agui_test() {
 }
 
 pub fn ui_proxy_auth_required_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let resp =
     http_client.request_sync_string(
@@ -70,7 +70,7 @@ pub fn ui_proxy_auth_required_test() {
 }
 
 pub fn proxy_ui_server_down_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-ui-down-1"
   create_agent(base_url, "echo_server", instance_id)
@@ -103,7 +103,7 @@ pub fn proxy_ui_server_down_test() {
 }
 
 pub fn ui_proxy_upstream_not_client_controlled_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-ui-headers-1"
   create_agent(base_url, "echo_server", instance_id)
@@ -111,7 +111,7 @@ pub fn ui_proxy_upstream_not_client_controlled_test() {
 
   let headers =
     auth_headers()
-    |> dict.insert("x-sad-upstream", "http://evil.invalid")
+    |> dict.insert("x-saar-upstream", "http://evil.invalid")
 
   let resp =
     http_client.request_sync_string(
@@ -126,11 +126,11 @@ pub fn ui_proxy_upstream_not_client_controlled_test() {
 
   resp.status |> should.equal(200)
   // Not an open proxy: only allowlisted headers are forwarded.
-  should.equal(string.contains(resp.body, "x-sad-upstream"), False)
+  should.equal(string.contains(resp.body, "x-saar-upstream"), False)
 }
 
 pub fn ui_proxy_does_not_forward_authorization_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-ui-auth-1"
   create_agent(base_url, "echo_server", instance_id)
@@ -167,19 +167,19 @@ pub fn ui_proxy_does_not_forward_authorization_test() {
 
   // Business context headers are injected.
   should.equal(
-    dict.get(upstream_headers, "x-sad-instance-id")
+    dict.get(upstream_headers, "x-saar-instance-id")
       |> option.from_result,
     option.Some(instance_id),
   )
   should.equal(
-    dict.get(upstream_headers, "x-sad-profile-id")
+    dict.get(upstream_headers, "x-saar-profile-id")
       |> option.from_result,
     option.Some("echo_server"),
   )
 }
 
 pub fn ui_proxy_does_not_add_cors_headers_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-ui-cors-1"
   create_agent(base_url, "echo_server", instance_id)
@@ -205,7 +205,7 @@ pub fn ui_proxy_does_not_add_cors_headers_test() {
 }
 
 pub fn ui_proxy_problem_details_does_not_leak_secrets_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-ui-secrets-1"
   create_agent(base_url, "echo_server", instance_id)
@@ -228,7 +228,7 @@ pub fn ui_proxy_problem_details_does_not_leak_secrets_test() {
 }
 
 pub fn ui_proxy_rejects_path_traversal_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let resp1 =
     http_client.request_sync_string(
@@ -258,7 +258,7 @@ pub fn ui_proxy_rejects_path_traversal_test() {
 }
 
 pub fn ui_proxy_invalid_instance_id_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let resp =
     http_client.request_sync_string(
@@ -276,7 +276,7 @@ pub fn ui_proxy_invalid_instance_id_test() {
 }
 
 pub fn ui_proxy_unknown_instance_returns_404_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let resp =
     http_client.request_sync_string(
@@ -293,7 +293,7 @@ pub fn ui_proxy_unknown_instance_returns_404_test() {
 }
 
 pub fn ui_proxy_rejects_non_http_profile_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-ui-non-http-1"
   create_agent(base_url, "runner_only_continuous", instance_id)
@@ -315,7 +315,7 @@ pub fn ui_proxy_rejects_non_http_profile_test() {
 }
 
 pub fn ui_proxy_invalid_base_url_returns_400_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-ui-bad-base-url-1"
   create_agent(base_url, "bad_base_url", instance_id)
@@ -337,7 +337,7 @@ pub fn ui_proxy_invalid_base_url_returns_400_test() {
 }
 
 pub fn ui_proxy_request_body_too_large_returns_413_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-ui-body-too-large-1"
   create_agent(base_url, "echo_server", instance_id)
@@ -361,7 +361,7 @@ pub fn ui_proxy_request_body_too_large_returns_413_test() {
 }
 
 pub fn ui_proxy_rejects_websocket_upgrade_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let headers =
     auth_headers()
@@ -387,7 +387,7 @@ pub fn ui_proxy_rejects_websocket_upgrade_test() {
 }
 
 pub fn ui_proxy_binary_passthrough_test() {
-  let base_url = start_sad()
+  let base_url = start_saar()
 
   let instance_id = "inst-ui-bin-1"
   create_agent(base_url, "echo_server", instance_id)
@@ -409,7 +409,7 @@ pub fn ui_proxy_binary_passthrough_test() {
   bit_array.byte_size(body) |> should.equal(16)
 }
 
-fn start_sad() -> String {
+fn start_saar() -> String {
   port_helpers.ensure_wrapper_path()
 
   let cfg0 =
@@ -417,7 +417,7 @@ fn start_sad() -> String {
       "./test/fixtures/config/test_config.toml",
       fn(name) {
         case name {
-          "SAD_TEST_API_KEY" -> Ok(api_key)
+          "SAAR_TEST_API_KEY" -> Ok(api_key)
           _ -> Error(Nil)
         }
       },
@@ -430,7 +430,7 @@ fn start_sad() -> String {
 
   let names = supervisor_names.new_names_with_suffix(int.to_string(port))
 
-  let cfg = types_config.SadConfig(..cfg0, server_port: port)
+  let cfg = types_config.SaarConfig(..cfg0, server_port: port)
 
   let profiles = profiles_sources.load_profiles_from_sources(cfg) |> assert_ok
 

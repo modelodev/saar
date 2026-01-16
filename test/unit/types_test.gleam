@@ -3,12 +3,12 @@ import gleam/option.{None, Some}
 import gleam/string
 import gleeunit
 import gleeunit/should
-import sad/bridge/runner_contract
-import sad/types/config as types_config
-import sad/types/core as types_core
-import sad/types/enums as types_enums
-import sad/types/resolved_params
-import sad/types/runner as types_runner
+import saar/bridge/runner_contract
+import saar/types/config as types_config
+import saar/types/core as types_core
+import saar/types/enums as types_enums
+import saar/types/resolved_params
+import saar/types/runner as types_runner
 
 pub fn main() {
   gleeunit.main()
@@ -87,7 +87,7 @@ pub fn instance_id_validation_test() {
 }
 
 pub fn config_value_lookup_test() {
-  let cfg = types_config.default_sad_config()
+  let cfg = types_config.default_saar_config()
 
   types_config.config_value(cfg, "server.host")
   |> should.equal(Some(types_core.StringVal("0.0.0.0")))
@@ -100,7 +100,7 @@ pub fn config_value_lookup_test() {
 }
 
 pub fn default_config_invariants_test() {
-  let types_config.SadConfig(
+  let types_config.SaarConfig(
     server_host: server_host,
     server_port: server_port,
     api_key: api_key,
@@ -112,9 +112,9 @@ pub fn default_config_invariants_test() {
     stream: stream,
     landlock_mode: landlock_mode,
     landlock_policy: _landlock_policy,
-  ) = types_config.default_sad_config()
+  ) = types_config.default_saar_config()
 
-  let types_config.SadTimeouts(
+  let types_config.SaarTimeouts(
     call_timeout_ms: call_timeout_ms,
     status_timeout_ms: status_timeout_ms,
     registry_timeout_ms: registry_timeout_ms,
@@ -141,7 +141,7 @@ pub fn default_config_invariants_test() {
     artifacts: artifacts,
   ) = storage
 
-  let types_config.SadLimits(
+  let types_config.SaarLimits(
     log_buffer_bytes: log_buffer_bytes,
     max_stdout_bytes: max_stdout_bytes,
     max_runner_event_bytes: max_runner_event_bytes,
@@ -164,7 +164,7 @@ pub fn default_config_invariants_test() {
   registry_timeout_ms |> should.equal(5000)
   health_check_timeout_ms |> should.equal(10_000)
   shutdown_timeout_ms |> should.equal(10_000)
-  profiles_git_cache_dir |> should.equal("./.sad/cache/git")
+  profiles_git_cache_dir |> should.equal("./.saar/cache/git")
   runners_python_bin |> should.equal("python3")
   workspaces_directory |> should.equal("./workspaces")
   log_buffer_bytes |> should.equal(1_048_576)

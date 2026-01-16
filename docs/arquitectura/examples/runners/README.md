@@ -11,15 +11,15 @@ Expectativas para cualquier runner:
   - `{"t":"log","message":"...","level":"info"}` (opcional)
   - `{"t":"chunk","delta":"..."}` (opcional; si `streaming: true`)
   - `{"t":"result", ...RunnerResponse...}` (obligatorio; exactamente uno)
-- STDERR: fuera de contrato (diagnóstico local); SAD no depende de capturarlo.
-- `runner_def.env_map` y `runner_def.args` llegan ya resueltos por SAD (sin `{{...}}`).
+- STDERR: fuera de contrato (diagnóstico local); SAAR no depende de capturarlo.
+- `runner_def.env_map` y `runner_def.args` llegan ya resueltos por SAAR (sin `{{...}}`).
 - No necesitan implementar stop; basta con reaccionar a SIGTERM/SIGKILL y salir.
-- Host/port llegan por env (`SAD_HOST`/`SAD_PORT` o `runtime.port_env_var/host_env_var`).
-- Input llega en `SAD_INPUT_JSON` (ya validado) reenviado por el wrapper desde `{"t":"input","payload":<SAD_INPUT_JSON>}`.
-- SAD habla con el wrapper/runner vía una única abstracción (`sad/bridge/port_process.gleam`) para aislar la implementación de ports (FFI mínima).
+- Host/port llegan por env (`SAAR_HOST`/`SAAR_PORT` o `runtime.port_env_var/host_env_var`).
+- Input llega en `SAAR_INPUT_JSON` (ya validado) reenviado por el wrapper desde `{"t":"input","payload":<SAAR_INPUT_JSON>}`.
+- SAAR habla con el wrapper/runner vía una única abstracción (`saar/bridge/port_process.gleam`) para aislar la implementación de ports (FFI mínima).
 
 Runners incluidos:
 - `generic_uvx.py`: para agentes transient (CLI).
 - `generic_uvx_server.py`: para agentes continuous (server).
 
-Nota (continuous): el runner de servidor debe capturar stdout/stderr del proceso hijo y reemitirlos como `t="log"` por STDOUT; el proceso hijo no puede escribir bytes libres al STDOUT del runner, porque SAD espera JSONL.
+Nota (continuous): el runner de servidor debe capturar stdout/stderr del proceso hijo y reemitirlos como `t="log"` por STDOUT; el proceso hijo no puede escribir bytes libres al STDOUT del runner, porque SAAR espera JSONL.

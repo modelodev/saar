@@ -1,17 +1,17 @@
 import gleam/dict
 import gleam/option
-import sad/types/core as types_core
-import sad/types/input as types_input
-import sad/types/resolved_params
-import sad/types/runner as types_runner
+import saar/types/core as types_core
+import saar/types/input as types_input
+import saar/types/resolved_params
+import saar/types/runner as types_runner
 
 pub fn base_input(
   payload: types_input.InputPayload,
   artifact_config: types_runner.ArtifactConfig,
-) -> types_input.SadInput {
+) -> types_input.SaarInput {
   let assert Ok(instance_id) = types_core.instance_id("inst-1")
 
-  types_input.SadInput(
+  types_input.SaarInput(
     meta: types_input.TransientMeta(
       "v0",
       types_core.profile_id("profile-1"),
