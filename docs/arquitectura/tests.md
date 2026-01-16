@@ -183,8 +183,8 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `validate_normalizes_double_slash` | `"a//b"` → `"a/b"` |
 | `read_file_rejects_symlink_escape` | `workspace/a.txt` symlink → `/etc/passwd` → `Error(PathOutsideWorkspace)` (symlink-safe FS access) |
 | `to_string_roundtrip` | `to_string(validate(s))` preserva path válido |
-| `to_os_path_absolute` | Path ya absoluto → devuelve tal cual |
-| `to_os_path_relative` | Path relativo → une con base_dir |
+| `to_absolute_joins_root` | `workspace_path_to_absolute(root, path)` une con `root` |
+| `join_valid` | `workspace_path_join(root, "output/result.json")` → `Ok` |
 | `join_valid` | `join(root, "output/result.json")` → `Ok` |
 | `join_traversal` | `join(root, "../etc")` → `Error` |
 | `dir_name_format` | `dir_name(id)` → `"workspace-<id>"` |
@@ -199,7 +199,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 | `prop_valid_path_no_parent_segment` | Path aceptado nunca contiene `..` |
 | `prop_valid_path_no_null_char` | Path aceptado nunca contiene `\0` |
 | `prop_validate_idempotent` | `validate(to_string(p))` equivalente al original |
-| `prop_to_os_path_starts_with_base` | Output de `to_os_path` siempre empieza con base_dir |
+| `prop_to_absolute_starts_with_root` | Output de `workspace_path_to_absolute` siempre empieza con root |
 
 ---
 
@@ -224,8 +224,8 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 
 | Propiedad | Descripción |
 |-----------|-------------|
-| `prop_runner_response_roundtrip` | `decode(encode(rr)) == rr` |
-| `prop_valid_responses_pass_validation` | Respuestas bien formadas siempre pasan `validate_response` |
+| `prop_decode_event_result_matches_runner_response_from_raw` | Decoding a result line yields `runner_response_from_raw(...)` |
+| `prop_valid_sequences_pass_validation` | Sequences with exactly one result (and chunks only when streaming) pass `validate_sequence` |
 
 ---
 
