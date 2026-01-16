@@ -52,6 +52,7 @@ Las rutas se permiten por tipo de permiso. Fuera de esta lista: denegado.
 - `/lib`
 - `/lib64`
 - `/usr`
+- `/home` (required for local profile sources)
 
 ### Read + Write + Exec (R+W+X)
 - `<workspace_dir>` de la instancia
@@ -63,6 +64,9 @@ Las rutas se permiten por tipo de permiso. Fuera de esta lista: denegado.
 Cuando el runner proviene de `profiles.sources`:
 - `<source_root>/runners` (R+X)
 - `<source_root>/profiles` (R)
+
+Nota: en v0 el wrapper deriva `<source_root>` desde el directorio actual del runner
+(`SAD_WORKSPACE` / `workspaces.directory`). Eso cubre `profiles.sources = dir`.
 
 ## Efectos esperados
 - El runner puede leer certificados y resolucion DNS del sistema.

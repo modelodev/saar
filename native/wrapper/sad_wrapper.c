@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -652,6 +653,39 @@ static int ll_restrict_self(int ruleset_fd, __u32 flags) {
   return syscall(__NR_landlock_restrict_self, ruleset_fd, flags);
 }
 
+static bool ensure_directory_exists(const char *path) {
+  if (!path || path[0] == '\0') {
+    return false;
+  }
+
+  // Best-effort recursive mkdir without invoking a shell.
+  char buf[4096];
+  size_t len = strlen(path);
+  if (len >= sizeof(buf)) {
+    return false;
+  }
+  memcpy(buf, path, len + 1);
+
+  // Walk segments, creating intermediate directories.
+  for (size_t i = 1; i < len; i++) {
+    if (buf[i] != '/') {
+      continue;
+    }
+    buf[i] = '\0';
+    if (mkdir(buf, 0755) != 0 && errno != EEXIST) {
+      buf[i] = '/';
+      return false;
+    }
+    buf[i] = '/';
+  }
+
+  if (mkdir(buf, 0755) != 0 && errno != EEXIST) {
+    return false;
+  }
+
+  return true;
+}
+
 static int try_apply_landlock_policy_v0(const char *workspace_dir,
                                        LandlockMode mode) {
   if (mode == LANDLOCK_MODE_OFF) {
@@ -667,6 +701,9 @@ static int try_apply_landlock_policy_v0(const char *workspace_dir,
     debug_log("landlock: missing SAD_WORKSPACE, skipping");
     return 0;
   }
+
+  // Ensure the workspace exists before we restrict filesystem access.
+  (void)ensure_directory_exists(workspace_dir);
 
   // Landlock requires no_new_privs.
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
@@ -735,6 +772,7 @@ static int try_apply_landlock_policy_v0(const char *workspace_dir,
       "/lib",
       "/lib64",
       "/usr",
+      "/home",
       NULL,
   };
 
