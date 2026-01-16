@@ -11,6 +11,7 @@ import sad/bridge/managed_port_env
 import sad/bridge/port_process
 import sad/bridge/runner_contract
 import sad/bridge/serialization
+import sad/bridge/wrapper_env
 import sad/core/artifact_registry_protocol
 import sad/ffi
 import sad/types/config as types_config
@@ -71,7 +72,7 @@ pub fn execute_transient(
     shutdown_timeout_ms,
     wrapper,
     config.landlock_mode,
-    landlock_policy_json(config, cwd),
+    config.landlock_policy,
     True,
   ))
 
@@ -134,7 +135,7 @@ pub fn run_provision(
     shutdown_timeout_ms,
     wrapper,
     config.landlock_mode,
-    landlock_policy_json(config, cwd),
+    config.landlock_policy,
     True,
   ))
 
@@ -183,12 +184,13 @@ pub fn start_server(
   ) = types_config.runner_exec_settings(config)
 
   let env =
-    append_wrapper_env(
+    wrapper_env.append(
       env,
       wrapper,
       shutdown_timeout_ms,
       config.landlock_mode,
-      landlock_policy_json(config, cwd),
+      config.landlock_policy,
+      cwd,
     )
 
   use env <- result.try(managed_port_env.inject_managed_port_env(
@@ -325,16 +327,17 @@ fn run_and_collect_events(
   shutdown_timeout_ms: Int,
   wrapper: types_config.WrapperConfig,
   landlock_mode: types_enums.LandlockMode,
-  landlock_policy_json: option.Option(String),
+  landlock_policy: option.Option(types_config.LandlockPolicyConfig),
   stop_on_timeout: Bool,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let env =
-    append_wrapper_env(
+    wrapper_env.append(
       env,
       wrapper,
       shutdown_timeout_ms,
       landlock_mode,
-      landlock_policy_json,
+      landlock_policy,
+      cwd,
     )
 
   use process <- result.try(start_process(
@@ -751,66 +754,6 @@ fn interaction_error(
   message: String,
 ) -> types_output.InteractionError {
   types_output.sad_error(trace_id, types_enums.InfraError, message)
-}
-
-fn landlock_policy_json(
-  config: types_config.SadConfig,
-  workspace: String,
-) -> option.Option(String) {
-  let types_config.SadConfig(landlock_policy: policy_opt, ..) = config
-
-  case policy_opt {
-    option.None -> option.None
-    option.Some(policy0) -> {
-      let types_config.LandlockPolicyConfig(
-        allow_read: allow_read0,
-        allow_exec: allow_exec0,
-        allow_write: allow_write0,
-      ) = policy0
-
-      let allow_read = list.append(allow_read0, [workspace])
-      let allow_write = list.append(allow_write0, [workspace])
-
-      json.object([
-        #("allow_read", json.array(allow_read, json.string)),
-        #("allow_exec", json.array(allow_exec0, json.string)),
-        #("allow_write", json.array(allow_write, json.string)),
-      ])
-      |> json.to_string
-      |> option.Some
-    }
-  }
-}
-
-fn append_wrapper_env(
-  env: List(#(String, String)),
-  wrapper: types_config.WrapperConfig,
-  shutdown_timeout_ms: Int,
-  landlock_mode: types_enums.LandlockMode,
-  landlock_policy_json: option.Option(String),
-) -> List(#(String, String)) {
-  let types_config.WrapperConfig(
-    read_buffer_bytes: read_buffer_bytes,
-    control_line_bytes: control_line_bytes,
-    poll_interval_ms: poll_interval_ms,
-    post_kill_wait_ms: post_kill_wait_ms,
-  ) = wrapper
-
-  let base = [
-    #("SAD_SHUTDOWN_MS", int.to_string(shutdown_timeout_ms)),
-    #("SAD_WRAPPER_READ_BUFFER_BYTES", int.to_string(read_buffer_bytes)),
-    #("SAD_WRAPPER_CONTROL_LINE_BYTES", int.to_string(control_line_bytes)),
-    #("SAD_WRAPPER_POLL_MS", int.to_string(poll_interval_ms)),
-    #("SAD_WRAPPER_POST_KILL_WAIT_MS", int.to_string(post_kill_wait_ms)),
-    #("SAD_LANDLOCK_MODE", types_enums.landlock_mode_to_string(landlock_mode)),
-  ]
-
-  let policy = case landlock_policy_json {
-    option.Some(policy_json) -> [#("SAD_LANDLOCK_POLICY_JSON", policy_json)]
-    option.None -> []
-  }
-
-  list.append(env, list.append(base, policy))
 }
 
 fn deadline_from_timeout(timeout_ms: Int) -> Deadline {
