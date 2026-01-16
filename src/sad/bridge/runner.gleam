@@ -70,6 +70,7 @@ pub fn execute_transient(
     timeout_ms,
     shutdown_timeout_ms,
     wrapper,
+    config.landlock_mode,
     True,
   ))
 
@@ -131,6 +132,7 @@ pub fn run_provision(
     timeout_ms,
     shutdown_timeout_ms,
     wrapper,
+    config.landlock_mode,
     True,
   ))
 
@@ -178,7 +180,8 @@ pub fn start_server(
     ..,
   ) = types_config.runner_exec_settings(config)
 
-  let env = append_wrapper_env(env, wrapper, shutdown_timeout_ms)
+  let env =
+    append_wrapper_env(env, wrapper, shutdown_timeout_ms, config.landlock_mode)
 
   use env <- result.try(managed_port_env.inject_managed_port_env(
     env,
@@ -313,9 +316,10 @@ fn run_and_collect_events(
   timeout_ms: Int,
   shutdown_timeout_ms: Int,
   wrapper: types_config.WrapperConfig,
+  landlock_mode: types_enums.LandlockMode,
   stop_on_timeout: Bool,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
-  let env = append_wrapper_env(env, wrapper, shutdown_timeout_ms)
+  let env = append_wrapper_env(env, wrapper, shutdown_timeout_ms, landlock_mode)
 
   use process <- result.try(start_process(
     runner_path,
@@ -605,6 +609,10 @@ fn handle_port_exit(
         True -> Error(interaction_error(trace_id, "Runner call timeout"))
         False -> Ok(list.reverse(events))
       }
+
+    code if code == port_process.landlock_unavailable_exit_code ->
+      Error(interaction_error(trace_id, "LANDLOCK_UNAVAILABLE"))
+
     _ ->
       Error(interaction_error(
         trace_id,
@@ -733,6 +741,7 @@ fn append_wrapper_env(
   env: List(#(String, String)),
   wrapper: types_config.WrapperConfig,
   shutdown_timeout_ms: Int,
+  landlock_mode: types_enums.LandlockMode,
 ) -> List(#(String, String)) {
   let types_config.WrapperConfig(
     read_buffer_bytes: read_buffer_bytes,
@@ -747,6 +756,7 @@ fn append_wrapper_env(
     #("SAD_WRAPPER_CONTROL_LINE_BYTES", int.to_string(control_line_bytes)),
     #("SAD_WRAPPER_POLL_MS", int.to_string(poll_interval_ms)),
     #("SAD_WRAPPER_POST_KILL_WAIT_MS", int.to_string(post_kill_wait_ms)),
+    #("SAD_LANDLOCK_MODE", types_enums.landlock_mode_to_string(landlock_mode)),
   ])
 }
 
