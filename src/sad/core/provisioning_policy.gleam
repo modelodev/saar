@@ -92,13 +92,18 @@ pub fn from_port_pool_error(
 ///
 /// This parses stable, wrapper-generated substrings.
 pub fn from_port_owner_start_reason(reason: String) -> types_agent.FailureReason {
-  case string.contains(reason, "CheckPortInUse") {
-    True -> types_agent.PortInUse
+  case string.contains(reason, "LANDLOCK_UNAVAILABLE") {
+    True -> types_agent.LandlockUnavailable
 
     False ->
-      case string.contains(reason, "Managed port check failed") {
-        True -> types_agent.PortBindFailed
-        False -> types_agent.StartServerFailed
+      case string.contains(reason, "CheckPortInUse") {
+        True -> types_agent.PortInUse
+
+        False ->
+          case string.contains(reason, "Managed port check failed") {
+            True -> types_agent.PortBindFailed
+            False -> types_agent.StartServerFailed
+          }
       }
   }
 }

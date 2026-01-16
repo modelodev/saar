@@ -69,13 +69,22 @@ pub fn classifies_port_pool_errors_test() {
 }
 
 pub fn classifies_port_owner_start_reason_test() {
+  provisioning_policy.from_port_owner_start_reason("LANDLOCK_UNAVAILABLE")
+  |> should.equal(types_agent.LandlockUnavailable)
+
   provisioning_policy.from_port_owner_start_reason("CheckPortInUse")
   |> should.equal(types_agent.PortInUse)
 
   provisioning_policy.from_port_owner_start_reason("Managed port check failed")
   |> should.equal(types_agent.PortBindFailed)
 
-  // Prefer "in use" when multiple signals exist.
+  // Prefer "landlock" when multiple signals exist.
+  provisioning_policy.from_port_owner_start_reason(
+    "LANDLOCK_UNAVAILABLE; CheckPortInUse; Managed port check failed",
+  )
+  |> should.equal(types_agent.LandlockUnavailable)
+
+  // Otherwise keep previous precedence.
   provisioning_policy.from_port_owner_start_reason(
     "CheckPortInUse; Managed port check failed",
   )
