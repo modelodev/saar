@@ -624,6 +624,25 @@ fn message_a2ui_json(data: json.Json) -> json.Json {
   ])
 }
 
+fn ingest_part_json(ingest: json.Json) -> json.Json {
+  json.object([
+    #("data", json.object([#("ingest", ingest)])),
+    #(
+      "metadata",
+      json.object([
+        #("mimeType", json.string("application/json")),
+      ]),
+    ),
+  ])
+}
+
+fn message_ingest_json(ingest: json.Json) -> json.Json {
+  json.object([
+    #("role", json.string("assistant")),
+    #("parts", json.array([ingest_part_json(ingest)], fn(item) { item })),
+  ])
+}
+
 fn encode_a2a_artifact(artifact: types_output.PublicArtifact) -> json.Json {
   json.object([
     #("id", json.string(types_core.artifact_id_to_string(artifact.id))),
@@ -642,10 +661,26 @@ fn message_from_result(result: types_output.InteractionResult) -> json.Json {
     None -> []
   }
 
+  let ingest_part = case dict.get(result.data.metadata, "ingest") {
+    Ok(ingest) -> Some(ingest_part_json(ingest))
+    Error(_) -> None
+  }
+
+  let parts = case ingest_part {
+    Some(part) -> list.append(parts, [part])
+    None -> parts
+  }
+
   json.object([
     #("role", json.string("assistant")),
     #("parts", json.array(parts, fn(item) { item })),
   ])
+}
+
+/// Builds an A2A stream event carrying ingest metadata.
+pub fn ingest_data_event(ingest: json.Json) -> stream.StreamEvent {
+  let payload = message_ingest_json(ingest) |> json.to_string
+  stream.event(sse.named_event("message", payload))
 }
 
 fn artifacts_from_result(result: types_output.InteractionResult) -> json.Json {
@@ -768,6 +803,7 @@ pub fn agent_card_from_instance(
     <> "/a2a"
 
   let skills = capabilities_to_skills(interface)
+  let extensions = agent_card_extensions(interface)
 
   json.object([
     #("name", json.string(card_name)),
@@ -782,15 +818,7 @@ pub fn agent_card_from_instance(
         #("pushNotifications", json.bool(False)),
       ]),
     ),
-    #(
-      "extensions",
-      json.array(
-        [
-          json.string("urn:saar:extensions:files-semantics:v1"),
-        ],
-        fn(item) { item },
-      ),
-    ),
+    #("extensions", extensions),
     #("skills", json.array(skills, fn(item) { item })),
   ])
 }
@@ -805,9 +833,10 @@ fn capabilities_to_skills(interface: types_profile.Interface) -> List(json.Json)
         let types_profile.RunnerCapability(
           input_schema: schema,
           description: description,
+          files: files,
           ..,
         ) = cap
-        skill_json(id, schema, description)
+        skill_json(id, schema, description, files, None)
       })
 
     types_profile.HttpInterface(_, _, _, caps) ->
@@ -818,9 +847,11 @@ fn capabilities_to_skills(interface: types_profile.Interface) -> List(json.Json)
         let types_profile.HttpCapability(
           input_schema: schema,
           description: description,
+          files: files,
+          response: response,
           ..,
         ) = cap
-        skill_json(id, schema, description)
+        skill_json(id, schema, description, files, response)
       })
   }
 }
@@ -829,28 +860,127 @@ fn skill_json(
   id: String,
   schema: Option(types_profile.InputSchema),
   description: Option(String),
+  files: Option(types_profile.FilesSemantics),
+  response: Option(types_profile.ResponseConfig),
 ) -> json.Json {
   let desc = case description {
     Some(text) -> text
     None -> ""
   }
 
+  let input_modes = input_modes(schema)
+  let output_modes = output_modes(files, response)
+  let extensions = skill_extensions(files)
+
   json.object([
     #("id", json.string(id)),
     #("name", json.string(id)),
     #("description", json.string(desc)),
-    #(
-      "inputModes",
-      json.array([json.string(input_mode(schema))], fn(item) { item }),
-    ),
-    #("outputModes", json.array([json.string("text")], fn(item) { item })),
+    #("inputModes", json.array(input_modes, fn(item) { json.string(item) })),
+    #("outputModes", json.array(output_modes, fn(item) { json.string(item) })),
+    #("extensions", extensions),
   ])
 }
 
-fn input_mode(schema: Option(types_profile.InputSchema)) -> String {
+fn input_modes(schema: Option(types_profile.InputSchema)) -> List(String) {
   case schema {
-    Some(types_profile.SchemaFiles) -> "file"
-    _ -> "text"
+    Some(types_profile.SchemaFiles) -> ["file"]
+    _ -> ["text"]
+  }
+}
+
+fn output_modes(
+  files: Option(types_profile.FilesSemantics),
+  response: Option(types_profile.ResponseConfig),
+) -> List(String) {
+  let base = ["text"]
+
+  case has_structured_output(files, response) {
+    True -> list.append(base, ["data"])
+    False -> base
+  }
+}
+
+fn has_structured_output(
+  files: Option(types_profile.FilesSemantics),
+  response: Option(types_profile.ResponseConfig),
+) -> Bool {
+  case files {
+    Some(types_profile.FilesSemantics(accepts: True, ..)) -> True
+    _ ->
+      case response {
+        None -> False
+        Some(types_profile.ResponseConfig(mapping: mapping, capture: capture)) ->
+          dict.size(capture) > 0
+          || case mapping {
+            types_profile.Artifacts(_) -> True
+            types_profile.Both(_, _) -> True
+            _ -> False
+          }
+      }
+  }
+}
+
+fn skill_extensions(files: Option(types_profile.FilesSemantics)) -> json.Json {
+  case files {
+    None -> json.object([])
+    Some(types_profile.FilesSemantics(
+      max_files: max_files,
+      ingest_effect: ingest_effect,
+      ..,
+    )) ->
+      json.object([
+        #(
+          "urn:saar:extensions:files-semantics:v1",
+          json.object([
+            #("maxFiles", json.int(max_files)),
+            #("ingestEffect", case ingest_effect {
+              Some(effect) ->
+                json.string(types_profile.ingest_effect_to_string(effect))
+              None -> json.null()
+            }),
+          ]),
+        ),
+      ])
+  }
+}
+
+fn agent_card_extensions(interface: types_profile.Interface) -> json.Json {
+  case interface_has_files_semantics(interface) {
+    True ->
+      json.array(
+        [
+          json.string("urn:saar:extensions:files-semantics:v1"),
+        ],
+        fn(item) { item },
+      )
+    False -> json.array([], fn(item) { item })
+  }
+}
+
+fn interface_has_files_semantics(interface: types_profile.Interface) -> Bool {
+  case interface {
+    types_profile.RunnerInterface(caps) ->
+      caps
+      |> dict.to_list
+      |> list.any(fn(pair) {
+        let #(_, cap) = pair
+        case cap.files {
+          Some(_) -> True
+          None -> False
+        }
+      })
+
+    types_profile.HttpInterface(_, _, _, caps) ->
+      caps
+      |> dict.to_list
+      |> list.any(fn(pair) {
+        let #(_, cap) = pair
+        case cap.files {
+          Some(_) -> True
+          None -> False
+        }
+      })
   }
 }
 

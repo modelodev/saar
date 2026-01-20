@@ -30,7 +30,7 @@ pub fn reload_dir_source_ok_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(14)
+  count |> should.equal(19)
 
   ids
   |> list.map(types_core.profile_id_to_string)
@@ -43,7 +43,12 @@ pub fn reload_dir_source_ok_test() {
     "echo_cli",
     "echo_cli_deferred",
     "echo_cli_deferred_slow",
+    "echo_files_eventual",
+    "echo_files_one",
+    "echo_files_zero",
     "echo_server",
+    "echo_server_files_missing",
+    "echo_server_files_track",
     "error_cli_deferred",
     "fs_probe",
     "greedy_logger",
@@ -73,7 +78,7 @@ pub fn reload_duplicate_ids_first_source_wins_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(14)
+  count |> should.equal(19)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI for testing")
 }
 
@@ -97,7 +102,7 @@ pub fn reload_duplicate_ids_order_inverts_winner_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(14)
+  count |> should.equal(19)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI overridden")
 }
 
@@ -135,7 +140,7 @@ pub fn reload_duplicate_ids_three_sources_keeps_first_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(14)
+  count |> should.equal(19)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI for testing")
 }
 
@@ -164,7 +169,7 @@ pub fn reload_duplicate_ids_within_dir_keeps_first_and_adds_new_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(15)
+  count |> should.equal(20)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI overridden")
   assert_profile_description(profiles_actor, "extra_echo_cli", "Extra profile")
 }

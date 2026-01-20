@@ -18,10 +18,12 @@
 import gleam/dict
 import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import saar/json_pointer
 import saar/types/core as types_core
 import saar/types/enums as types_enums
 import saar/types/input as types_input
@@ -774,6 +776,11 @@ fn runner_capability_decoder() -> decode.Decoder(types_profile.RunnerCapability)
       None,
       decode.optional(capability_limits_decoder()),
     )
+    use files <- decode.optional_field(
+      "files",
+      None,
+      decode.optional(files_semantics_decoder()),
+    )
     case validate_response_mode(streaming, response_mode) {
       Ok(_) ->
         decode.success(types_profile.RunnerCapability(
@@ -782,6 +789,7 @@ fn runner_capability_decoder() -> decode.Decoder(types_profile.RunnerCapability)
           streaming: streaming,
           response_mode: response_mode,
           limits: limits,
+          files: files,
         ))
 
       Error(expected) ->
@@ -800,10 +808,15 @@ fn http_capability_decoder() -> decode.Decoder(types_profile.HttpCapability) {
       None,
       decode.optional(input_schema_decoder()),
     )
+    use body <- decode.optional_field(
+      "body",
+      None,
+      decode.optional(http_body_decoder()),
+    )
     use response <- decode.optional_field(
       "response",
       None,
-      decode.optional(response_mapping_decoder()),
+      decode.optional(response_config_decoder()),
     )
     use description <- decode.optional_field(
       "description",
@@ -821,17 +834,24 @@ fn http_capability_decoder() -> decode.Decoder(types_profile.HttpCapability) {
       None,
       decode.optional(capability_limits_decoder()),
     )
+    use files <- decode.optional_field(
+      "files",
+      None,
+      decode.optional(files_semantics_decoder()),
+    )
     case validate_response_mode(streaming, response_mode) {
       Ok(_) ->
         decode.success(types_profile.HttpCapability(
           path: path,
           method: method,
           input_schema: input_schema,
+          body: body,
           response: response,
           description: description,
           streaming: streaming,
           response_mode: response_mode,
           limits: limits,
+          files: files,
         ))
 
       Error(expected) ->
@@ -881,6 +901,7 @@ fn runner_capability_placeholder() -> types_profile.RunnerCapability {
     streaming: False,
     response_mode: types_profile.ResponseModeSync,
     limits: None,
+    files: None,
   )
 }
 
@@ -889,15 +910,17 @@ fn http_capability_placeholder() -> types_profile.HttpCapability {
     path: "/",
     method: types_profile.HttpPost,
     input_schema: None,
+    body: None,
     response: None,
     description: None,
     streaming: False,
     response_mode: types_profile.ResponseModeSync,
     limits: None,
+    files: None,
   )
 }
 
-fn response_mapping_decoder() -> decode.Decoder(types_profile.ResponseMapping) {
+fn response_config_decoder() -> decode.Decoder(types_profile.ResponseConfig) {
   let decoder = {
     use text_pointer <- decode.optional_field(
       "text_pointer",
@@ -909,14 +932,79 @@ fn response_mapping_decoder() -> decode.Decoder(types_profile.ResponseMapping) {
       None,
       decode.optional(decode.string),
     )
-    decode.success(case text_pointer, artifacts_pointer {
+    use capture <- decode.optional_field(
+      "capture",
+      dict.new(),
+      decode.dict(decode.string, decode.string),
+    )
+    let mapping = case text_pointer, artifacts_pointer {
       None, None -> types_profile.Default
       Some(text), None -> types_profile.Text(text)
       None, Some(artifacts) -> types_profile.Artifacts(artifacts)
       Some(text), Some(artifacts) -> types_profile.Both(text, artifacts)
-    })
+    }
+    decode.success(types_profile.ResponseConfig(
+      mapping: mapping,
+      capture: capture,
+    ))
   }
   decoder
+}
+
+fn http_body_decoder() -> decode.Decoder(types_profile.HttpRequestBody) {
+  let decoder = {
+    use kind <- decode.field("type", decode.string)
+    case kind {
+      "json" -> http_body_json_decoder()
+      "multipart" -> http_body_multipart_decoder()
+      _ -> decode.failure(http_body_placeholder(), expected: "HttpBodyType")
+    }
+  }
+  decoder
+}
+
+fn http_body_json_decoder() -> decode.Decoder(types_profile.HttpRequestBody) {
+  let decoder = {
+    use template <- decode.field("template", decode.dynamic)
+    decode.success(
+      types_profile.JsonBody(json_pointer.dynamic_to_json(template)),
+    )
+  }
+  decoder
+}
+
+fn http_body_multipart_decoder() -> decode.Decoder(
+  types_profile.HttpRequestBody,
+) {
+  let decoder = {
+    use fields <- decode.optional_field(
+      "fields",
+      dict.new(),
+      decode.dict(decode.string, decode.string),
+    )
+    use files <- decode.field(
+      "files",
+      decode.list(of: multipart_file_decoder()),
+    )
+    decode.success(types_profile.MultipartBody(fields: fields, files: files))
+  }
+  decoder
+}
+
+fn multipart_file_decoder() -> decode.Decoder(types_profile.MultipartFilePart) {
+  let decoder = {
+    use field <- decode.field("field", decode.string)
+    use source_pointer <- decode.field("source_pointer", decode.string)
+    decode.success(types_profile.MultipartFilePart(
+      field: field,
+      source_pointer: source_pointer,
+    ))
+  }
+  decoder
+}
+
+fn http_body_placeholder() -> types_profile.HttpRequestBody {
+  types_profile.JsonBody(json.null())
 }
 
 fn capability_limits_decoder() -> decode.Decoder(types_profile.CapabilityLimits) {
@@ -929,6 +1017,70 @@ fn capability_limits_decoder() -> decode.Decoder(types_profile.CapabilityLimits)
     decode.success(types_profile.CapabilityLimits(call_timeout_ms))
   }
   decoder
+}
+
+fn files_semantics_decoder() -> decode.Decoder(types_profile.FilesSemantics) {
+  let decoder = {
+    use accepts <- decode.field("accepts", decode.bool)
+    use max_files <- decode.field("max_files", decode.int)
+    use ingest_effect <- decode.optional_field(
+      "ingest_effect",
+      None,
+      decode.optional(ingest_effect_decoder()),
+    )
+    case validate_files_semantics(accepts, max_files, ingest_effect) {
+      Ok(_) ->
+        decode.success(types_profile.FilesSemantics(
+          accepts: accepts,
+          max_files: max_files,
+          ingest_effect: ingest_effect,
+        ))
+
+      Error(expected) ->
+        decode.failure(files_semantics_placeholder(), expected: expected)
+    }
+  }
+  decoder
+}
+
+fn ingest_effect_decoder() -> decode.Decoder(types_profile.IngestEffect) {
+  let decoder = {
+    use raw <- decode.then(decode.string)
+    case types_profile.ingest_effect_from_string(raw) {
+      Ok(effect) -> decode.success(effect)
+      Error(_) ->
+        decode.failure(types_profile.IngestImmediate, expected: "IngestEffect")
+    }
+  }
+  decoder
+}
+
+fn validate_files_semantics(
+  accepts: Bool,
+  max_files: Int,
+  ingest_effect: Option(types_profile.IngestEffect),
+) -> Result(Nil, String) {
+  case max_files < 0 {
+    True -> Error("FilesMaxFilesNonNegative")
+    False ->
+      case accepts, max_files {
+        False, value if value != 0 -> Error("FilesAcceptsFalseRequiresZero")
+        True, value if value < 1 -> Error("FilesAcceptsTrueRequiresPositive")
+        _, _ ->
+          case accepts, ingest_effect {
+            False, Some(_) -> Error("FilesIngestEffectRequiresAcceptsTrue")
+            _, _ -> Ok(Nil)
+          }
+      }
+  }
+}
+
+fn files_semantics_placeholder() -> types_profile.FilesSemantics {
+  types_profile.FilesSemantics(
+    accepts: False,
+    max_files: 0,
+    ingest_effect: None,
+  )
 }
 
 fn http_method_decoder() -> decode.Decoder(types_profile.HttpMethod) {

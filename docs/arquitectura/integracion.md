@@ -17,6 +17,21 @@ Objetivo: que un agente se integre en SAAR **sin modificar SAAR**, usando (1) un
 - **Respuesta declarativa**: `ResponseMapping` usa JSON Pointers (`text_pointer`, etc.) en vez de código; resolucion interna sobre Dynamic para evitar conversion Json/Dynamic repetida.
 - **Entrega de ficheros (CLI runners)**: SAAR pasa URLs (`FileRef.url`). Si un runner necesita rutas locales, descarga/copia dentro del workspace.
 
+### 2.1 Semantica de ficheros
+
+Las capabilities pueden declarar semantica de ficheros con:
+
+- `files.accepts`: si la capability acepta ficheros.
+- `files.max_files`: cardinalidad maxima permitida.
+- `files.ingest_effect`: `immediate` o `eventual`.
+
+Impacto para clientes:
+
+- En discovery nativo (`GET /agents/:instance_id`) la capability incluye el bloque `files`.
+- En Agent Card A2A se expone como extension `urn:saar:extensions:files-semantics:v1`.
+- Si `ingest_effect = "eventual"`, un upload no garantiza uso inmediato en consultas posteriores.
+- Si el cliente excede `max_files`, SAAR responde `400 BadRequest`.
+
 ## 3. Contrato de streaming (v0)
 
 SAAR distingue dos streams:

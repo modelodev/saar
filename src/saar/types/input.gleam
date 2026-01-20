@@ -91,6 +91,15 @@ pub fn derive_helpers(payload: InputPayload) -> SaarHelpers {
   }
 }
 
+/// Returns how many files are present in an `InputPayload`.
+pub fn payload_file_count(payload: InputPayload) -> Int {
+  case payload {
+    PayloadChat(_, _) -> 0
+    PayloadFiles(files) -> list.length(files)
+    PayloadMixed(_, files, _) -> list.length(files)
+  }
+}
+
 fn last_user_content(messages: List(ChatMessage)) -> Option(String) {
   messages
   |> list.reverse

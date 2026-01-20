@@ -468,6 +468,7 @@ pub fn interact_respects_timeout() {
             limits: option.Some(
               types_profile.CapabilityLimits(call_timeout_ms: option.Some(10)),
             ),
+            files: option.None,
           ),
         ),
       ]),

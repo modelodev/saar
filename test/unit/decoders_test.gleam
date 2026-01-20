@@ -44,7 +44,8 @@ pub fn decode_profile_ok_test() {
 
   let assert Ok(profile) = json.parse(contents, decoders.profile_decoder())
 
-  let types_profile.Profile(meta: meta, ..) = profile
+  let types_profile.Profile(meta: meta, parameters: _, runner: _, interface: _) =
+    profile
   meta.id
   |> types_core.profile_id_to_string
   |> should.equal("echo_cli")
@@ -123,8 +124,14 @@ pub fn response_mode_defaults_to_sync() {
   let interface = decoders.decode_interface(value) |> should.be_ok
   let assert types_profile.RunnerInterface(capabilities: caps) = interface
   let assert Ok(capability) = dict.get(caps, "c")
-  let types_profile.RunnerCapability(response_mode: response_mode, ..) =
-    capability
+  let types_profile.RunnerCapability(
+    input_schema: _,
+    description: _,
+    streaming: _,
+    response_mode: response_mode,
+    limits: _,
+    files: _,
+  ) = capability
 
   response_mode |> should.equal(types_profile.ResponseModeSync)
 }
@@ -160,15 +167,81 @@ pub fn response_mode_invalid_value_rejected() {
   |> should.be_error
 }
 
+pub fn files_semantics_defaults_to_absent() {
+  let payload = runner_capability_payload("\"streaming\":false")
+  let assert Ok(value) = json.parse(payload, decode.dynamic)
+
+  let interface = decoders.decode_interface(value) |> should.be_ok
+  let assert types_profile.RunnerInterface(capabilities: caps) = interface
+  let assert Ok(types_profile.RunnerCapability(
+    input_schema: _,
+    description: _,
+    streaming: _,
+    response_mode: _,
+    limits: _,
+    files: files,
+  )) = dict.get(caps, "c")
+
+  files |> should.equal(None)
+}
+
+pub fn files_semantics_accepts_false_requires_max_files_zero() {
+  let payload =
+    runner_capability_payload(
+      "\"streaming\":false,\"files\":{\"accepts\":false,\"max_files\":1}",
+    )
+  let assert Ok(value) = json.parse(payload, decode.dynamic)
+
+  decoders.decode_interface(value)
+  |> should.be_error
+}
+
+pub fn files_semantics_accepts_true_requires_positive_max_files() {
+  let payload =
+    runner_capability_payload(
+      "\"streaming\":false,\"files\":{\"accepts\":true,\"max_files\":0}",
+    )
+  let assert Ok(value) = json.parse(payload, decode.dynamic)
+
+  decoders.decode_interface(value)
+  |> should.be_error
+}
+
+pub fn files_semantics_ingest_effect_requires_accepts_true() {
+  let payload =
+    runner_capability_payload(
+      "\"streaming\":false,\"files\":{\"accepts\":false,\"max_files\":0,\"ingest_effect\":\"eventual\"}",
+    )
+  let assert Ok(value) = json.parse(payload, decode.dynamic)
+
+  decoders.decode_interface(value)
+  |> should.be_error
+}
+
 fn assert_decoded_http_method(raw: String, expected: types_profile.HttpMethod) {
   let payload = http_interface_payload(raw)
   let assert Ok(value) = json.parse(payload, decode.dynamic)
 
   let interface = decoders.decode_interface(value) |> should.be_ok
 
-  let assert types_profile.HttpInterface(capabilities: caps, ..) = interface
-  let assert Ok(types_profile.HttpCapability(method: method, ..)) =
-    dict.get(caps, "c")
+  let assert types_profile.HttpInterface(
+    base_url: _,
+    headers: _,
+    health_check: _,
+    capabilities: caps,
+  ) = interface
+  let assert Ok(types_profile.HttpCapability(
+    path: _,
+    method: method,
+    input_schema: _,
+    body: _,
+    response: _,
+    description: _,
+    streaming: _,
+    response_mode: _,
+    limits: _,
+    files: _,
+  )) = dict.get(caps, "c")
 
   method |> should.equal(expected)
 }

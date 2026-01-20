@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": null,
+  "current_sprint": "S22",
   "sprints": {
     "S01": {
       "status": "completed",
@@ -598,6 +598,45 @@
           "status": "completed",
           "branch": "feat/s21-t06-docs-tests",
           "commit": "a16d3b3ff3e287e16d85d3fbbf0525e01fb504af"
+        }
+      }
+    },
+    "S22": {
+      "status": "in_progress",
+      "branch": "sprint/s22-files-semantics-discovery",
+      "started_at": "2026-01-20T18:54:22Z",
+      "completed_at": null,
+      "current_story": null,
+      "stories": {
+        "S22-T01": {
+          "status": "completed",
+          "branch": "feat/s22-t01-files-semantics-types",
+          "commit": "1645d1e80000b43e4cd064ffaca7b36d6ef82c17"
+        },
+        "S22-T02": {
+          "status": "completed",
+          "branch": "feat/s22-t02-files-cardinality",
+          "commit": "9aa2aebf59950fbe62f834a5acf96ed797f2ba84"
+        },
+        "S22-T03": {
+          "status": "completed",
+          "branch": "feat/s22-t03-multipart-ingest-metadata",
+          "commit": "f44394e657950a930ad53c196cc17ca39d1540c0"
+        },
+        "S22-T04": {
+          "status": "completed",
+          "branch": "feat/s22-t04-gateway-ingest-metadata",
+          "commit": "9ddddc0770ffe8616351b6769b97a5042a54b1c4"
+        },
+        "S22-T05": {
+          "status": "completed",
+          "branch": "feat/s22-t05-discovery-files-semantics",
+          "commit": "e794508e9e2ad503894144c8302322f587908f36"
+        },
+        "S22-T06": {
+          "status": "completed",
+          "branch": "feat/s22-t06-e2e-docs-files",
+          "commit": "856ff4f3b12f4c096bb6828dc3ab13ec4a2e4664"
         }
       }
     }

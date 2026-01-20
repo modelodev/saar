@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "id": "echo_server_files_track",
+    "lifecycle": "continuous",
+    "description": "Echo HTTP multipart with track id"
+  },
+  "parameters": {},
+  "runner": {
+    "type": "echo_server",
+    "tool_config": {"script": "echo_server.py"},
+    "runtime": {"mode": "managed_port"}
+  },
+  "interface": {
+    "protocol": "http",
+    "base_url": "http://{{runner.host}}:{{runner.port}}",
+    "health_check": {"path": "/health", "method": "GET", "expect_statuses": [200]},
+    "capabilities": {
+      "files": {
+        "path": "/multipart_check",
+        "method": "POST",
+        "streaming": false,
+        "input_schema": "std:files",
+        "body": {
+          "type": "multipart",
+          "fields": {},
+          "files": [{"field": "file", "source_pointer": "/input/files/0"}]
+        },
+        "response": {
+          "capture": {"track_id": "/track_id"}
+        },
+        "files": {"accepts": true, "max_files": 1, "ingest_effect": "immediate"}
+      }
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import gleam/dict
 import gleam/dynamic
 import gleam/list
 import gleam/option.{None, Some}
@@ -25,8 +26,16 @@ pub fn response_mapping_text_pointer_ok_test() {
       #(dynamic.string("answer"), dynamic.string("ok")),
     ])
 
-  let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =
-    response_mapping.apply_response_mapping(trace_id(), Some(mapping), body)
+  let assert Ok(response_mapping.MappingResult(
+    text: text,
+    artifacts: artifacts,
+    metadata: _,
+  )) =
+    response_mapping.apply_response_mapping(
+      trace_id(),
+      Some(response_config(mapping)),
+      body,
+    )
 
   text |> should.equal(Some("ok"))
   artifacts |> should.equal(None)
@@ -40,8 +49,16 @@ pub fn response_mapping_text_pointer_missing_test() {
       #(dynamic.string("answer"), dynamic.string("ok")),
     ])
 
-  let assert Ok(response_mapping.MappingResult(text: text, artifacts: _)) =
-    response_mapping.apply_response_mapping(trace_id(), Some(mapping), body)
+  let assert Ok(response_mapping.MappingResult(
+    text: text,
+    artifacts: _,
+    metadata: _,
+  )) =
+    response_mapping.apply_response_mapping(
+      trace_id(),
+      Some(response_config(mapping)),
+      body,
+    )
 
   text |> should.equal(None)
 }
@@ -58,7 +75,12 @@ pub fn response_mapping_pointer_invalid_test() {
     kind: kind,
     message: message,
     ..,
-  )) = response_mapping.apply_response_mapping(trace_id(), Some(mapping), body)
+  )) =
+    response_mapping.apply_response_mapping(
+      trace_id(),
+      Some(response_config(mapping)),
+      body,
+    )
 
   kind |> should.equal(types_enums.BadRequest)
   message |> should.equal("Invalid JSON pointer 'bad'")
@@ -76,7 +98,12 @@ pub fn response_mapping_text_pointer_wrong_type_test() {
     kind: kind,
     message: message,
     ..,
-  )) = response_mapping.apply_response_mapping(trace_id(), Some(mapping), body)
+  )) =
+    response_mapping.apply_response_mapping(
+      trace_id(),
+      Some(response_config(mapping)),
+      body,
+    )
 
   kind |> should.equal(types_enums.AgentError)
   message |> should.equal("Expected string at '/answer', got number")
@@ -99,7 +126,12 @@ pub fn response_mapping_text_pointer_wrong_type_object_test() {
     kind: kind,
     message: message,
     ..,
-  )) = response_mapping.apply_response_mapping(trace_id(), Some(mapping), body)
+  )) =
+    response_mapping.apply_response_mapping(
+      trace_id(),
+      Some(response_config(mapping)),
+      body,
+    )
 
   kind |> should.equal(types_enums.AgentError)
   message |> should.equal("Expected string at '/answer', got object")
@@ -117,7 +149,12 @@ pub fn response_mapping_artifacts_pointer_wrong_type_test() {
     kind: kind,
     message: message,
     ..,
-  )) = response_mapping.apply_response_mapping(trace_id(), Some(mapping), body)
+  )) =
+    response_mapping.apply_response_mapping(
+      trace_id(),
+      Some(response_config(mapping)),
+      body,
+    )
 
   kind |> should.equal(types_enums.AgentError)
   message |> should.equal("Expected array at '/files', got string")
@@ -137,8 +174,16 @@ pub fn response_mapping_artifacts_pointer_test() {
       ),
     ])
 
-  let assert Ok(response_mapping.MappingResult(text: _, artifacts: artifacts)) =
-    response_mapping.apply_response_mapping(trace_id(), Some(mapping), body)
+  let assert Ok(response_mapping.MappingResult(
+    text: _,
+    artifacts: artifacts,
+    metadata: _,
+  )) =
+    response_mapping.apply_response_mapping(
+      trace_id(),
+      Some(response_config(mapping)),
+      body,
+    )
 
   let assert Some(items) = artifacts
   list.length(items) |> should.equal(2)
@@ -153,8 +198,16 @@ pub fn response_mapping_both_pointers_test() {
       #(dynamic.string("files"), dynamic.list([dynamic.string("a")])),
     ])
 
-  let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =
-    response_mapping.apply_response_mapping(trace_id(), Some(mapping), body)
+  let assert Ok(response_mapping.MappingResult(
+    text: text,
+    artifacts: artifacts,
+    metadata: _,
+  )) =
+    response_mapping.apply_response_mapping(
+      trace_id(),
+      Some(response_config(mapping)),
+      body,
+    )
 
   text |> should.equal(Some("ok"))
   let assert Some(items) = artifacts
@@ -167,8 +220,11 @@ pub fn response_mapping_none_test() {
       #(dynamic.string("answer"), dynamic.string("ok")),
     ])
 
-  let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =
-    response_mapping.apply_response_mapping(trace_id(), None, body)
+  let assert Ok(response_mapping.MappingResult(
+    text: text,
+    artifacts: artifacts,
+    metadata: _,
+  )) = response_mapping.apply_response_mapping(trace_id(), None, body)
 
   text |> should.equal(Some("{\"answer\":\"ok\"}"))
   artifacts |> should.equal(None)
@@ -180,13 +236,23 @@ pub fn response_mapping_default_test() {
       #(dynamic.string("answer"), dynamic.string("ok")),
     ])
 
-  let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =
+  let assert Ok(response_mapping.MappingResult(
+    text: text,
+    artifacts: artifacts,
+    metadata: _,
+  )) =
     response_mapping.apply_response_mapping(
       trace_id(),
-      Some(types_profile.Default),
+      Some(response_config(types_profile.Default)),
       body,
     )
 
   text |> should.equal(Some("{\"answer\":\"ok\"}"))
   artifacts |> should.equal(None)
+}
+
+fn response_config(
+  mapping: types_profile.ResponseMapping,
+) -> types_profile.ResponseConfig {
+  types_profile.ResponseConfig(mapping: mapping, capture: dict.new())
 }

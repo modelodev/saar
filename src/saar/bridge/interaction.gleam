@@ -17,6 +17,7 @@
 
 import envoy
 import gleam/dict
+import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/http
 import gleam/int
@@ -39,6 +40,8 @@ import saar/bridge/serialization
 import saar/bridge/wrapper_env
 import saar/core/artifact_registry_protocol
 import saar/ffi
+import saar/json_pointer
+import saar/response_mapping
 import saar/streams/sink
 import saar/streams/stream_pump
 import saar/types/config as types_config
@@ -49,6 +52,7 @@ import saar/types/output as types_output
 import saar/types/profile as types_profile
 import saar/types/resolved_params
 import saar/types/runner as types_runner
+import saar/types/stream as types_stream
 
 /// Executes a single interaction.
 ///
@@ -217,9 +221,29 @@ fn init_a2a_flags(
       a2a.StreamStarted(task_id: input.context.trace_id, context_id: context_id),
     )
 
+  let events = case ingest_event_from_context(input.context.extra) {
+    Some(event) -> list.append(events, [event])
+    None -> events
+  }
+
   events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
 
   A2aFlags(state)
+}
+
+fn ingest_event_from_context(
+  extra: dict.Dict(String, String),
+) -> Option(types_stream.StreamEvent) {
+  case dict.get(extra, "ingest_payload") {
+    Ok(payload) ->
+      case json.parse(payload, decode.dynamic) {
+        Ok(value) ->
+          Some(a2a.ingest_data_event(json_pointer.dynamic_to_json(value)))
+        Error(_) -> None
+      }
+
+    Error(_) -> None
+  }
 }
 
 fn execute_runner_streaming(
@@ -622,37 +646,252 @@ fn execute_http_sync(
   let url = base <> capability.path
 
   let method = http_method(capability.method)
-  let body = json.to_string(input_payload_to_json(input.input))
 
   let types_config.SaarConfig(limits: limits, timeouts: timeouts, ..) = config
   let types_config.SaarLimits(max_http_response_bytes: max_resp, ..) = limits
   let types_config.SaarTimeouts(call_timeout_ms: timeout_ms, ..) = timeouts
 
-  http_client.request_sync_string(
-    method,
-    url,
-    hdrs,
-    Some(body),
-    timeout_ms,
-    max_resp,
-  )
-  |> result.map_error(fn(err) {
-    types_output.saar_error(
+  let response = case capability.body {
+    None -> {
+      let body = json.to_string(input_payload_to_json(input.input))
+      http_client.request_sync_string(
+        method,
+        url,
+        hdrs,
+        Some(body),
+        timeout_ms,
+        max_resp,
+      )
+      |> result.map_error(fn(err) {
+        types_output.saar_error(
+          input.context.trace_id,
+          types_enums.InfraError,
+          http_client.http_error_to_string(err),
+        )
+      })
+    }
+
+    Some(types_profile.JsonBody(template)) -> {
+      use rendered <- result.try(interpolator.interpolate_json(template, ctx))
+      let body = json.to_string(rendered)
+      http_client.request_sync_string(
+        method,
+        url,
+        hdrs,
+        Some(body),
+        timeout_ms,
+        max_resp,
+      )
+      |> result.map_error(fn(err) {
+        types_output.saar_error(
+          input.context.trace_id,
+          types_enums.InfraError,
+          http_client.http_error_to_string(err),
+        )
+      })
+    }
+
+    Some(types_profile.MultipartBody(fields, files)) -> {
+      use interpolated_fields <- result.try(interpolator.interpolate_dict(
+        fields,
+        ctx,
+      ))
+      use file_parts <- result.try(resolve_multipart_files(
+        files,
+        input.input,
+        input.context.trace_id,
+      ))
+      case file_parts {
+        [] ->
+          Error(types_output.saar_error(
+            input.context.trace_id,
+            types_enums.BadRequest,
+            "Multipart body requires files",
+          ))
+
+        [#(field, file)] ->
+          http_client.request_multipart_file(
+            input.context.trace_id,
+            method,
+            url,
+            hdrs,
+            interpolated_fields,
+            field,
+            file,
+            capability.streaming,
+            config,
+            timeout_ms,
+          )
+
+        _ -> {
+          use responses <- result.try(
+            file_parts
+            |> list.try_map(fn(pair) {
+              let #(field, file) = pair
+              http_client.request_multipart_file(
+                input.context.trace_id,
+                method,
+                url,
+                hdrs,
+                interpolated_fields,
+                field,
+                file,
+                capability.streaming,
+                config,
+                timeout_ms,
+              )
+            }),
+          )
+          first_response(responses, input.context.trace_id)
+        }
+      }
+    }
+  }
+
+  response
+  |> result.try(fn(resp) {
+    use response_data <- result.try(build_http_response_data(
+      capability.response,
+      resp,
       input.context.trace_id,
-      types_enums.InfraError,
-      http_client.http_error_to_string(err),
-    )
-  })
-  |> result.map(fn(resp) {
-    types_output.InteractionResult(
-      data: types_output.ResponseData(
-        content: Some(resp.body),
-        metadata: dict.new(),
-      ),
+    ))
+    Ok(types_output.InteractionResult(
+      data: response_data,
       artifacts: [],
       trace_id: input.context.trace_id,
+    ))
+  })
+}
+
+fn resolve_multipart_files(
+  files: List(types_profile.MultipartFilePart),
+  payload: types_input.InputPayload,
+  trace_id: types_core.TraceId,
+) -> Result(List(#(String, types_input.FileRef)), types_output.InteractionError) {
+  files
+  |> list.try_map(fn(part) {
+    let types_profile.MultipartFilePart(
+      field: field,
+      source_pointer: source_pointer,
+    ) = part
+    resolve_file_pointer(source_pointer, payload, trace_id)
+    |> result.map(fn(file) { #(field, file) })
+  })
+}
+
+fn resolve_file_pointer(
+  pointer: String,
+  payload: types_input.InputPayload,
+  trace_id: types_core.TraceId,
+) -> Result(types_input.FileRef, types_output.InteractionError) {
+  use parsed <- result.try(
+    json_pointer.parse(pointer)
+    |> result.map_error(fn(_) {
+      types_output.saar_error(
+        trace_id,
+        types_enums.BadRequest,
+        "Invalid file pointer '" <> pointer <> "'",
+      )
+    }),
+  )
+
+  case json_pointer.segments(parsed) {
+    ["input", "files", index_str] ->
+      case int.parse(index_str) {
+        Ok(index) if index >= 0 ->
+          file_at(payload_files(payload), index, trace_id, pointer)
+        _ ->
+          Error(types_output.saar_error(
+            trace_id,
+            types_enums.BadRequest,
+            "Invalid file pointer '" <> pointer <> "'",
+          ))
+      }
+
+    _ ->
+      Error(types_output.saar_error(
+        trace_id,
+        types_enums.BadRequest,
+        "Invalid file pointer '" <> pointer <> "'",
+      ))
+  }
+}
+
+fn payload_files(payload: types_input.InputPayload) -> List(types_input.FileRef) {
+  case payload {
+    types_input.PayloadChat(_, _) -> []
+    types_input.PayloadFiles(files) -> files
+    types_input.PayloadMixed(_, files, _) -> files
+  }
+}
+
+fn file_at(
+  files: List(types_input.FileRef),
+  index: Int,
+  trace_id: types_core.TraceId,
+  pointer: String,
+) -> Result(types_input.FileRef, types_output.InteractionError) {
+  files
+  |> list.drop(index)
+  |> list.first
+  |> result.map_error(fn(_) {
+    types_output.saar_error(
+      trace_id,
+      types_enums.BadRequest,
+      "Missing file for pointer '" <> pointer <> "'",
     )
   })
+}
+
+fn first_response(
+  responses: List(http_client.HttpResponse),
+  trace_id: types_core.TraceId,
+) -> Result(http_client.HttpResponse, types_output.InteractionError) {
+  responses
+  |> list.first
+  |> result.map_error(fn(_) {
+    types_output.saar_error(
+      trace_id,
+      types_enums.InfraError,
+      "Missing multipart response",
+    )
+  })
+}
+
+fn build_http_response_data(
+  response: Option(types_profile.ResponseConfig),
+  resp: http_client.HttpResponse,
+  trace_id: types_core.TraceId,
+) -> Result(types_output.ResponseData, types_output.InteractionError) {
+  case response {
+    None ->
+      Ok(types_output.ResponseData(
+        content: Some(resp.body),
+        metadata: dict.new(),
+      ))
+
+    Some(response_config) -> {
+      use body <- result.try(
+        json.parse(resp.body, decode.dynamic)
+        |> result.map_error(fn(_) {
+          types_output.saar_error(
+            trace_id,
+            types_enums.AgentError,
+            "Invalid HTTP response JSON",
+          )
+        }),
+      )
+      use mapped <- result.try(response_mapping.apply_response_mapping(
+        trace_id,
+        Some(response_config),
+        body,
+      ))
+      Ok(types_output.ResponseData(
+        content: mapped.text,
+        metadata: mapped.metadata,
+      ))
+    }
+  }
 }
 
 fn http_method(method: types_profile.HttpMethod) -> http.Method {
