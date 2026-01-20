@@ -114,6 +114,25 @@ pub type CapabilityLimits {
   CapabilityLimits(call_timeout_ms: Option(Int))
 }
 
+/// File-handling semantics for a capability.
+///
+/// `accepts` declares whether the capability accepts file inputs.
+/// `max_files` describes the cardinality (0, 1, or N).
+/// `ingest_effect` describes whether ingestion is immediate or eventual.
+pub type FilesSemantics {
+  FilesSemantics(
+    accepts: Bool,
+    max_files: Int,
+    ingest_effect: Option(IngestEffect),
+  )
+}
+
+/// Describes when uploaded files become visible to subsequent interactions.
+pub type IngestEffect {
+  IngestImmediate
+  IngestEventual
+}
+
 /// Declares how a capability delivers its response to clients.
 ///
 /// - `ResponseModeSync`: reply immediately in the same request.
@@ -144,11 +163,29 @@ pub fn response_mode_to_string(mode: ResponseMode) -> String {
   }
 }
 
+/// Parses a file ingest effect from its stable string representation.
+pub fn ingest_effect_from_string(raw: String) -> Result(IngestEffect, Nil) {
+  case raw {
+    "immediate" -> Ok(IngestImmediate)
+    "eventual" -> Ok(IngestEventual)
+    _ -> Error(Nil)
+  }
+}
+
+/// Converts a file ingest effect into its stable string representation.
+pub fn ingest_effect_to_string(effect: IngestEffect) -> String {
+  case effect {
+    IngestImmediate -> "immediate"
+    IngestEventual -> "eventual"
+  }
+}
+
 /// A capability provided by a runner interface.
 ///
 /// This is used when the interface is runner-native rather than HTTP.
 /// `response_mode` declares how results are delivered to clients; when omitted
 /// in JSON it defaults to `ResponseModeSync`.
+/// `files` adds file cardinality and ingest semantics when applicable.
 pub type RunnerCapability {
   RunnerCapability(
     input_schema: Option(InputSchema),
@@ -156,6 +193,7 @@ pub type RunnerCapability {
     streaming: Bool,
     response_mode: ResponseMode,
     limits: Option(CapabilityLimits),
+    files: Option(FilesSemantics),
   )
 }
 
@@ -178,6 +216,7 @@ pub type ResponseMapping {
 /// `path` and `method` identify the endpoint; `response` can optionally map
 /// response fields. `response_mode` declares the delivery mode for clients and
 /// defaults to `ResponseModeSync` when omitted in JSON.
+/// `files` adds file cardinality and ingest semantics when applicable.
 pub type HttpCapability {
   HttpCapability(
     path: String,
@@ -188,6 +227,7 @@ pub type HttpCapability {
     streaming: Bool,
     response_mode: ResponseMode,
     limits: Option(CapabilityLimits),
+    files: Option(FilesSemantics),
   )
 }
 

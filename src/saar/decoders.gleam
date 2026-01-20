@@ -774,6 +774,11 @@ fn runner_capability_decoder() -> decode.Decoder(types_profile.RunnerCapability)
       None,
       decode.optional(capability_limits_decoder()),
     )
+    use files <- decode.optional_field(
+      "files",
+      None,
+      decode.optional(files_semantics_decoder()),
+    )
     case validate_response_mode(streaming, response_mode) {
       Ok(_) ->
         decode.success(types_profile.RunnerCapability(
@@ -782,6 +787,7 @@ fn runner_capability_decoder() -> decode.Decoder(types_profile.RunnerCapability)
           streaming: streaming,
           response_mode: response_mode,
           limits: limits,
+          files: files,
         ))
 
       Error(expected) ->
@@ -821,6 +827,11 @@ fn http_capability_decoder() -> decode.Decoder(types_profile.HttpCapability) {
       None,
       decode.optional(capability_limits_decoder()),
     )
+    use files <- decode.optional_field(
+      "files",
+      None,
+      decode.optional(files_semantics_decoder()),
+    )
     case validate_response_mode(streaming, response_mode) {
       Ok(_) ->
         decode.success(types_profile.HttpCapability(
@@ -832,6 +843,7 @@ fn http_capability_decoder() -> decode.Decoder(types_profile.HttpCapability) {
           streaming: streaming,
           response_mode: response_mode,
           limits: limits,
+          files: files,
         ))
 
       Error(expected) ->
@@ -881,6 +893,7 @@ fn runner_capability_placeholder() -> types_profile.RunnerCapability {
     streaming: False,
     response_mode: types_profile.ResponseModeSync,
     limits: None,
+    files: None,
   )
 }
 
@@ -894,6 +907,7 @@ fn http_capability_placeholder() -> types_profile.HttpCapability {
     streaming: False,
     response_mode: types_profile.ResponseModeSync,
     limits: None,
+    files: None,
   )
 }
 
@@ -929,6 +943,70 @@ fn capability_limits_decoder() -> decode.Decoder(types_profile.CapabilityLimits)
     decode.success(types_profile.CapabilityLimits(call_timeout_ms))
   }
   decoder
+}
+
+fn files_semantics_decoder() -> decode.Decoder(types_profile.FilesSemantics) {
+  let decoder = {
+    use accepts <- decode.field("accepts", decode.bool)
+    use max_files <- decode.field("max_files", decode.int)
+    use ingest_effect <- decode.optional_field(
+      "ingest_effect",
+      None,
+      decode.optional(ingest_effect_decoder()),
+    )
+    case validate_files_semantics(accepts, max_files, ingest_effect) {
+      Ok(_) ->
+        decode.success(types_profile.FilesSemantics(
+          accepts: accepts,
+          max_files: max_files,
+          ingest_effect: ingest_effect,
+        ))
+
+      Error(expected) ->
+        decode.failure(files_semantics_placeholder(), expected: expected)
+    }
+  }
+  decoder
+}
+
+fn ingest_effect_decoder() -> decode.Decoder(types_profile.IngestEffect) {
+  let decoder = {
+    use raw <- decode.then(decode.string)
+    case types_profile.ingest_effect_from_string(raw) {
+      Ok(effect) -> decode.success(effect)
+      Error(_) ->
+        decode.failure(types_profile.IngestImmediate, expected: "IngestEffect")
+    }
+  }
+  decoder
+}
+
+fn validate_files_semantics(
+  accepts: Bool,
+  max_files: Int,
+  ingest_effect: Option(types_profile.IngestEffect),
+) -> Result(Nil, String) {
+  case max_files < 0 {
+    True -> Error("FilesMaxFilesNonNegative")
+    False ->
+      case accepts, max_files {
+        False, value if value != 0 -> Error("FilesAcceptsFalseRequiresZero")
+        True, value if value < 1 -> Error("FilesAcceptsTrueRequiresPositive")
+        _, _ ->
+          case accepts, ingest_effect {
+            False, Some(_) -> Error("FilesIngestEffectRequiresAcceptsTrue")
+            _, _ -> Ok(Nil)
+          }
+      }
+  }
+}
+
+fn files_semantics_placeholder() -> types_profile.FilesSemantics {
+  types_profile.FilesSemantics(
+    accepts: False,
+    max_files: 0,
+    ingest_effect: None,
+  )
 }
 
 fn http_method_decoder() -> decode.Decoder(types_profile.HttpMethod) {
