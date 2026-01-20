@@ -98,6 +98,9 @@ pub type SaarLimits {
     max_request_body_bytes: Int,
     max_http_response_bytes: Int,
     max_file_fetch_bytes: Int,
+    task_retention_ms: Int,
+    max_tasks: Int,
+    max_task_result_bytes: Int,
   )
 }
 
@@ -267,6 +270,21 @@ pub fn config_value(cfg: SaarConfig, key: String) -> option.Option(core.Value) {
       option.Some(core.IntVal(v))
     }
 
+    "limits.task_retention_ms" -> {
+      let SaarLimits(task_retention_ms: v, ..) = limits
+      option.Some(core.IntVal(v))
+    }
+
+    "limits.max_tasks" -> {
+      let SaarLimits(max_tasks: v, ..) = limits
+      option.Some(core.IntVal(v))
+    }
+
+    "limits.max_task_result_bytes" -> {
+      let SaarLimits(max_task_result_bytes: v, ..) = limits
+      option.Some(core.IntVal(v))
+    }
+
     _ -> option.None
   }
 }
@@ -334,6 +352,9 @@ pub fn default_saar_config() -> SaarConfig {
       max_request_body_bytes: 1_048_576,
       max_http_response_bytes: 10_485_760,
       max_file_fetch_bytes: 52_428_800,
+      task_retention_ms: 604_800_000,
+      max_tasks: 10_000,
+      max_task_result_bytes: 262_144,
     ),
     stream: StreamConfig(
       sse_keep_alive_interval_ms: 15_000,

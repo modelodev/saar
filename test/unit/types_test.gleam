@@ -148,6 +148,9 @@ pub fn default_config_invariants_test() {
     max_request_body_bytes: max_request_body_bytes,
     max_http_response_bytes: max_http_response_bytes,
     max_file_fetch_bytes: max_file_fetch_bytes,
+    task_retention_ms: task_retention_ms,
+    max_tasks: max_tasks,
+    max_task_result_bytes: max_task_result_bytes,
   ) = limits
 
   let types_config.StreamConfig(
@@ -173,6 +176,9 @@ pub fn default_config_invariants_test() {
   max_request_body_bytes |> should.equal(1_048_576)
   max_http_response_bytes |> should.equal(10_485_760)
   max_file_fetch_bytes |> should.equal(52_428_800)
+  task_retention_ms |> should.equal(604_800_000)
+  max_tasks |> should.equal(10_000)
+  max_task_result_bytes |> should.equal(262_144)
   port_range_min |> should.equal(9000)
   port_range_max |> should.equal(9999)
   sse_keep_alive_interval_ms |> should.equal(15_000)

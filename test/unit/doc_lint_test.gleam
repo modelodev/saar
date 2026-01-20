@@ -146,6 +146,21 @@ pub fn doc_lint_limits_defaults_match_config_test() {
         entry.default_int |> should.equal(Some(limits.max_file_fetch_bytes))
       }
 
+      "limits.task_retention_ms" -> {
+        let types_config.SaarConfig(limits: limits, ..) = cfg
+        entry.default_int |> should.equal(Some(limits.task_retention_ms))
+      }
+
+      "limits.max_tasks" -> {
+        let types_config.SaarConfig(limits: limits, ..) = cfg
+        entry.default_int |> should.equal(Some(limits.max_tasks))
+      }
+
+      "limits.max_task_result_bytes" -> {
+        let types_config.SaarConfig(limits: limits, ..) = cfg
+        entry.default_int |> should.equal(Some(limits.max_task_result_bytes))
+      }
+
       "limits.sse_keep_alive_interval_ms" -> {
         let types_config.SaarConfig(stream: stream, ..) = cfg
         entry.default_int

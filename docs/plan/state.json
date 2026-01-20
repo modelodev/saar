@@ -567,12 +567,16 @@
       "branch": "sprint/s21-interacciones-diferidas",
       "started_at": "2026-01-20T12:04:14Z",
       "completed_at": null,
-      "current_story": null,
+      "current_story": "S21-T02",
       "stories": {
         "S21-T01": {
           "status": "completed",
           "branch": "feat/s21-t01-response-mode",
           "commit": "0a79e771feb92b0061232f7a3ee68514f1fdc569"
+        },
+        "S21-T02": {
+          "status": "in_progress",
+          "branch": "feat/s21-t02-task-store"
         }
       }
     }
