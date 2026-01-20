@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "id": "artifact_gen_deferred",
+    "lifecycle": "transient",
+    "description": "Artifact generator deferred"
+  },
+  "parameters": {},
+  "runner": {
+    "type": "artifact_gen",
+    "tool_config": {"script": "artifact_gen.py"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {
+      "generate": {
+        "input_schema": "std:chat",
+        "streaming": false,
+        "response_mode": "deferred"
+      }
+    }
+  }
+}

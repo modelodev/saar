@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "id": "error_cli_deferred",
+    "lifecycle": "transient",
+    "description": "Error CLI deferred"
+  },
+  "parameters": {},
+  "runner": {
+    "type": "error_cli",
+    "tool_config": {"script": "error_cli.py"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {
+      "echo": {
+        "input_schema": "std:chat",
+        "streaming": false,
+        "response_mode": "deferred"
+      }
+    }
+  }
+}

@@ -313,6 +313,10 @@ pub opaque type AgentMsg {
       Result(types_output.InteractionResult, types_output.InteractionError),
     ),
   )
+  CancelInteraction(
+    trace_id: types_core.TraceId,
+    reply_to: process.Subject(Bool),
+  )
   GetStatus(process.Subject(types_agent.AgentStatusView))
   GetInfo(process.Subject(types_agent.AgentInfoView))
   GetStartSnapshot(process.Subject(StartSnapshot))
@@ -476,6 +480,9 @@ fn handle_message(
 
     Interact(req, stream_mode, reply_to) ->
       handle_interact(state, req, stream_mode, reply_to)
+
+    CancelInteraction(trace_id, reply_to) ->
+      handle_cancel_interaction(state, trace_id, reply_to)
 
     InteractionDone(result) -> handle_interaction_done(state, result)
 
@@ -814,6 +821,36 @@ fn handle_hard_timeout(
   }
 }
 
+fn handle_cancel_interaction(
+  state: AgentRuntimeState,
+  trace_id: types_core.TraceId,
+  reply_to: process.Subject(Bool),
+) -> actor.Next(AgentRuntimeState, AgentMsg) {
+  case state.mode {
+    Idle -> {
+      process.send(reply_to, False)
+      actor.continue(state)
+    }
+
+    Busy(in_flight) -> {
+      let InFlight(trace_id: in_flight_trace, ..) = in_flight
+
+      case in_flight_trace == trace_id {
+        True -> {
+          let next_state = cancel_if_busy(state, "cancelled")
+          process.send(reply_to, True)
+          actor.continue(next_state)
+        }
+
+        False -> {
+          process.send(reply_to, False)
+          actor.continue(state)
+        }
+      }
+    }
+  }
+}
+
 fn clear_in_flight(state: AgentRuntimeState) -> AgentRuntimeState {
   let selector = clear_worker_monitor(state)
 
@@ -992,6 +1029,17 @@ pub fn interact(
     Interact(req, stream_mode, reply_to)
   })
   |> unwrap_or_disconnected(context.trace_id)
+}
+
+/// Cancels an in-flight interaction by trace id, if present.
+pub fn cancel_interaction(
+  agent: AgentRef,
+  trace_id: types_core.TraceId,
+  timeout_ms: Int,
+) -> Result(Bool, safe_call.CallError) {
+  safe_call.call_within(subject(agent), timeout_ms, fn(reply_to) {
+    CancelInteraction(trace_id, reply_to)
+  })
 }
 
 fn unwrap_or_disconnected(

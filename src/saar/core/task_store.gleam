@@ -59,16 +59,17 @@ pub fn start(
   |> actor.start
 }
 
-/// Creates a task with the provided trace id.
+/// Creates a task with the provided trace id and optional context id.
 pub fn create_task(
   store: process.Subject(task_store_protocol.TaskStoreMsg),
   timeout_ms: Int,
   id: types_core.TraceId,
   instance_id: types_core.InstanceId,
   capability: String,
+  context_id: option.Option(String),
   now_ms: Int,
 ) -> Result(
-  types_task.TaskRecord,
+  types_task.TaskCreateResult,
   safe_call.ApiCallError(types_task.TaskStoreError),
 ) {
   safe_call.call_unwrap_result(store, timeout_ms, fn(reply_to) {
@@ -76,6 +77,7 @@ pub fn create_task(
       id,
       instance_id,
       capability,
+      context_id,
       now_ms,
       reply_to,
     )
@@ -189,11 +191,12 @@ fn handle_message(
       id,
       instance_id,
       capability,
+      context_id,
       now_ms,
       reply_to,
     ) -> {
       let #(next, result) =
-        create_task_state(state, id, instance_id, capability, now_ms)
+        create_task_state(state, id, instance_id, capability, context_id, now_ms)
       process.send(reply_to, result)
       actor.continue(next)
     }
@@ -243,12 +246,13 @@ fn create_task_state(
   id: types_core.TraceId,
   instance_id: types_core.InstanceId,
   capability: String,
+  context_id: option.Option(String),
   now_ms: Int,
-) -> #(State, Result(types_task.TaskRecord, types_task.TaskStoreError)) {
+) -> #(State, Result(types_task.TaskCreateResult, types_task.TaskStoreError)) {
   let State(tasks: tasks, max_tasks: max_tasks, ..) = state
 
   case dict.get(tasks, id) {
-    Ok(existing) -> #(state, Ok(existing))
+    Ok(existing) -> #(state, Ok(types_task.TaskExisting(existing)))
     Error(_) ->
       case dict.size(tasks) >= max_tasks {
         True -> #(
@@ -261,12 +265,16 @@ fn create_task_state(
               id: id,
               instance_id: instance_id,
               capability: capability,
+              context_id: context_id,
               status: types_task.TaskRunning,
               created_at_ms: now_ms,
               updated_at_ms: now_ms,
             )
           let next_tasks = dict.insert(tasks, id, record)
-          #(State(..state, tasks: next_tasks), Ok(record))
+          #(
+            State(..state, tasks: next_tasks),
+            Ok(types_task.TaskCreated(record)),
+          )
         }
       }
   }

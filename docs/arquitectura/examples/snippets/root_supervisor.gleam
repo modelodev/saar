@@ -18,6 +18,7 @@ import saar/core/messages.{
   type AgentManagerMsg, type ArtifactRegistryMsg, type PortPoolMsg,
   type ProfilesMsg, type RegistryMsg, type StartArgs,
 }
+import saar/core/task_store_protocol
 import saar/core/port_pool_actor
 import saar/core/profiles
 import saar/core/registry
@@ -34,6 +35,7 @@ pub type RootNames {
     artifact_registry: Name(ArtifactRegistryMsg),
     port_pool: Name(PortPoolMsg),
     profiles: Name(ProfilesMsg),
+    task_store: Name(task_store_protocol.TaskStoreMsg),
     agent_factory: Name(factory_supervisor.Message(StartArgs, agent.AgentRef)),
     agent_manager: Name(AgentManagerMsg),
   )
@@ -45,6 +47,7 @@ pub fn new_names() -> RootNames {
     artifact_registry: process.new_name("saar_artifact_registry"),
     port_pool: process.new_name("saar_port_pool"),
     profiles: process.new_name("saar_profiles"),
+    task_store: process.new_name("saar_task_store"),
     agent_factory: process.new_name("saar_agent_factory"),
     agent_manager: process.new_name("saar_agent_manager"),
   )
@@ -58,6 +61,7 @@ pub opaque type SupervisorRef {
     artifact_registry: Subject(ArtifactRegistryMsg),
     port_pool: Subject(PortPoolMsg),
     profiles: Subject(ProfilesMsg),
+    task_store: Subject(task_store_protocol.TaskStoreMsg),
     agent_manager: Subject(AgentManagerMsg),
   )
 }
@@ -74,6 +78,7 @@ pub fn start(
     artifact_registry_name,
     port_pool_name,
     profiles_name,
+    task_store_name,
     agent_factory_name,
     agent_manager_name,
   ) = names
@@ -83,6 +88,7 @@ pub fn start(
   let artifact_registry_subject = process.named_subject(artifact_registry_name)
   let port_pool_subject = process.named_subject(port_pool_name)
   let profiles_subject = process.named_subject(profiles_name)
+  let task_store_subject = process.named_subject(task_store_name)
   let agent_manager_subject = process.named_subject(agent_manager_name)
 
   // Referencia al supervisor de factory vía nombre (evita pasar PIDs).
@@ -110,6 +116,7 @@ pub fn start(
       profiles_name,
       app_state.initial_profiles,
     ))
+    |> supervisor.add(task_store_child_spec(task_store_name, app_state.config))
     |> supervisor.add(agent_manager_child_spec(
       app_state,
       deps,

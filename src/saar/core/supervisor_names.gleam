@@ -17,6 +17,7 @@ import gleam/otp/factory_supervisor
 import saar/core/agent
 import saar/core/artifact_registry_protocol
 import saar/core/messages
+import saar/core/task_store_protocol
 import saar/gateway/shutdown as gateway_shutdown
 import youid/uuid
 
@@ -32,6 +33,7 @@ pub type RootNames {
     ),
     port_pool: process.Name(messages.PortPoolMsg),
     profiles: process.Name(messages.ProfilesMsg),
+    task_store: process.Name(task_store_protocol.TaskStoreMsg),
     agent_manager: process.Name(messages.AgentManagerMsg),
     agent_factory: process.Name(
       factory_supervisor.Message(messages.StartArgs, agent.AgentRef),
@@ -46,6 +48,7 @@ pub fn new_names() -> RootNames {
     artifact_registry: process.new_name("saar_artifact_registry"),
     port_pool: process.new_name("saar_port_pool"),
     profiles: process.new_name("saar_profiles"),
+    task_store: process.new_name("saar_task_store"),
     agent_manager: process.new_name("saar_agent_manager"),
     agent_factory: process.new_name("saar_agent_factory"),
     gateway_shutdown: process.new_name("saar_gateway_shutdown"),
@@ -66,6 +69,7 @@ pub fn new_names_with_suffix(suffix: String) -> RootNames {
     artifact_registry: process.new_name("saar_artifact_registry_" <> unique),
     port_pool: process.new_name("saar_port_pool_" <> unique),
     profiles: process.new_name("saar_profiles_" <> unique),
+    task_store: process.new_name("saar_task_store_" <> unique),
     agent_manager: process.new_name("saar_agent_manager_" <> unique),
     agent_factory: process.new_name("saar_agent_factory_" <> unique),
     gateway_shutdown: process.new_name("saar_gateway_shutdown_" <> unique),

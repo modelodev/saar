@@ -30,17 +30,21 @@ pub fn reload_dir_source_ok_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(10)
+  count |> should.equal(14)
 
   ids
   |> list.map(types_core.profile_id_to_string)
   |> list.sort(string.compare)
   |> should.equal([
     "artifact_gen",
+    "artifact_gen_deferred",
     "bad_base_url",
     "crasher",
     "echo_cli",
+    "echo_cli_deferred",
+    "echo_cli_deferred_slow",
     "echo_server",
+    "error_cli_deferred",
     "fs_probe",
     "greedy_logger",
     "runner_only_continuous",
@@ -69,7 +73,7 @@ pub fn reload_duplicate_ids_first_source_wins_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(10)
+  count |> should.equal(14)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI for testing")
 }
 
@@ -93,7 +97,7 @@ pub fn reload_duplicate_ids_order_inverts_winner_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(10)
+  count |> should.equal(14)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI overridden")
 }
 
@@ -131,7 +135,7 @@ pub fn reload_duplicate_ids_three_sources_keeps_first_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(10)
+  count |> should.equal(14)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI for testing")
 }
 
@@ -160,7 +164,7 @@ pub fn reload_duplicate_ids_within_dir_keeps_first_and_adds_new_test() {
     profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
     |> test_assertions.assert_ok
 
-  count |> should.equal(11)
+  count |> should.equal(15)
   assert_profile_description(profiles_actor, "echo_cli", "Echo CLI overridden")
   assert_profile_description(profiles_actor, "extra_echo_cli", "Extra profile")
 }

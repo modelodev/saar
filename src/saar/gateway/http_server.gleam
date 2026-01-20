@@ -24,6 +24,7 @@ import gleam/string
 import mist
 import saar/core/artifact_registry_protocol
 import saar/core/messages
+import saar/core/task_store_protocol
 import saar/gateway/a2a_api
 import saar/gateway/agents_api
 import saar/gateway/artifacts_api
@@ -32,6 +33,7 @@ import saar/gateway/health
 import saar/gateway/problem
 import saar/gateway/shutdown as gateway_shutdown
 import saar/gateway/sys_api
+import saar/gateway/tasks_api
 import saar/gateway/ui_proxy_api
 import saar/types/config as types_config
 import saar/types/core as types_core
@@ -45,6 +47,7 @@ pub fn start(
     artifact_registry_protocol.ArtifactRegistryMsg,
   ),
   profiles: process.Subject(messages.ProfilesMsg),
+  task_store: process.Subject(task_store_protocol.TaskStoreMsg),
   agent_manager: process.Subject(messages.AgentManagerMsg),
   shutdown: process.Subject(gateway_shutdown.Msg),
 ) -> actor.StartResult(Nil) {
@@ -57,9 +60,10 @@ pub fn start(
       agent_manager: agent_manager,
     )
 
-  let agents_deps = agents_api.Deps(registry: registry)
+  let agents_deps = agents_api.Deps(registry: registry, task_store: task_store)
   let a2a_deps = a2a_api.Deps(registry: registry)
   let artifacts_deps = artifacts_api.Deps(artifact_registry: artifact_registry)
+  let tasks_deps = tasks_api.Deps(registry: registry, task_store: task_store)
   let ui_deps = ui_proxy_api.Deps(registry: registry, profiles: profiles)
 
   let handler = fn(req) {
@@ -70,6 +74,7 @@ pub fn start(
       agents_deps,
       a2a_deps,
       artifacts_deps,
+      tasks_deps,
       ui_deps,
       profiles,
       shutdown,
@@ -90,6 +95,7 @@ fn handle_request(
   agents_deps: agents_api.Deps,
   a2a_deps: a2a_api.Deps,
   artifacts_deps: artifacts_api.Deps,
+  tasks_deps: tasks_api.Deps,
   ui_deps: ui_proxy_api.Deps,
   profiles: process.Subject(messages.ProfilesMsg),
   shutdown: process.Subject(gateway_shutdown.Msg),
@@ -115,6 +121,7 @@ fn handle_request(
           agents_deps,
           a2a_deps,
           artifacts_deps,
+          tasks_deps,
           ui_deps,
           profiles,
           trace_id,
@@ -133,6 +140,7 @@ fn route_request(
   agents_deps: agents_api.Deps,
   a2a_deps: a2a_api.Deps,
   artifacts_deps: artifacts_api.Deps,
+  tasks_deps: tasks_api.Deps,
   ui_deps: ui_proxy_api.Deps,
   profiles: process.Subject(messages.ProfilesMsg),
   trace_id: types_core.TraceId,
@@ -187,10 +195,20 @@ fn route_request(
                             trace_id,
                           )
                         False ->
-                          case string.starts_with(req.path, "/ui") {
+                          case string.starts_with(req.path, "/tasks") {
                             True ->
-                              ui_proxy_api.handle(req, cfg, ui_deps, trace_id)
-                            False -> problem.not_found(trace_id, req.path)
+                              tasks_api.handle(req, cfg, tasks_deps, trace_id)
+                            False ->
+                              case string.starts_with(req.path, "/ui") {
+                                True ->
+                                  ui_proxy_api.handle(
+                                    req,
+                                    cfg,
+                                    ui_deps,
+                                    trace_id,
+                                  )
+                                False -> problem.not_found(trace_id, req.path)
+                              }
                           }
                       }
                   }

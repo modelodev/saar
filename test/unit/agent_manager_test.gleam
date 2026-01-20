@@ -37,6 +37,7 @@ pub fn start_agent_same_key_one_wins_test() {
     _,
     _,
     _,
+    _,
     agent_manager_name,
     _,
     _,
@@ -106,6 +107,7 @@ pub fn create_agent_profile_not_found_test() {
     _,
     _,
     _profiles_name,
+    _,
     agent_manager_name,
     _,
     _,
@@ -145,6 +147,7 @@ pub fn create_agent_uses_profiles_actor_test() {
     _,
     _,
     profiles_name,
+    _,
     agent_manager_name,
     _,
     _,
@@ -224,6 +227,7 @@ pub fn start_agent_registration_failed_rolls_back_test() {
 
   let supervisor_names.RootNames(
     registry_name,
+    _,
     _,
     _,
     _,

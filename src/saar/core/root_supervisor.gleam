@@ -32,6 +32,8 @@ import saar/core/port_pool_actor
 import saar/core/profiles
 import saar/core/registry
 import saar/core/supervisor_names
+import saar/core/task_store
+import saar/core/task_store_protocol
 import saar/gateway/http_server
 import saar/gateway/shutdown as gateway_shutdown
 import saar/types/config as types_config
@@ -48,6 +50,7 @@ pub opaque type SupervisorRef {
     ),
     port_pool: process.Subject(messages.PortPoolMsg),
     profiles: process.Subject(messages.ProfilesMsg),
+    task_store: process.Subject(task_store_protocol.TaskStoreMsg),
     agent_manager: process.Subject(messages.AgentManagerMsg),
     agent_factory: factory_supervisor.Supervisor(
       messages.StartArgs,
@@ -60,7 +63,7 @@ pub opaque type SupervisorRef {
 /// Starts the full core supervision tree.
 ///
 /// The child order is canonical and must remain stable:
-/// Registry -> ArtifactRegistry -> PortPoolActor -> ProfilesActor -> AgentManagerActor -> AgentFactorySupervisor -> HttpServer.
+/// Registry -> ArtifactRegistry -> PortPoolActor -> ProfilesActor -> TaskStore -> AgentManagerActor -> AgentFactorySupervisor -> HttpServer.
 pub fn start(
   state: app_state.AppState,
   names: supervisor_names.RootNames,
@@ -70,6 +73,7 @@ pub fn start(
     artifact_registry_name,
     port_pool_name,
     profiles_name,
+    task_store_name,
     agent_manager_name,
     agent_factory_name,
     gateway_shutdown_name,
@@ -79,6 +83,7 @@ pub fn start(
   let artifact_registry_subject = process.named_subject(artifact_registry_name)
   let port_pool_subject = process.named_subject(port_pool_name)
   let profiles_subject = process.named_subject(profiles_name)
+  let task_store_subject = process.named_subject(task_store_name)
   let agent_manager_subject = process.named_subject(agent_manager_name)
   let gateway_shutdown_subject = process.named_subject(gateway_shutdown_name)
 
@@ -100,6 +105,7 @@ pub fn start(
     |> supervisor.add(artifact_registry_child_spec(artifact_registry_name))
     |> supervisor.add(port_pool_child_spec(port_pool_name, min_port, max_port))
     |> supervisor.add(profiles_child_spec(profiles_name, initial_profiles))
+    |> supervisor.add(task_store_child_spec(task_store_name, config))
     // Keep agent_manager before agent_factory so rest_for_one restarts
     // the factory (and its agents) when the manager crashes.
     |> supervisor.add(agent_manager_child_spec(
@@ -122,6 +128,7 @@ pub fn start(
       registry_subject,
       artifact_registry_subject,
       profiles_subject,
+      task_store_subject,
       agent_manager_subject,
       gateway_shutdown_subject,
     ))
@@ -141,6 +148,7 @@ pub fn start(
         artifact_registry: artifact_registry_subject,
         port_pool: port_pool_subject,
         profiles: profiles_subject,
+        task_store: task_store_subject,
         agent_manager: agent_manager_subject,
         agent_factory: agent_factory,
         gateway_shutdown: gateway_shutdown_subject,
@@ -176,6 +184,15 @@ fn profiles_child_spec(
   initial_profiles: Dict(types_core.ProfileId, types_profile.Profile),
 ) -> supervision.ChildSpecification(process.Subject(messages.ProfilesMsg)) {
   supervision.worker(fn() { profiles.start(name, initial_profiles) })
+}
+
+fn task_store_child_spec(
+  name: process.Name(task_store_protocol.TaskStoreMsg),
+  config: types_config.SaarConfig,
+) -> supervision.ChildSpecification(
+  process.Subject(task_store_protocol.TaskStoreMsg),
+) {
+  supervision.worker(fn() { task_store.start(name, config) })
 }
 
 fn agent_manager_child_spec(
@@ -231,6 +248,7 @@ fn http_server_child_spec(
     artifact_registry_protocol.ArtifactRegistryMsg,
   ),
   profiles: process.Subject(messages.ProfilesMsg),
+  task_store: process.Subject(task_store_protocol.TaskStoreMsg),
   agent_manager: process.Subject(messages.AgentManagerMsg),
   gateway_shutdown: process.Subject(gateway_shutdown.Msg),
 ) -> supervision.ChildSpecification(Nil) {
@@ -240,6 +258,7 @@ fn http_server_child_spec(
       registry,
       artifact_registry,
       profiles,
+      task_store,
       agent_manager,
       gateway_shutdown,
     )
@@ -261,6 +280,13 @@ pub fn artifact_registry(
 /// Returns the named profiles subject.
 pub fn profiles(ref: SupervisorRef) -> process.Subject(messages.ProfilesMsg) {
   ref.profiles
+}
+
+/// Returns the named task store subject.
+pub fn task_store(
+  ref: SupervisorRef,
+) -> process.Subject(task_store_protocol.TaskStoreMsg) {
+  ref.task_store
 }
 
 /// Returns the named port pool subject.

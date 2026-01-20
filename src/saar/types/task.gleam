@@ -15,6 +15,7 @@
 //// - Used by `saar/core/task_store`.
 //// - Consumed by gateway APIs for deferred task views.
 
+import gleam/option.{type Option}
 import saar/types/core as types_core
 import saar/types/output as types_output
 
@@ -26,16 +27,23 @@ pub type TaskStatus {
   TaskCancelled(error: types_output.InteractionError)
 }
 
-/// Stored task record with lifecycle timestamps.
+/// Stored task record with lifecycle timestamps and optional context id.
 pub type TaskRecord {
   TaskRecord(
     id: types_core.TraceId,
     instance_id: types_core.InstanceId,
     capability: String,
+    context_id: Option(String),
     status: TaskStatus,
     created_at_ms: Int,
     updated_at_ms: Int,
   )
+}
+
+/// Outcome of creating a task in the TaskStore.
+pub type TaskCreateResult {
+  TaskCreated(record: TaskRecord)
+  TaskExisting(record: TaskRecord)
 }
 
 /// Errors returned by the TaskStore actor.
@@ -62,6 +70,14 @@ pub fn task_status_to_string(status: TaskStatus) -> String {
     TaskCompleted(_) -> "completed"
     TaskFailed(_) -> "failed"
     TaskCancelled(_) -> "cancelled"
+  }
+}
+
+/// Returns the task record from a create result.
+pub fn task_create_record(result: TaskCreateResult) -> TaskRecord {
+  case result {
+    TaskCreated(record) -> record
+    TaskExisting(record) -> record
   }
 }
 

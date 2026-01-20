@@ -6,10 +6,11 @@ El gateway es la frontera HTTP de SAAR. Expone dos APIs y servicios de proxy.
 
 ```text
 saar/gateway/
-├── api.gleam      # /sys (orquestador) + /agents (nativo) + /instances/:instance_id/a2a (A2A)
-├── problem.gleam  # RFC7807: dominio → Problem → HTTP response
-├── proxy.gleam    # /artifacts (archivos)
-└── ui_proxy.gleam # /agents/:instance_id/ui/* (proxy UI HTTP-only)
+├── api.gleam        # /sys (orquestador) + /agents (nativo) + /instances/:instance_id/a2a (A2A)
+├── tasks_api.gleam  # /tasks (deferred tasks)
+├── problem.gleam    # RFC7807: dominio → Problem → HTTP response
+├── proxy.gleam      # /artifacts (archivos)
+└── ui_proxy.gleam   # /agents/:instance_id/ui/* (proxy UI HTTP-only)
 ```
 
 ## 2. Autenticación
@@ -74,15 +75,16 @@ Implementación canónica:
 
 ---
 
-## SSE en SAAR (2 usos distintos)
+## SSE en SAAR (3 usos distintos)
 
-SAAR expone Server-Sent Events (SSE) en **dos** flujos distintos. Es importante no mezclarlos:
+SAAR expone Server-Sent Events (SSE) en **tres** flujos distintos. Es importante no mezclarlos:
 
 | Tipo | Endpoint | Qué transmite | Lifecycle | Notas |
 |------|----------|---------------|-----------|-------|
 | **SSE de logs (instancia)** | `GET /sys/agents/:instance_id/logs/stream` | `LogEvent` (runner/system logs) | Mientras exista la instancia | Tiene ring buffer + takeover |
 | **SSE de interacción (nativa)** | `POST /agents/:instance_id/interact` (si `streaming: true`) | Eventos de respuesta (`StreamEvent` → AG-UI) | Dura lo que dure esa interacción | No es ring buffer de logs |
 | **SSE de interacción (A2A)** | `POST /instances/:instance_id/a2a/message:stream` | Eventos A2A (task_status/message) | Dura lo que dure esa interacción | Es streaming de interacción, no logs |
+| **SSE de tasks (deferred)** | `GET /tasks/:task_id/subscribe` | Snapshot + cambios de estado | Hasta terminal o borrado | Polling interno con keep-alives |
 
 **Principio (v0):** cortar SSE (en cualquiera de los flujos) **no** toma decisiones sobre el agente; solo detiene la entrega al cliente. La ejecución sigue hasta completar o timeout, salvo orden superior explícita.
 
@@ -622,6 +624,43 @@ SAAR no interpreta ni valida el catálogo; solo aplica límites/backpressure y t
 **Cancelación (v0):**
 - No hay endpoint de cancelación dedicado ni cancelación implícita al cerrar SSE; si el cliente cierra, simplemente deja de recibir eventos. La interacción sigue hasta completar o timeout.
 - `POST /sys/agents/:instance_id/stop` y `DELETE /sys/agents/:instance_id` **sí** cancelan provisioning/interacciones in-flight best-effort; el cliente de `interact` observa un error `agent_error` con mensaje `"cancelled"` (sync: RFC7807 422; streaming: evento terminal `RUN_ERROR`/`task_status failed`).
+- En modo diferido, `DELETE /tasks/:task_id` cancela una tarea en `running` y la deja en estado terminal `cancelled`.
+
+### 5.3 Interacción diferida (ResponseModeDeferred)
+
+Cuando la capability declara `response_mode=deferred`, el gateway responde rápido con un task id y persiste el estado en TaskStore.
+
+**Semántica v0:**
+- SAAR crea la tarea con `context.trace_id` como `task_id` (idempotente).
+- Responde `202` con `{task_id, instance_id, state}`.
+- Si el agente está Busy, responde `422` (`agent_error`).
+
+**Ejemplo (202):**
+
+```json
+{
+  "task_id": "trace-abc123",
+  "instance_id": "inst-1",
+  "context_id": null,
+  "state": "running",
+  "result": null,
+  "error": null
+}
+```
+
+### 5.4 Tasks API
+
+```http
+GET /tasks/:task_id
+DELETE /tasks/:task_id
+GET /tasks/:task_id/subscribe
+Authorization: Bearer <api_key>
+```
+
+**Semántica v0:**
+- `GET /tasks/:task_id`: devuelve 200 con `state` y `result`/`error` cuando terminal; 404 si no existe.
+- `DELETE /tasks/:task_id`: si está `running`, cancela la interacción y responde 200 con estado `cancelled`; si es terminal, elimina y responde 204.
+- `GET /tasks/:task_id/subscribe`: SSE con snapshot inicial + cambios de estado; se cierra al llegar a terminal o si la tarea desaparece.
 
 ---
 
@@ -1000,6 +1039,9 @@ como feature aislada (módulo dedicado + tests de seguridad).
 | `GET` | `/sys/profiles` | Listar perfiles disponibles | API Key |
 | `GET` | `/agents/:instance_id` | Info + capabilities | API Key |
 | `POST` | `/agents/:instance_id/interact` | Interacción nativa | API Key |
+| `GET` | `/tasks/:task_id` | Ver tarea diferida | API Key |
+| `DELETE` | `/tasks/:task_id` | Cancelar/eliminar tarea | API Key |
+| `GET` | `/tasks/:task_id/subscribe` | Stream de tarea (SSE) | API Key |
 | `GET` | `/instances/:instance_id/.well-known/agent-card.json` | Agent Card A2A | API Key |
 | `POST` | `/instances/:instance_id/a2a/message:send` | Mensaje A2A síncrono | API Key |
 | `POST` | `/instances/:instance_id/a2a/message:stream` | Mensaje A2A streaming | API Key |
@@ -1069,9 +1111,12 @@ fn kill_running_server() -> Nil {
 RootSupervisor (RestForOne)
 ├── RegistryActor (permanent)
 ├── ArtifactRegistry (permanent)
+├── PortPoolActor (permanent)
 ├── ProfilesActor (permanent)
+├── TaskStore (permanent)
 ├── AgentManagerActor (permanent)
 ├── AgentFactorySupervisor (permanent)
+├── GatewayShutdown (permanent)
 └── HttpServer (permanent)
 
 Nota: los `AgentActor` se crean bajo demanda como children del `AgentFactorySupervisor`

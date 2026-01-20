@@ -21,7 +21,15 @@ pub fn store_roundtrip_get() {
   let assert Ok(instance_id) = types_core.instance_id("inst-1")
   let trace_id = types_core.trace_id("trace-1")
 
-  task_store.create_task(store, 1000, trace_id, instance_id, "chat", 10)
+  task_store.create_task(
+    store,
+    1000,
+    trace_id,
+    instance_id,
+    "chat",
+    option.None,
+    10,
+  )
   |> should.be_ok
 
   let result = sample_result(trace_id, "ok")
@@ -45,7 +53,15 @@ pub fn gc_removes_old_terminal_tasks() {
   let assert Ok(instance_id) = types_core.instance_id("inst-1")
   let trace_id = types_core.trace_id("trace-gc")
 
-  task_store.create_task(store, 1000, trace_id, instance_id, "chat", 0)
+  task_store.create_task(
+    store,
+    1000,
+    trace_id,
+    instance_id,
+    "chat",
+    option.None,
+    0,
+  )
   |> should.be_ok
 
   let result = sample_result(trace_id, "ok")
@@ -71,6 +87,7 @@ pub fn max_tasks_limit_enforced() {
     types_core.trace_id("trace-1"),
     instance_id,
     "chat",
+    option.None,
     0,
   )
   |> should.be_ok
@@ -82,6 +99,7 @@ pub fn max_tasks_limit_enforced() {
       types_core.trace_id("trace-2"),
       instance_id,
       "chat",
+      option.None,
       0,
     )
   {
@@ -97,7 +115,15 @@ pub fn max_task_result_bytes_enforced() {
   let assert Ok(instance_id) = types_core.instance_id("inst-1")
   let trace_id = types_core.trace_id("trace-big")
 
-  task_store.create_task(store, 1000, trace_id, instance_id, "chat", 0)
+  task_store.create_task(
+    store,
+    1000,
+    trace_id,
+    instance_id,
+    "chat",
+    option.None,
+    0,
+  )
   |> should.be_ok
 
   let result = sample_result(trace_id, "this string is too long")

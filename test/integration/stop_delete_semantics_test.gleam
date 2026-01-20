@@ -542,6 +542,7 @@ fn start_root(
     artifact_registry_name,
     _,
     _,
+    _,
     agent_manager_name,
     _,
     _,

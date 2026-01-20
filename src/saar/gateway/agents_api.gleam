@@ -35,9 +35,12 @@ import mist
 import saar/adapters/agui
 import saar/core/agent
 import saar/core/messages
+import saar/core/task_store
+import saar/core/task_store_protocol
 import saar/decoders
 import saar/gateway/lookup_http
 import saar/gateway/problem
+import saar/gateway/tasks_api
 import saar/gateway/request_url
 import saar/otp/safe_call
 import saar/streams/sink
@@ -50,10 +53,15 @@ import saar/types/input as types_input
 import saar/types/output as types_output
 import saar/types/profile as types_profile
 import saar/types/stream
+import saar/types/task as types_task
+import saar/ffi
 import youid/uuid
 
 pub type Deps {
-  Deps(registry: process.Subject(messages.RegistryMsg))
+  Deps(
+    registry: process.Subject(messages.RegistryMsg),
+    task_store: process.Subject(task_store_protocol.TaskStoreMsg),
+  )
 }
 
 /// Routes a request under `/agents`.
@@ -86,7 +94,7 @@ fn handle_agent_info(
       case parse_instance_id_or_400(instance_raw, trace_id, req.path) {
         Error(resp) -> resp
         Ok(instance_id) -> {
-          let Deps(registry: registry) = deps
+          let Deps(registry: registry, ..) = deps
           lookup_http.with_agent_ref(
             registry,
             registry_timeout_ms(cfg),
@@ -120,14 +128,16 @@ fn handle_agent_interact(
       case parse_instance_id_or_400(instance_raw, trace_id, req.path) {
         Error(resp) -> resp
         Ok(instance_id) -> {
-          let Deps(registry: registry) = deps
+          let Deps(registry: registry, ..) = deps
           lookup_http.with_agent_ref(
             registry,
             registry_timeout_ms(cfg),
             trace_id,
             req.path,
             instance_id,
-            fn(agent_ref) { interact_with_agent(req, cfg, trace_id, agent_ref) },
+            fn(agent_ref) {
+              interact_with_agent(req, cfg, deps, trace_id, agent_ref)
+            },
           )
         }
       }
@@ -147,6 +157,7 @@ type InteractParsed {
 fn interact_with_agent(
   req: request.Request(mist.Connection),
   cfg: types_config.SaarConfig,
+  deps: Deps,
   server_trace_id: types_core.TraceId,
   agent_ref: agent.AgentRef,
 ) -> response.Response(mist.ResponseData) {
@@ -219,8 +230,8 @@ fn interact_with_agent(
                       inputs: payload,
                       context: ctx,
                     )
-                  let wants_streaming =
-                    is_streaming_capability(info.interface, capability)
+                  let response_mode =
+                    capability_response_mode(info.interface, capability)
                   let timeout_ms =
                     agent.resolve_call_timeout_for(
                       cfg,
@@ -228,14 +239,25 @@ fn interact_with_agent(
                       capability,
                     )
 
-                  case wants_streaming {
-                    False ->
+                  case response_mode {
+                    types_profile.ResponseModeSync ->
                       interact_sync(req, trace_id, agent_ref, req0, timeout_ms)
 
-                    True ->
+                    types_profile.ResponseModeStream ->
                       interact_streaming(
                         req,
                         cfg,
+                        trace_id,
+                        agent_ref,
+                        req0,
+                        timeout_ms,
+                      )
+
+                    types_profile.ResponseModeDeferred ->
+                      interact_deferred(
+                        req,
+                        cfg,
+                        deps,
                         trace_id,
                         agent_ref,
                         req0,
@@ -352,6 +374,168 @@ fn interact_streaming(
   |> response.set_body(mist.Chunked(body_stream))
 }
 
+fn interact_deferred(
+  req: request.Request(mist.Connection),
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  trace_id: types_core.TraceId,
+  agent_ref: agent.AgentRef,
+  req0: agent.AgentRequest,
+  timeout_ms: Int,
+) -> response.Response(mist.ResponseData) {
+  let Deps(task_store: store, ..) = deps
+  let agent.AgentRequest(instance_id: instance_id, capability: capability, ..) =
+    req0
+
+  case
+    task_store.create_task(
+      store,
+      task_timeout_ms(cfg),
+      trace_id,
+      instance_id,
+      capability,
+      None,
+      ffi.now_ms(),
+    )
+  {
+    Ok(result) ->
+      handle_created_task(req, cfg, deps, agent_ref, req0, timeout_ms, result)
+    Error(safe_call.CallFailed(call_err)) ->
+      problem.from_call_error(call_err, trace_id, req.path)
+    Error(safe_call.ActorError(err)) ->
+      task_store_error_to_response(trace_id, req.path, err)
+  }
+}
+
+fn handle_created_task(
+  req: request.Request(mist.Connection),
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  agent_ref: agent.AgentRef,
+  req0: agent.AgentRequest,
+  timeout_ms: Int,
+  result: types_task.TaskCreateResult,
+) -> response.Response(mist.ResponseData) {
+  let record = types_task.task_create_record(result)
+
+  case result {
+    types_task.TaskExisting(_) ->
+      json_response(202, tasks_api.encode_task_record(record))
+
+    types_task.TaskCreated(_) ->
+      case agent.status(agent_ref, status_timeout_ms(cfg)) {
+        Error(call_err) ->
+          task_create_call_failed(req, cfg, deps, record, call_err)
+        Ok(status) ->
+          case status.mode {
+            types_agent.RunBusy -> task_create_busy(req, cfg, deps, record)
+            types_agent.RunIdle -> {
+              start_deferred_interaction(cfg, deps, agent_ref, req0, timeout_ms)
+              json_response(202, tasks_api.encode_task_record(record))
+            }
+          }
+      }
+  }
+}
+
+fn task_create_call_failed(
+  req: request.Request(mist.Connection),
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  record: types_task.TaskRecord,
+  call_err: safe_call.CallError,
+) -> response.Response(mist.ResponseData) {
+  let Deps(task_store: store, ..) = deps
+  let _ = task_store.delete_task(store, task_timeout_ms(cfg), record.id)
+  problem.from_call_error(call_err, record.id, req.path)
+}
+
+fn task_create_busy(
+  req: request.Request(mist.Connection),
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  record: types_task.TaskRecord,
+) -> response.Response(mist.ResponseData) {
+  let Deps(task_store: store, ..) = deps
+  let _ = task_store.delete_task(store, task_timeout_ms(cfg), record.id)
+
+  problem.from_error_kind(
+    types_enums.AgentError,
+    record.id,
+    req.path,
+    "Agent is busy",
+  )
+}
+
+fn start_deferred_interaction(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  agent_ref: agent.AgentRef,
+  req0: agent.AgentRequest,
+  timeout_ms: Int,
+) -> Nil {
+  let Deps(task_store: store, ..) = deps
+
+  let _ =
+    process.spawn(fn() {
+      let result = agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms)
+      let now_ms = ffi.now_ms()
+
+      case result {
+        Ok(output) -> {
+          let _ =
+            task_store.complete_task(
+              store,
+              task_timeout_ms(cfg),
+              output.trace_id,
+              output,
+              now_ms,
+            )
+          Nil
+        }
+
+        Error(err) -> handle_deferred_error(cfg, deps, err, now_ms)
+      }
+    })
+
+  Nil
+}
+
+fn handle_deferred_error(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  err: types_output.InteractionError,
+  now_ms: Int,
+) -> Nil {
+  let Deps(task_store: store, ..) = deps
+
+  case err.kind, err.message {
+    types_enums.AgentError, "cancelled" -> {
+      let _ =
+        task_store.cancel_task(
+          store,
+          task_timeout_ms(cfg),
+          err.trace_id,
+          err,
+          now_ms,
+        )
+      Nil
+    }
+
+    _, _ -> {
+      let _ =
+        task_store.fail_task(
+          store,
+          task_timeout_ms(cfg),
+          err.trace_id,
+          err,
+          now_ms,
+        )
+      Nil
+    }
+  }
+}
+
 type WriterMsg {
   Write(String, process.Subject(Result(Nil, safe_call.CallError)))
   Close
@@ -453,21 +637,21 @@ fn capability_input_schema(
   }
 }
 
-fn is_streaming_capability(
+fn capability_response_mode(
   interface: types_profile.Interface,
   capability: String,
-) -> Bool {
+) -> types_profile.ResponseMode {
   case interface {
     types_profile.RunnerInterface(caps) ->
       case dict.get(caps, capability) {
-        Ok(cap) -> cap.streaming
-        Error(_) -> False
+        Ok(cap) -> cap.response_mode
+        Error(_) -> types_profile.ResponseModeSync
       }
 
     types_profile.HttpInterface(_, _, _, caps) ->
       case dict.get(caps, capability) {
-        Ok(cap) -> cap.streaming
-        Error(_) -> False
+        Ok(cap) -> cap.response_mode
+        Error(_) -> types_profile.ResponseModeSync
       }
   }
 }
@@ -714,6 +898,12 @@ fn registry_timeout_ms(cfg: types_config.SaarConfig) -> Int {
   ms
 }
 
+fn task_timeout_ms(cfg: types_config.SaarConfig) -> Int {
+  let types_config.SaarConfig(timeouts: timeouts, ..) = cfg
+  let types_config.SaarTimeouts(call_timeout_ms: ms, ..) = timeouts
+  ms
+}
+
 fn max_request_body_bytes(cfg: types_config.SaarConfig) -> Int {
   let types_config.SaarConfig(limits: limits, ..) = cfg
   let types_config.SaarLimits(max_request_body_bytes: bytes, ..) = limits
@@ -724,4 +914,28 @@ fn sse_keep_alive_interval_ms(cfg: types_config.SaarConfig) -> Int {
   let types_config.SaarConfig(stream: stream, ..) = cfg
   let types_config.StreamConfig(sse_keep_alive_interval_ms: ms, ..) = stream
   ms
+}
+
+fn task_store_error_to_response(
+  trace_id: types_core.TraceId,
+  path: String,
+  err: types_task.TaskStoreError,
+) -> response.Response(mist.ResponseData) {
+  case err {
+    types_task.TaskNotFound -> problem.not_found(trace_id, path)
+    types_task.TaskLimitReached(_) ->
+      problem.from_error_kind(
+        types_enums.InfraError,
+        trace_id,
+        path,
+        "max tasks reached",
+      )
+    types_task.TaskResultTooLarge(_, _) ->
+      problem.from_error_kind(
+        types_enums.InfraError,
+        trace_id,
+        path,
+        "task result too large",
+      )
+  }
 }

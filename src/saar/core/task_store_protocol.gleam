@@ -15,7 +15,7 @@
 //// - Used by boundary callers via `saar/otp/safe_call`.
 
 import gleam/erlang/process.{type Subject}
-import gleam/option.{type Option}
+import gleam/option
 import saar/types/core as types_core
 import saar/types/output as types_output
 import saar/types/task as types_task
@@ -26,12 +26,15 @@ pub type TaskStoreMsg {
     id: types_core.TraceId,
     instance_id: types_core.InstanceId,
     capability: String,
+    context_id: option.Option(String),
     now_ms: Int,
-    reply_to: Subject(Result(types_task.TaskRecord, types_task.TaskStoreError)),
+    reply_to: Subject(
+      Result(types_task.TaskCreateResult, types_task.TaskStoreError),
+    ),
   )
   GetTask(
     id: types_core.TraceId,
-    reply_to: Subject(Option(types_task.TaskRecord)),
+    reply_to: Subject(option.Option(types_task.TaskRecord)),
   )
   CompleteTask(
     id: types_core.TraceId,

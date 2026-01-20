@@ -34,7 +34,7 @@ RootSupervisor (RestForOne, Permanent)
 │   - SSOT de instancias activas (InstanceId → AgentRef)
 │   - Si crashea, **no intentamos rehidratar** el índice en v0
 │   - Por diseño, su caída provoca (RestForOne) la terminación del subtree dependiente
-│     (ProfilesActor + AgentManagerActor + AgentFactorySupervisor + agentes + GatewayShutdown + HttpServer):
+│     (ProfilesActor + TaskStore + AgentManagerActor + AgentFactorySupervisor + agentes + GatewayShutdown + HttpServer):
 │     evita “agentes fantasma”
 ├── ArtifactRegistry (Permanent)
 │   - Whitelist en memoria para servir `/artifacts/:artifact_id` (ArtifactId → #(InstanceId, WorkspacePath, mime))
@@ -46,6 +46,9 @@ RootSupervisor (RestForOne, Permanent)
 │   - SSOT en memoria de perfiles cargados (ProfileId → Profile)
 │   - Permite `/sys/reload-profiles` sin reiniciar SAAR
 │   - El IO de leer perfiles desde disco ocurre en el borde; aquí solo se actualiza estado puro (SetProfiles)
+├── TaskStore (Permanent)
+│   - SSOT en memoria de tareas diferidas (TraceId → TaskRecord)
+│   - Aplica límites de retención, conteo y tamaño de resultado
 ├── AgentManagerActor (Permanent)
 │   - Actor “manager” de instancias (no es un supervisor OTP).
 │   - Crea agentes bajo demanda vía `AgentFactorySupervisor` y coordina register/stop/delete.
@@ -79,11 +82,11 @@ RootSupervisor (RestForOne, Permanent)
 
 | Supervisor | Estrategia | Justificación |
 |------------|------------|---------------|
-| Root | RestForOne | Si cae Registry o ArtifactRegistry, reinicia el subtree dependiente (`ProfilesActor` + `AgentManagerActor` + `AgentFactorySupervisor` + agentes + `GatewayShutdown` + `HttpServer`); si cae `AgentManagerActor`, reinicia su subtree dependiente (`AgentFactorySupervisor` + agentes + `GatewayShutdown` + `HttpServer`) |
+| Root | RestForOne | Si cae Registry o ArtifactRegistry, reinicia el subtree dependiente (`ProfilesActor` + `TaskStore` + `AgentManagerActor` + `AgentFactorySupervisor` + agentes + `GatewayShutdown` + `HttpServer`); si cae `AgentManagerActor`, reinicia su subtree dependiente (`AgentFactorySupervisor` + agentes + `GatewayShutdown` + `HttpServer`) |
 
-Hijos declarados en ese orden (Registry -> ArtifactRegistry -> PortPoolActor -> ProfilesActor -> AgentManagerActor -> AgentFactorySupervisor -> GatewayShutdown -> HttpServer) para que RestForOne reinicie dependencias sin cascadas innecesarias y para evitar “agentes huérfanos”.
+Hijos declarados en ese orden (Registry -> ArtifactRegistry -> PortPoolActor -> ProfilesActor -> TaskStore -> AgentManagerActor -> AgentFactorySupervisor -> GatewayShutdown -> HttpServer) para que RestForOne reinicie dependencias sin cascadas innecesarias y para evitar “agentes huérfanos”.
 
-**Invariante (consistencia):** si el `RegistryActor` pierde estado (crash+restart), SAAR no permite que queden agentes vivos “invisibles” para el índice. La estrategia elegida (RestForOne con Registry antes del subtree dependiente: `ProfilesActor` + `AgentManagerActor` + `AgentFactorySupervisor` + agentes + `GatewayShutdown` + `HttpServer`) garantiza que la caída del Registry tumba ese subtree. La reconciliación/recreación es responsabilidad de SAM.
+**Invariante (consistencia):** si el `RegistryActor` pierde estado (crash+restart), SAAR no permite que queden agentes vivos “invisibles” para el índice. La estrategia elegida (RestForOne con Registry antes del subtree dependiente: `ProfilesActor` + `TaskStore` + `AgentManagerActor` + `AgentFactorySupervisor` + agentes + `GatewayShutdown` + `HttpServer`) garantiza que la caída del Registry tumba ese subtree. La reconciliación/recreación es responsabilidad de SAM.
 Además, al declarar `AgentManagerActor` antes del `AgentFactorySupervisor`, si el manager crashea entre `start_child` y `registry.register`, el `RestForOne` tumba el factory (y por tanto los agentes) y no puede quedar un proceso “vivo pero no registrado”.
 
 ### 1.2 Política de Reinicio
@@ -93,6 +96,7 @@ Además, al declarar `AgentManagerActor` antes del `AgentFactorySupervisor`, si 
 | Registry | Permanent | Crítico para el sistema |
 | ArtifactRegistry | Permanent | Sirve `/artifacts` y purga en delete |
 | ProfilesActor | Permanent | SSOT de perfiles en memoria |
+| TaskStore | Permanent | Estado en memoria de tareas diferidas |
 | AgentFactorySupervisor | Permanent | Crea agentes dinámicamente (children `Temporary`) |
 | AgentManagerActor | Permanent | Debe estar siempre disponible |
 | HttpServer | Permanent | Debe estar siempre disponible |
@@ -120,6 +124,7 @@ Módulos:
 | `saar/core/registry_api.gleam` | API pública para el registry |
 | `saar/core/profiles.gleam` | SSOT de perfiles (ProfilesActor) |
 | `saar/core/profiles_api.gleam` | API tipada para ProfilesActor |
+| `saar/core/task_store.gleam` | TaskStore (tareas diferidas) |
 | `saar/core/agent_manager.gleam` | Actor “manager” de instancias (start vía factory supervisor) |
 | `saar/gateway/http_server.gleam` | Servidor HTTP (mist) supervisado |
 | `saar/bridge/runner.gleam` | Ports a `generic_uvx`/`generic_uvx_server` |
@@ -854,23 +859,23 @@ pub fn update_status(registry: Subject(RegistryMsg), instance_id: InstanceId, st
 SAAR usa una jerarquía de supervisores OTP estándar:
 
 ```
-┌───────────────────────────────────────────────────────────────────────────┐
-│                          RootSupervisor                                    │
-│                       (RestForOne, Permanent)                             │
-│                                                                           │
-│  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌──────────────────┐  ┌──────────────────┐  ┌───────────────┐ │
-│  │ RegistryActor  │  │ ArtifactReg    │  │ ProfilesActor  │  │ AgentManagerActor │  │ AgentFactorySup   │  │   HttpServer   │ │
-│  │  (Permanent)   │  │  (Permanent)   │  │  (Permanent)   │  │  (Permanent)      │  │  (Permanent)      │  │  (Permanent)   │ │
-│  │                │  │                │  │                │  │                   │  │  ┌─────────┐       │  │               │ │
-│  │ - Índice inst. │  │ - Mapeo ID→    │  │ - SSOT perfiles│  │ - CRUD instancias │  │  │ Agent 1 │       │  │ - Sockets     │ │
-│  │ - Monitores    │  │   artefactos   │  │                │  │ - Register/stop   │  │  │ (link)  │       │  │ - SSE         │ │
-│  │   agentes      │  │ - Sin monitoreo│  │                │  │                   │  │  └─────────┘       │  │               │ │
-│  └────────────────┘  └────────────────┘  └────────────────┘  └──────────────────┘  │  ┌─────────┐       │  └───────────────┘ │
-│                                                                                      │  │ Agent 2 │       │                     │
-│                                                                                      │  │ (link)  │       │                     │
-│                                                                                      │  └─────────┘       │                     │
-│                                                                                      └──────────────────┘                     │
-└───────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   RootSupervisor                                                    │
+│                                (RestForOne, Permanent)                                               │
+│                                                                                                     │
+│  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐  ┌───────────────┐ │
+│  │ RegistryActor  │  │ ArtifactReg    │  │ ProfilesActor  │  │  TaskStore   │  │ AgentManagerActor │  │ AgentFactorySup   │  │   HttpServer   │ │
+│  │  (Permanent)   │  │  (Permanent)   │  │  (Permanent)   │  │ (Permanent)  │  │  (Permanent)      │  │  (Permanent)      │  │  (Permanent)   │ │
+│  │                │  │                │  │                │  │              │  │                   │  │  ┌─────────┐       │  │               │ │
+│  │ - Índice inst. │  │ - Mapeo ID→    │  │ - SSOT perfiles│  │ - Tasks en   │  │ - CRUD instancias │  │  │ Agent 1 │       │  │ - Sockets     │ │
+│  │ - Monitores    │  │   artefactos   │  │                │  │   memoria    │  │ - Register/stop   │  │  │ (link)  │       │  │ - SSE         │ │
+│  │   agentes      │  │ - Sin monitoreo│  │                │  │              │  │                   │  │  └─────────┘       │  │               │ │
+│  └────────────────┘  └────────────────┘  └────────────────┘  └──────────────┘  └──────────────────┘  │  ┌─────────┐       │  └───────────────┘ │
+│                                                                                                      │  │ Agent 2 │       │                     │
+│                                                                                                      │  │ (link)  │       │                     │
+│                                                                                                      │  └─────────┘       │                     │
+│                                                                                                      └──────────────────┘                     │
+└───────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Nota (shutdown):** `HttpServer` es hijo del `RootSupervisor` y se arranca al final para que, al apagar,
@@ -1032,6 +1037,7 @@ pub fn list_agents(
 | `RegistryActor` | `Permanent` | Crítico para el sistema, siempre debe existir |
 | `ArtifactRegistry` | `Permanent` | Sirve `/artifacts` y purga en delete |
 | `ProfilesActor` | `Permanent` | SSOT de perfiles en memoria (reload sin reinicio) |
+| `TaskStore` | `Permanent` | Estado en memoria de tareas diferidas |
 | `AgentFactorySupervisor` | `Permanent` | Crea agentes bajo demanda; children `Temporary` (sin restart) |
 | `AgentManagerActor` | `Permanent` | Debe estar disponible para crear/gestionar instancias |
 | `AgentActor` | N/A | En v0 no hay auto-restart de agentes; si un agente cae, SAM debe recrearlo |

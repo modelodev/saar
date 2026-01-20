@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "id": "echo_cli_deferred_slow",
+    "lifecycle": "transient",
+    "description": "Echo CLI deferred slow"
+  },
+  "parameters": {
+    "delay_ms": {"source": "fixed", "value": 2000, "type": "int"}
+  },
+  "runner": {
+    "type": "echo_cli",
+    "tool_config": {"script": "echo_cli.py"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {
+      "echo": {
+        "input_schema": "std:chat",
+        "streaming": false,
+        "response_mode": "deferred"
+      }
+    }
+  }
+}
