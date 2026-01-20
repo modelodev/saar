@@ -633,7 +633,11 @@
           "branch": "feat/s22-t05-discovery-files-semantics",
           "commit": "e794508e9e2ad503894144c8302322f587908f36"
         },
-        "S22-T06": {"status": "pending", "branch": null, "commit": null}
+        "S22-T06": {
+          "status": "completed",
+          "branch": "feat/s22-t06-e2e-docs-files",
+          "commit": "856ff4f3b12f4c096bb6828dc3ab13ec4a2e4664"
+        }
       }
     }
   }
