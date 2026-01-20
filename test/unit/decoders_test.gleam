@@ -44,12 +44,8 @@ pub fn decode_profile_ok_test() {
 
   let assert Ok(profile) = json.parse(contents, decoders.profile_decoder())
 
-  let types_profile.Profile(
-    meta: meta,
-    parameters: _,
-    runner: _,
-    interface: _,
-  ) = profile
+  let types_profile.Profile(meta: meta, parameters: _, runner: _, interface: _) =
+    profile
   meta.id
   |> types_core.profile_id_to_string
   |> should.equal("echo_cli")

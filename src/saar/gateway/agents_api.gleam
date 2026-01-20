@@ -25,6 +25,7 @@ import gleam/erlang/process
 import gleam/http
 import gleam/http/request
 import gleam/http/response
+import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -217,52 +218,77 @@ fn interact_with_agent(
                   )
 
                 Ok(payload) -> {
-                  let ctx =
-                    types_input.RequestContext(
-                      trace_id: trace_id,
-                      extra: dict.new(),
-                    )
-                  let req0 =
-                    agent.AgentRequest(
-                      profile_id: info.meta.id,
-                      instance_id: info.status.instance_id,
-                      capability: capability,
-                      inputs: payload,
-                      context: ctx,
-                    )
-                  let response_mode =
-                    capability_response_mode(info.interface, capability)
-                  let timeout_ms =
-                    agent.resolve_call_timeout_for(
-                      cfg,
-                      info.interface,
-                      capability,
-                    )
+                  let files_semantics =
+                    capability_files_semantics(info.interface, capability)
 
-                  case response_mode {
-                    types_profile.ResponseModeSync ->
-                      interact_sync(req, trace_id, agent_ref, req0, timeout_ms)
-
-                    types_profile.ResponseModeStream ->
-                      interact_streaming(
-                        req,
-                        cfg,
+                  case validate_files_cardinality(files_semantics, payload) {
+                    Error(#(max_files, received_files)) ->
+                      problem.bad_request_with_code(
                         trace_id,
-                        agent_ref,
-                        req0,
-                        timeout_ms,
+                        req.path,
+                        files_cardinality_detail(
+                          capability,
+                          max_files,
+                          received_files,
+                        ),
+                        "invalid_input",
                       )
 
-                    types_profile.ResponseModeDeferred ->
-                      interact_deferred(
-                        req,
-                        cfg,
-                        deps,
-                        trace_id,
-                        agent_ref,
-                        req0,
-                        timeout_ms,
-                      )
+                    Ok(_) -> {
+                      let ctx =
+                        types_input.RequestContext(
+                          trace_id: trace_id,
+                          extra: dict.new(),
+                        )
+                      let req0 =
+                        agent.AgentRequest(
+                          profile_id: info.meta.id,
+                          instance_id: info.status.instance_id,
+                          capability: capability,
+                          inputs: payload,
+                          context: ctx,
+                        )
+                      let response_mode =
+                        capability_response_mode(info.interface, capability)
+                      let timeout_ms =
+                        agent.resolve_call_timeout_for(
+                          cfg,
+                          info.interface,
+                          capability,
+                        )
+
+                      case response_mode {
+                        types_profile.ResponseModeSync ->
+                          interact_sync(
+                            req,
+                            trace_id,
+                            agent_ref,
+                            req0,
+                            timeout_ms,
+                          )
+
+                        types_profile.ResponseModeStream ->
+                          interact_streaming(
+                            req,
+                            cfg,
+                            trace_id,
+                            agent_ref,
+                            req0,
+                            timeout_ms,
+                          )
+
+                        types_profile.ResponseModeDeferred ->
+                          interact_deferred(
+                            req,
+                            cfg,
+                            deps,
+                            trace_id,
+                            agent_ref,
+                            req0,
+                            timeout_ms,
+                          )
+                      }
+                    }
                   }
                 }
               }
@@ -655,6 +681,55 @@ fn capability_response_mode(
         Error(_) -> types_profile.ResponseModeSync
       }
   }
+}
+
+fn capability_files_semantics(
+  interface: types_profile.Interface,
+  capability: String,
+) -> Option(types_profile.FilesSemantics) {
+  case interface {
+    types_profile.RunnerInterface(caps) ->
+      case dict.get(caps, capability) {
+        Ok(cap) -> cap.files
+        Error(_) -> None
+      }
+
+    types_profile.HttpInterface(_, _, _, caps) ->
+      case dict.get(caps, capability) {
+        Ok(cap) -> cap.files
+        Error(_) -> None
+      }
+  }
+}
+
+fn validate_files_cardinality(
+  files_semantics: Option(types_profile.FilesSemantics),
+  payload: types_input.InputPayload,
+) -> Result(Nil, #(Int, Int)) {
+  case files_semantics {
+    None -> Ok(Nil)
+    Some(types_profile.FilesSemantics(max_files: max_files, ..)) -> {
+      let received_files = types_input.payload_file_count(payload)
+
+      case received_files > max_files {
+        True -> Error(#(max_files, received_files))
+        False -> Ok(Nil)
+      }
+    }
+  }
+}
+
+fn files_cardinality_detail(
+  capability: String,
+  max_files: Int,
+  received_files: Int,
+) -> String {
+  "invalid files cardinality: capability="
+  <> capability
+  <> " max_files="
+  <> int.to_string(max_files)
+  <> " received_files="
+  <> int.to_string(received_files)
 }
 
 fn encode_agent_info(
