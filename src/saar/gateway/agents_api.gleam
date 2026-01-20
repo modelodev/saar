@@ -43,6 +43,7 @@ import saar/gateway/lookup_http
 import saar/gateway/problem
 import saar/gateway/request_url
 import saar/gateway/tasks_api
+import saar/ingest_metadata
 import saar/otp/safe_call
 import saar/streams/sink
 
@@ -265,6 +266,7 @@ fn interact_with_agent(
                             agent_ref,
                             req0,
                             timeout_ms,
+                            files_semantics,
                           )
 
                         types_profile.ResponseModeStream ->
@@ -306,11 +308,15 @@ fn interact_sync(
   agent_ref: agent.AgentRef,
   req0: agent.AgentRequest,
   timeout_ms: Int,
+  files_semantics: Option(types_profile.FilesSemantics),
 ) -> response.Response(mist.ResponseData) {
   let out = agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms)
 
   case out {
-    Ok(result) -> json_response(200, encode_interaction_result(result))
+    Ok(result) -> {
+      let result = ingest_metadata.attach_ingest_metadata(files_semantics, result)
+      json_response(200, encode_interaction_result(result))
+    }
 
     Error(err) -> interaction_error_to_response(req, trace_id, err)
   }

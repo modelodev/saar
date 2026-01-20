@@ -52,6 +52,7 @@ import saar/types/output as types_output
 import saar/types/profile as types_profile
 import saar/types/resolved_params
 import saar/types/runner as types_runner
+import saar/types/stream as types_stream
 
 /// Executes a single interaction.
 ///
@@ -220,9 +221,29 @@ fn init_a2a_flags(
       a2a.StreamStarted(task_id: input.context.trace_id, context_id: context_id),
     )
 
+  let events = case ingest_event_from_context(input.context.extra) {
+    Some(event) -> list.append(events, [event])
+    None -> events
+  }
+
   events |> list.each(fn(ev) { stream_pump.push(pump, ev) })
 
   A2aFlags(state)
+}
+
+fn ingest_event_from_context(
+  extra: dict.Dict(String, String),
+) -> Option(types_stream.StreamEvent) {
+  case dict.get(extra, "ingest_payload") {
+    Ok(payload) ->
+      case json.parse(payload, decode.dynamic) {
+        Ok(value) ->
+          Some(a2a.ingest_data_event(json_pointer.dynamic_to_json(value)))
+        Error(_) -> None
+      }
+
+    Error(_) -> None
+  }
 }
 
 fn execute_runner_streaming(

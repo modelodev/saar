@@ -42,6 +42,7 @@ import saar/gateway/lookup
 import saar/gateway/lookup_http
 import saar/gateway/problem
 import saar/gateway/request_url
+import saar/ingest_metadata
 import saar/otp/safe_call
 import saar/streams/sink
 import saar/types/agent as types_agent
@@ -76,6 +77,7 @@ type PreparedInteraction {
     context_id: String,
     extensions: a2a.Extensions,
     response_mode: types_profile.ResponseMode,
+    files_semantics: Option(types_profile.FilesSemantics),
     req0: agent.AgentRequest,
     timeout_ms: Int,
   )
@@ -196,6 +198,7 @@ fn message_send_with_agent(
           let PreparedInteraction(
             trace_id: trace_id,
             context_id: context_id,
+            files_semantics: files_semantics,
             response_mode: response_mode,
             req0: req0,
             timeout_ms: timeout_ms,
@@ -210,11 +213,16 @@ fn message_send_with_agent(
               case
                 agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms)
               {
-                Ok(result) ->
+                Ok(result) -> {
+                  let result = ingest_metadata.attach_ingest_metadata(
+                    files_semantics,
+                    result,
+                  )
                   json_response(
                     200,
                     a2a.message_send_response(result, context_id),
                   )
+                }
 
                 Error(err) ->
                   problem.from_error_kind_a2a(err.kind, trace_id, err.message)
@@ -274,6 +282,7 @@ fn message_stream_with_agent(
             trace_id: trace_id,
             context_id: context_id,
             extensions: extensions,
+            files_semantics: files_semantics,
             req0: req0,
             timeout_ms: timeout_ms,
             ..,
@@ -286,6 +295,7 @@ fn message_stream_with_agent(
             context_id,
             protocol,
             extensions,
+            ingest_metadata.ingest_payload(files_semantics, dict.new()),
             keep_alive_ms,
             agent_ref,
             req0,
@@ -904,6 +914,8 @@ fn prepare_interaction(
 
   let files_semantics = capability_files_semantics(info.interface, capability)
 
+  let ingest_payload = ingest_metadata.ingest_payload(files_semantics, dict.new())
+
   use _ <- result.try(
     validate_files_cardinality(files_semantics, payload)
     |> result.map_error(fn(err) {
@@ -916,11 +928,15 @@ fn prepare_interaction(
     }),
   )
 
-  let ctx =
-    types_input.RequestContext(
-      trace_id: trace_id,
-      extra: dict.from_list([#("context_id", context_id)]),
-    )
+  let extra = case ingest_payload {
+    Some(payload) -> dict.from_list([
+      #("context_id", context_id),
+      #("ingest_payload", json.to_string(payload)),
+    ])
+    None -> dict.from_list([#("context_id", context_id)])
+  }
+
+  let ctx = types_input.RequestContext(trace_id: trace_id, extra: extra)
 
   let req0 =
     agent.AgentRequest(
@@ -939,6 +955,7 @@ fn prepare_interaction(
     context_id: context_id,
     extensions: extensions,
     response_mode: response_mode,
+    files_semantics: files_semantics,
     req0: req0,
     timeout_ms: timeout_ms,
   ))
@@ -949,6 +966,7 @@ fn interact_streaming_a2a(
   context_id: String,
   protocol: sink.WireProtocol,
   extensions: a2a.Extensions,
+  ingest: Option(json.Json),
   keep_alive_ms: Int,
   agent_ref: agent.AgentRef,
   req0: agent.AgentRequest,
@@ -970,6 +988,15 @@ fn interact_streaming_a2a(
     )
 
   let stream_sink = sink.start_sse_sink(writer, protocol, keep_alive_ms)
+
+  case ingest {
+    Some(payload) -> {
+      let event = a2a.ingest_data_event(payload)
+      let _ = sink.push_batch(stream_sink, [event], 250)
+      Nil
+    }
+    None -> Nil
+  }
 
   let _pid =
     process.spawn(fn() {

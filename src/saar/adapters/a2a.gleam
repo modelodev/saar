@@ -624,6 +624,31 @@ fn message_a2ui_json(data: json.Json) -> json.Json {
   ])
 }
 
+fn ingest_part_json(ingest: json.Json) -> json.Json {
+  json.object([
+    #("data", json.object([#("ingest", ingest)])),
+    #(
+      "metadata",
+      json.object([
+        #("mimeType", json.string("application/json")),
+      ]),
+    ),
+  ])
+}
+
+fn message_ingest_json(ingest: json.Json) -> json.Json {
+  json.object([
+    #("role", json.string("assistant")),
+    #(
+      "parts",
+      json.array(
+        [ingest_part_json(ingest)],
+        fn(item) { item },
+      ),
+    ),
+  ])
+}
+
 fn encode_a2a_artifact(artifact: types_output.PublicArtifact) -> json.Json {
   json.object([
     #("id", json.string(types_core.artifact_id_to_string(artifact.id))),
@@ -642,10 +667,26 @@ fn message_from_result(result: types_output.InteractionResult) -> json.Json {
     None -> []
   }
 
+  let ingest_part = case dict.get(result.data.metadata, "ingest") {
+    Ok(ingest) -> Some(ingest_part_json(ingest))
+    Error(_) -> None
+  }
+
+  let parts = case ingest_part {
+    Some(part) -> list.append(parts, [part])
+    None -> parts
+  }
+
   json.object([
     #("role", json.string("assistant")),
     #("parts", json.array(parts, fn(item) { item })),
   ])
+}
+
+/// Builds an A2A stream event carrying ingest metadata.
+pub fn ingest_data_event(ingest: json.Json) -> stream.StreamEvent {
+  let payload = message_ingest_json(ingest) |> json.to_string
+  stream.event(sse.named_event("message", payload))
 }
 
 fn artifacts_from_result(result: types_output.InteractionResult) -> json.Json {
