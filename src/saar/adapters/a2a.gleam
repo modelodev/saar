@@ -33,6 +33,7 @@ import saar/types/input as types_input
 import saar/types/output as types_output
 import saar/types/profile as types_profile
 import saar/types/stream
+import saar/types/task as types_task
 
 /// A2A message role (user or assistant).
 pub type A2aRole {
@@ -635,28 +636,106 @@ fn encode_a2a_artifact(artifact: types_output.PublicArtifact) -> json.Json {
   ])
 }
 
-/// Builds an A2A `result` payload from an `InteractionResult`.
-pub fn interaction_result_to_task(
-  result: types_output.InteractionResult,
-  context_id: String,
-) -> json.Json {
+fn message_from_result(result: types_output.InteractionResult) -> json.Json {
   let parts = case result.data.content {
     Some(text) -> [json.object([#("text", json.string(text))])]
     None -> []
   }
 
-  let message =
-    json.object([
-      #("role", json.string("assistant")),
-      #("parts", json.array(parts, fn(item) { item })),
-    ])
+  json.object([
+    #("role", json.string("assistant")),
+    #("parts", json.array(parts, fn(item) { item })),
+  ])
+}
 
+fn artifacts_from_result(
+  result: types_output.InteractionResult,
+) -> json.Json {
+  json.array(result.artifacts, encode_a2a_artifact)
+}
+
+/// Builds an A2A `result` payload from an `InteractionResult`.
+pub fn interaction_result_to_task(
+  result: types_output.InteractionResult,
+  context_id: String,
+) -> json.Json {
   json.object([
     #("id", json.string(types_core.trace_id_to_string(result.trace_id))),
     #("contextId", json.string(context_id)),
     #("status", json.object([#("state", json.string("completed"))])),
-    #("message", message),
-    #("artifacts", json.array(result.artifacts, encode_a2a_artifact)),
+    #("message", message_from_result(result)),
+    #("artifacts", artifacts_from_result(result)),
+  ])
+}
+
+/// Builds an A2A Task payload from a stored task record.
+pub fn task_record_to_task(record: types_task.TaskRecord) -> json.Json {
+  let types_task.TaskRecord(
+    id: id,
+    context_id: context_id,
+    status: status,
+    ..,
+  ) = record
+
+  let fields = [
+    #("id", json.string(types_core.trace_id_to_string(id))),
+    #("contextId", task_context_id(context_id)),
+    #("status", task_status_json(status, id)),
+  ]
+
+  case status {
+    types_task.TaskCompleted(result) ->
+      json.object(
+        list.append(fields, [
+          #("message", message_from_result(result)),
+          #("artifacts", artifacts_from_result(result)),
+        ]),
+      )
+
+    _ -> json.object(fields)
+  }
+}
+
+fn task_context_id(value: Option(String)) -> json.Json {
+  case value {
+    Some(id) -> json.string(id)
+    None -> json.null()
+  }
+}
+
+fn task_status_json(
+  status: types_task.TaskStatus,
+  task_id: types_core.TraceId,
+) -> json.Json {
+  case status {
+    types_task.TaskRunning ->
+      json.object([#("state", json.string("working"))])
+
+    types_task.TaskCompleted(_) ->
+      json.object([#("state", json.string("completed"))])
+
+    types_task.TaskFailed(err) ->
+      json.object([
+        #("state", json.string("failed")),
+        #("error", task_error_json(err, task_id)),
+      ])
+
+    types_task.TaskCancelled(err) ->
+      json.object([
+        #("state", json.string("cancelled")),
+        #("error", task_error_json(err, task_id)),
+      ])
+  }
+}
+
+fn task_error_json(
+  err: types_output.InteractionError,
+  task_id: types_core.TraceId,
+) -> json.Json {
+  json.object([
+    #("kind", json.string(types_enums.error_kind_to_string(err.kind))),
+    #("message", json.string(err.message)),
+    #("trace_id", json.string(types_core.trace_id_to_string(task_id))),
   ])
 }
 
