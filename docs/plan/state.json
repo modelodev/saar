@@ -628,7 +628,11 @@
           "branch": "feat/s22-t04-gateway-ingest-metadata",
           "commit": "9ddddc0770ffe8616351b6769b97a5042a54b1c4"
         },
-        "S22-T05": {"status": "pending", "branch": null, "commit": null},
+        "S22-T05": {
+          "status": "completed",
+          "branch": "feat/s22-t05-discovery-files-semantics",
+          "commit": "e794508e9e2ad503894144c8302322f587908f36"
+        },
         "S22-T06": {"status": "pending", "branch": null, "commit": null}
       }
     }
