@@ -6,6 +6,7 @@
 //// - Implement `GET /instances/:instance_id/.well-known/agent-card.json`.
 //// - Implement `POST /instances/:instance_id/a2a/message:send`.
 //// - Implement `POST /instances/:instance_id/a2a/message:stream`.
+//// - Implement A2A task operations (`GetTask`, `CancelTask`, `SubscribeToTask`).
 //// - Enforce request body limits and A2A-compatible RFC7807 responses.
 ////
 //// Non-responsibilities:
@@ -33,20 +34,30 @@ import mist
 import saar/adapters/a2a
 import saar/core/agent
 import saar/core/messages
+import saar/core/task_store
+import saar/core/task_store_protocol
+import saar/ffi
+import saar/gateway/lookup
 import saar/gateway/lookup_http
 import saar/gateway/problem
 import saar/gateway/request_url
 import saar/otp/safe_call
 import saar/streams/sink
+import saar/types/agent as types_agent
 import saar/types/config as types_config
 import saar/types/core as types_core
 import saar/types/enums as types_enums
 import saar/types/input as types_input
+import saar/types/output as types_output
 import saar/types/profile as types_profile
+import saar/types/task as types_task
 import youid/uuid
 
 pub type Deps {
-  Deps(registry: process.Subject(messages.RegistryMsg))
+  Deps(
+    registry: process.Subject(messages.RegistryMsg),
+    task_store: process.Subject(task_store_protocol.TaskStoreMsg),
+  )
 }
 
 type ParsedMessageRequest {
@@ -63,6 +74,7 @@ type PreparedInteraction {
     trace_id: types_core.TraceId,
     context_id: String,
     extensions: a2a.Extensions,
+    response_mode: types_profile.ResponseMode,
     req0: agent.AgentRequest,
     timeout_ms: Int,
   )
@@ -85,6 +97,9 @@ pub fn handle(
     ["instances", instance_id, "a2a", "message:stream"] ->
       handle_message_stream(req, cfg, deps, trace_id, instance_id)
 
+    ["instances", instance_id, "a2a", "tasks", task_segment] ->
+      handle_task_request(req, cfg, deps, trace_id, instance_id, task_segment)
+
     _ -> problem.not_found_a2a(trace_id)
   }
 }
@@ -101,7 +116,7 @@ fn handle_agent_card(
       case parse_instance_id_or_400(instance_raw, trace_id) {
         Error(resp) -> resp
         Ok(instance_id) -> {
-          let Deps(registry: registry) = deps
+          let Deps(registry: registry, ..) = deps
 
           lookup_http.with_agent_ref(
             registry,
@@ -145,7 +160,7 @@ fn handle_message_send(
       case parse_instance_id_or_400(instance_raw, trace_id) {
         Error(resp) -> resp
         Ok(instance_id) -> {
-          let Deps(registry: registry) = deps
+          let Deps(registry: registry, ..) = deps
 
           lookup_http.with_agent_ref(
             registry,
@@ -154,7 +169,7 @@ fn handle_message_send(
             req.path,
             instance_id,
             fn(agent_ref) {
-              message_send_with_agent(req, cfg, trace_id, agent_ref)
+              message_send_with_agent(req, cfg, deps, trace_id, agent_ref)
             },
           )
         }
@@ -167,6 +182,7 @@ fn handle_message_send(
 fn message_send_with_agent(
   req: request.Request(mist.Connection),
   cfg: types_config.SaarConfig,
+  deps: Deps,
   server_trace_id: types_core.TraceId,
   agent_ref: agent.AgentRef,
 ) -> response.Response(mist.ResponseData) {
@@ -179,17 +195,27 @@ fn message_send_with_agent(
           let PreparedInteraction(
             trace_id: trace_id,
             context_id: context_id,
+            response_mode: response_mode,
             req0: req0,
             timeout_ms: timeout_ms,
             ..,
           ) = prepared
 
-          case agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms) {
-            Ok(result) ->
-              json_response(200, a2a.message_send_response(result, context_id))
+          case response_mode {
+            types_profile.ResponseModeDeferred ->
+              interact_deferred_a2a(cfg, deps, agent_ref, prepared)
 
-            Error(err) ->
-              problem.from_error_kind_a2a(err.kind, trace_id, err.message)
+            _ ->
+              case agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms) {
+                Ok(result) ->
+                  json_response(
+                    200,
+                    a2a.message_send_response(result, context_id),
+                  )
+
+                Error(err) ->
+                  problem.from_error_kind_a2a(err.kind, trace_id, err.message)
+              }
           }
         }
       }
@@ -208,7 +234,7 @@ fn handle_message_stream(
       case parse_instance_id_or_400(instance_raw, trace_id) {
         Error(resp) -> resp
         Ok(instance_id) -> {
-          let Deps(registry: registry) = deps
+          let Deps(registry: registry, ..) = deps
 
           lookup_http.with_agent_ref(
             registry,
@@ -247,6 +273,7 @@ fn message_stream_with_agent(
             extensions: extensions,
             req0: req0,
             timeout_ms: timeout_ms,
+            ..,
           ) = prepared
 
           let protocol = select_wire_protocol(extensions)
@@ -263,6 +290,520 @@ fn message_stream_with_agent(
           )
         }
       }
+  }
+}
+
+fn handle_task_request(
+  req: request.Request(mist.Connection),
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  trace_id: types_core.TraceId,
+  instance_raw: String,
+  task_segment: String,
+) -> response.Response(mist.ResponseData) {
+  case parse_instance_id_or_400(instance_raw, trace_id) {
+    Error(resp) -> resp
+    Ok(instance_id) ->
+      case string.split_once(task_segment, on: ":") {
+        Error(_) ->
+          handle_task_get(req, cfg, deps, trace_id, instance_id, task_segment)
+
+        Ok(#(task_id_raw, "cancel")) ->
+          handle_task_cancel(req, cfg, deps, trace_id, instance_id, task_id_raw)
+
+        Ok(#(task_id_raw, "subscribe")) ->
+          handle_task_subscribe(
+            req,
+            cfg,
+            deps,
+            trace_id,
+            instance_id,
+            task_id_raw,
+          )
+
+        Ok(_) -> problem.not_found_a2a(trace_id)
+      }
+  }
+}
+
+fn handle_task_get(
+  req: request.Request(mist.Connection),
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  trace_id: types_core.TraceId,
+  instance_id: types_core.InstanceId,
+  task_id_raw: String,
+) -> response.Response(mist.ResponseData) {
+  case req.method {
+    http.Get ->
+      case parse_task_id_or_400(task_id_raw, trace_id) {
+        Error(resp) -> resp
+        Ok(task_id) ->
+          case find_task_for_instance(cfg, deps, trace_id, task_id, instance_id) {
+            Error(resp) -> resp
+            Ok(record) -> json_response(200, a2a.task_record_to_task(record))
+          }
+      }
+
+    _ -> empty_response(405)
+  }
+}
+
+fn handle_task_cancel(
+  req: request.Request(mist.Connection),
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  trace_id: types_core.TraceId,
+  instance_id: types_core.InstanceId,
+  task_id_raw: String,
+) -> response.Response(mist.ResponseData) {
+  case req.method {
+    http.Post ->
+      case parse_task_id_or_400(task_id_raw, trace_id) {
+        Error(resp) -> resp
+        Ok(task_id) ->
+          case find_task_for_instance(cfg, deps, trace_id, task_id, instance_id) {
+            Error(resp) -> resp
+            Ok(record) -> cancel_task_record(cfg, deps, trace_id, record)
+          }
+      }
+
+    _ -> empty_response(405)
+  }
+}
+
+fn handle_task_subscribe(
+  req: request.Request(mist.Connection),
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  trace_id: types_core.TraceId,
+  instance_id: types_core.InstanceId,
+  task_id_raw: String,
+) -> response.Response(mist.ResponseData) {
+  case req.method {
+    http.Post ->
+      case parse_task_id_or_400(task_id_raw, trace_id) {
+        Error(resp) -> resp
+        Ok(task_id) ->
+          case find_task_for_instance(cfg, deps, trace_id, task_id, instance_id) {
+            Error(resp) -> resp
+            Ok(record) ->
+              subscribe_task_response(cfg, deps, instance_id, record)
+          }
+      }
+
+    _ -> empty_response(405)
+  }
+}
+
+fn cancel_task_record(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  trace_id: types_core.TraceId,
+  record: types_task.TaskRecord,
+) -> response.Response(mist.ResponseData) {
+  let types_task.TaskRecord(status: status, ..) = record
+
+  case status {
+    types_task.TaskRunning -> cancel_running_task(cfg, deps, trace_id, record)
+    _ -> json_response(200, a2a.task_record_to_task(record))
+  }
+}
+
+fn cancel_running_task(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  trace_id: types_core.TraceId,
+  record: types_task.TaskRecord,
+) -> response.Response(mist.ResponseData) {
+  let Deps(task_store: store, ..) = deps
+  cancel_agent_task(cfg, deps, record)
+
+  case
+    task_store.cancel_task(
+      store,
+      task_timeout_ms(cfg),
+      record.id,
+      cancel_error(record.id),
+      ffi.now_ms(),
+    )
+  {
+    Ok(updated) -> json_response(200, a2a.task_record_to_task(updated))
+    Error(safe_call.CallFailed(call_err)) ->
+      problem.from_call_error_a2a(call_err, trace_id)
+    Error(safe_call.ActorError(err)) ->
+      task_store_error_to_response(trace_id, err)
+  }
+}
+
+fn subscribe_task_response(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  instance_id: types_core.InstanceId,
+  record: types_task.TaskRecord,
+) -> response.Response(mist.ResponseData) {
+  let keep_alive_ms = sse_keep_alive_interval_ms(cfg)
+  let types_task.TaskRecord(id: task_id, status: status, ..) = record
+
+  let stream =
+    yielder.unfold(
+      from: SubscribeState(
+        sent_initial: False,
+        last_status: status,
+        closed: types_task.task_status_is_terminal(status),
+      ),
+      with: fn(state) {
+        next_subscription_step(
+          cfg,
+          deps,
+          instance_id,
+          record,
+          task_id,
+          state,
+          keep_alive_ms,
+        )
+      },
+    )
+
+  response.new(200)
+  |> response.set_header("content-type", "text/event-stream")
+  |> response.set_header("cache-control", "no-cache")
+  |> response.set_header("connection", "keep-alive")
+  |> response.set_body(mist.Chunked(stream))
+}
+
+type SubscribeState {
+  SubscribeState(
+    sent_initial: Bool,
+    last_status: types_task.TaskStatus,
+    closed: Bool,
+  )
+}
+
+fn next_subscription_step(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  instance_id: types_core.InstanceId,
+  initial_record: types_task.TaskRecord,
+  task_id: types_core.TraceId,
+  state: SubscribeState,
+  keep_alive_ms: Int,
+) -> yielder.Step(bytes_tree.BytesTree, SubscribeState) {
+  case state.sent_initial {
+    False ->
+      yielder.Next(
+        element: task_event_chunk_for(initial_record),
+        accumulator: SubscribeState(
+          sent_initial: True,
+          last_status: state.last_status,
+          closed: state.closed,
+        ),
+      )
+
+    True ->
+      case state.closed {
+        True -> yielder.Done
+        False ->
+          poll_task_for_updates(
+            cfg,
+            deps,
+            instance_id,
+            task_id,
+            state,
+            keep_alive_ms,
+          )
+      }
+  }
+}
+
+fn poll_task_for_updates(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  instance_id: types_core.InstanceId,
+  task_id: types_core.TraceId,
+  state: SubscribeState,
+  keep_alive_ms: Int,
+) -> yielder.Step(bytes_tree.BytesTree, SubscribeState) {
+  process.sleep(keep_alive_ms)
+
+  case fetch_task_record(cfg, deps, task_id, instance_id) {
+    option.None -> yielder.Done
+    option.Some(record) ->
+      case record.status == state.last_status {
+        True ->
+          yielder.Next(
+            element: bytes_tree.from_string(": keep-alive\n\n"),
+            accumulator: state,
+          )
+
+        False -> {
+          let next_state =
+            SubscribeState(
+              sent_initial: True,
+              last_status: record.status,
+              closed: types_task.task_status_is_terminal(record.status),
+            )
+          let chunk = task_event_chunk_for(record)
+          yielder.Next(element: chunk, accumulator: next_state)
+        }
+      }
+  }
+}
+
+fn task_event_chunk_for(record: types_task.TaskRecord) -> bytes_tree.BytesTree {
+  let payload = a2a.task_record_to_task(record) |> json.to_string
+  bytes_tree.from_string("data: " <> payload <> "\n\n")
+}
+
+fn fetch_task_record(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  task_id: types_core.TraceId,
+  instance_id: types_core.InstanceId,
+) -> option.Option(types_task.TaskRecord) {
+  let Deps(task_store: store, ..) = deps
+  let timeout_ms = task_timeout_ms(cfg)
+
+  case task_store.get_task(store, timeout_ms, task_id) {
+    Ok(option.Some(record)) ->
+      case record.instance_id == instance_id {
+        True -> option.Some(record)
+        False -> option.None
+      }
+    _ -> option.None
+  }
+}
+
+fn find_task_for_instance(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  trace_id: types_core.TraceId,
+  task_id: types_core.TraceId,
+  instance_id: types_core.InstanceId,
+) -> Result(types_task.TaskRecord, response.Response(mist.ResponseData)) {
+  let Deps(task_store: store, ..) = deps
+
+  case task_store.get_task(store, task_timeout_ms(cfg), task_id) {
+    Error(call_err) -> Error(problem.from_call_error_a2a(call_err, trace_id))
+    Ok(option.None) -> Error(problem.not_found_a2a(trace_id))
+    Ok(option.Some(record)) ->
+      case record.instance_id == instance_id {
+        True -> Ok(record)
+        False -> Error(problem.not_found_a2a(trace_id))
+      }
+  }
+}
+
+fn parse_task_id_or_400(
+  raw: String,
+  trace_id: types_core.TraceId,
+) -> Result(types_core.TraceId, response.Response(mist.ResponseData)) {
+  case a2a.validate_task_id(raw) {
+    Ok(_) -> Ok(types_core.trace_id(raw))
+    Error(_) ->
+      Error(problem.from_error_kind_a2a(
+        types_enums.BadRequest,
+        trace_id,
+        "invalid task id",
+      ))
+  }
+}
+
+fn cancel_agent_task(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  record: types_task.TaskRecord,
+) -> Nil {
+  let Deps(registry: registry, ..) = deps
+
+  case
+    lookup.lookup_agent_ref(
+      registry,
+      registry_timeout_ms(cfg),
+      record.instance_id,
+    )
+  {
+    Ok(option.Some(agent_ref)) -> {
+      let _ = agent.cancel_interaction(agent_ref, record.id, 1000)
+      Nil
+    }
+    _ -> Nil
+  }
+}
+
+fn cancel_error(trace_id: types_core.TraceId) -> types_output.InteractionError {
+  types_output.saar_error(trace_id, types_enums.AgentError, "cancelled")
+}
+
+fn interact_deferred_a2a(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  agent_ref: agent.AgentRef,
+  prepared: PreparedInteraction,
+) -> response.Response(mist.ResponseData) {
+  let Deps(task_store: store, ..) = deps
+  let PreparedInteraction(
+    trace_id: trace_id,
+    context_id: context_id,
+    req0: req0,
+    timeout_ms: _timeout_ms,
+    ..,
+  ) = prepared
+  let agent.AgentRequest(instance_id: instance_id, capability: capability, ..) =
+    req0
+
+  case
+    task_store.create_task(
+      store,
+      task_timeout_ms(cfg),
+      trace_id,
+      instance_id,
+      capability,
+      option.Some(context_id),
+      ffi.now_ms(),
+    )
+  {
+    Ok(result) -> handle_created_task(cfg, deps, agent_ref, prepared, result)
+    Error(safe_call.CallFailed(call_err)) ->
+      problem.from_call_error_a2a(call_err, trace_id)
+    Error(safe_call.ActorError(err)) ->
+      task_store_error_to_response(trace_id, err)
+  }
+}
+
+fn handle_created_task(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  agent_ref: agent.AgentRef,
+  prepared: PreparedInteraction,
+  result: types_task.TaskCreateResult,
+) -> response.Response(mist.ResponseData) {
+  let record = types_task.task_create_record(result)
+
+  case result {
+    types_task.TaskExisting(_) ->
+      json_response(200, a2a_task_response(record))
+
+    types_task.TaskCreated(_) ->
+      case agent.status(agent_ref, status_timeout_ms(cfg)) {
+        Error(call_err) -> task_create_call_failed(cfg, deps, record, call_err)
+
+        Ok(status) ->
+          case status.mode {
+            types_agent.RunBusy -> task_create_busy(cfg, deps, record)
+            types_agent.RunIdle -> {
+              start_deferred_interaction(cfg, deps, agent_ref, prepared)
+              json_response(200, a2a_task_response(record))
+            }
+          }
+      }
+  }
+}
+
+fn a2a_task_response(record: types_task.TaskRecord) -> json.Json {
+  json.object([
+    #("result", a2a.task_record_to_task(record)),
+  ])
+}
+
+fn task_create_call_failed(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  record: types_task.TaskRecord,
+  call_err: safe_call.CallError,
+) -> response.Response(mist.ResponseData) {
+  let Deps(task_store: store, ..) = deps
+  let _ = task_store.delete_task(store, task_timeout_ms(cfg), record.id)
+  problem.from_call_error_a2a(call_err, record.id)
+}
+
+fn task_create_busy(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  record: types_task.TaskRecord,
+) -> response.Response(mist.ResponseData) {
+  let Deps(task_store: store, ..) = deps
+  let _ = task_store.delete_task(store, task_timeout_ms(cfg), record.id)
+
+  problem.from_error_kind_a2a(
+    types_enums.AgentError,
+    record.id,
+    "Agent is busy",
+  )
+}
+
+fn start_deferred_interaction(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  agent_ref: agent.AgentRef,
+  prepared: PreparedInteraction,
+) -> Nil {
+  let Deps(task_store: store, ..) = deps
+  let PreparedInteraction(
+    trace_id: trace_id,
+    req0: req0,
+    timeout_ms: timeout_ms,
+    ..,
+  ) = prepared
+
+  let _ =
+    process.spawn(fn() {
+      let result =
+        agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms)
+      let now_ms = ffi.now_ms()
+
+      case result {
+        Ok(output) -> {
+          let _ =
+            task_store.complete_task(
+              store,
+              task_timeout_ms(cfg),
+              trace_id,
+              output,
+              now_ms,
+            )
+          Nil
+        }
+
+        Error(err) -> handle_deferred_error(cfg, deps, err, now_ms)
+      }
+    })
+
+  Nil
+}
+
+fn handle_deferred_error(
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  err: types_output.InteractionError,
+  now_ms: Int,
+) -> Nil {
+  let Deps(task_store: store, ..) = deps
+
+  case err.kind, err.message {
+    types_enums.AgentError, "cancelled" -> {
+      let _ =
+        task_store.cancel_task(
+          store,
+          task_timeout_ms(cfg),
+          err.trace_id,
+          err,
+          now_ms,
+        )
+      Nil
+    }
+
+    _, _ -> {
+      let _ =
+        task_store.fail_task(
+          store,
+          task_timeout_ms(cfg),
+          err.trace_id,
+          err,
+          now_ms,
+        )
+      Nil
+    }
   }
 }
 
@@ -349,6 +890,8 @@ fn prepare_interaction(
     }),
   )
 
+  let response_mode = capability_response_mode(info.interface, capability)
+
   let payload = a2a.message_to_payload(message)
 
   let ctx =
@@ -373,6 +916,7 @@ fn prepare_interaction(
     trace_id: trace_id,
     context_id: context_id,
     extensions: extensions,
+    response_mode: response_mode,
     req0: req0,
     timeout_ms: timeout_ms,
   ))
@@ -538,6 +1082,26 @@ fn pick_capability_from_dict(
   }
 }
 
+// Local copy to avoid exporting gateway internals from agents_api.
+fn capability_response_mode(
+  interface: types_profile.Interface,
+  capability: String,
+) -> types_profile.ResponseMode {
+  case interface {
+    types_profile.RunnerInterface(caps) ->
+      case dict.get(caps, capability) {
+        Ok(cap) -> cap.response_mode
+        Error(_) -> types_profile.ResponseModeSync
+      }
+
+    types_profile.HttpInterface(_, _, _, caps) ->
+      case dict.get(caps, capability) {
+        Ok(cap) -> cap.response_mode
+        Error(_) -> types_profile.ResponseModeSync
+      }
+  }
+}
+
 fn json_response(
   status: Int,
   payload: json.Json,
@@ -570,6 +1134,33 @@ fn max_request_body_bytes(cfg: types_config.SaarConfig) -> Int {
   let types_config.SaarConfig(limits: limits, ..) = cfg
   let types_config.SaarLimits(max_request_body_bytes: bytes, ..) = limits
   bytes
+}
+
+fn task_timeout_ms(cfg: types_config.SaarConfig) -> Int {
+  let types_config.SaarConfig(timeouts: timeouts, ..) = cfg
+  let types_config.SaarTimeouts(call_timeout_ms: call_timeout_ms, ..) = timeouts
+  call_timeout_ms
+}
+
+fn task_store_error_to_response(
+  trace_id: types_core.TraceId,
+  err: types_task.TaskStoreError,
+) -> response.Response(mist.ResponseData) {
+  case err {
+    types_task.TaskNotFound -> problem.not_found_a2a(trace_id)
+    types_task.TaskLimitReached(_) ->
+      problem.from_error_kind_a2a(
+        types_enums.InfraError,
+        trace_id,
+        "max tasks reached",
+      )
+    types_task.TaskResultTooLarge(_, _) ->
+      problem.from_error_kind_a2a(
+        types_enums.InfraError,
+        trace_id,
+        "task result too large",
+      )
+  }
 }
 
 fn sse_keep_alive_interval_ms(cfg: types_config.SaarConfig) -> Int {
