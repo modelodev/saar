@@ -770,6 +770,7 @@ fn encode_capabilities(interface: types_profile.Interface) -> json.Json {
             cap.input_schema,
             cap.description,
             cap.limits,
+            cap.files,
           )
         }),
       )
@@ -786,6 +787,7 @@ fn encode_capabilities(interface: types_profile.Interface) -> json.Json {
             cap.input_schema,
             cap.description,
             cap.limits,
+            cap.files,
           )
         }),
       )
@@ -799,6 +801,7 @@ fn capability_view(
   input_schema: Option(types_profile.InputSchema),
   description: Option(String),
   limits: Option(types_profile.CapabilityLimits),
+  files: Option(types_profile.FilesSemantics),
 ) -> #(String, json.Json) {
   #(
     name,
@@ -808,6 +811,7 @@ fn capability_view(
       #("input_schema", encode_input_schema(input_schema)),
       #("description", encode_optional_string(description)),
       #("limits", encode_capability_limits(limits)),
+      #("files", encode_files_semantics(files)),
     ]),
   )
 }
@@ -825,6 +829,27 @@ fn encode_capability_limits(
       json.object([
         #("timeout_ms", case call_timeout_ms {
           Some(ms) -> json.int(ms)
+          None -> json.null()
+        }),
+      ])
+  }
+}
+
+fn encode_files_semantics(
+  files: Option(types_profile.FilesSemantics),
+) -> json.Json {
+  case files {
+    None -> json.null()
+    Some(types_profile.FilesSemantics(
+      accepts: accepts,
+      max_files: max_files,
+      ingest_effect: ingest_effect,
+    )) ->
+      json.object([
+        #("accepts", json.bool(accepts)),
+        #("max_files", json.int(max_files)),
+        #("ingest_effect", case ingest_effect {
+          Some(effect) -> json.string(types_profile.ingest_effect_to_string(effect))
           None -> json.null()
         }),
       ])
