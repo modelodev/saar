@@ -17,6 +17,11 @@ Una instancia de SAAR expone sus capacidades a través del API `/agents`.
 
 El diccionario `capabilities` es la lista autoritativa de operaciones que un cliente puede invocar.
 
+Para decidir cómo consumir la respuesta, el cliente debe leer:
+
+- `capabilities.<cap>.response_mode` (`sync`, `stream`, `deferred`).
+- `capabilities.<cap>.streaming` (si soporta SSE).
+
 ## 2. Invocar una capacidad (API nativa)
 
 Los clientes invocan capacidades usando:
@@ -28,6 +33,11 @@ El cuerpo incluye:
 - `capability`: el nombre de la capacidad (clave dentro de `capabilities`).
 - `inputs`: un objeto JSON que respeta `input_schema`.
 - `context.trace_id`: un identificador aportado por el cliente para correlación y trazabilidad.
+
+### 2.2 Estado ocupado (422)
+
+Si la instancia está ocupada (sin cola), SAAR responde `422` con un Problem Details `agent_error`.
+El cliente debe reintentar más tarde o usar otra instancia.
 
 ### 2.1 Qué significa `capability`
 
@@ -160,7 +170,7 @@ Reglas de consistencia (para que un cliente pueda validar sin ambigüedad):
   - debe aparecer `error`.
   - no debe aparecer `result`.
 - Si `state = "cancelled"`:
-  - debe aparecer `error` (con un mensaje estable del estilo `cancelled_by_sad`).
+  - debe aparecer `error` con `message = "cancelled"`.
   - no debe aparecer `result`.
 
 Campos opcionales:
@@ -172,6 +182,12 @@ Campos opcionales:
 Errores:
 
 - `404` si el `task_id` no existe.
+
+### 3.4 Cancelled vs failed
+
+- `failed` implica que la ejecución terminó con un error propio del agente o del bridge.
+- `cancelled` implica que SAAR detuvo la interacción (por `DELETE /tasks/:task_id`,
+  `POST /sys/agents/:instance_id/stop` o `DELETE /sys/agents/:instance_id`).
 
 Cuando la tarea es terminal, aparece `result` o `error`:
 
