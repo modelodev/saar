@@ -579,6 +579,10 @@ Authorization: Bearer <api_key>
 
 **Streaming:** Determinado por `capability.streaming` en el perfil.
 
+**Response mode:** el cliente debe leer `capabilities.<cap>.response_mode` en
+`GET /agents/:instance_id` para decidir si la respuesta es inmediata, por SSE
+o diferida.
+
 - Si `streaming: false` → Respuesta JSON síncrona
 - Si `streaming: true` → Respuesta SSE (`text/event-stream`)
 
@@ -592,6 +596,7 @@ SAAR no interpreta ni valida el catálogo; solo aplica límites/backpressure y t
 
 **Errores comunes (v0):**
 - Si el agente está Busy (ya hay una interacción en curso), responde `422` (`agent_error`) con detalle `"Agent is busy"`.
+  El cliente debe reintentar o usar otra instancia; no hay cola.
 
 **Respuesta síncrona (200):**
 
@@ -625,6 +630,7 @@ SAAR no interpreta ni valida el catálogo; solo aplica límites/backpressure y t
 - No hay endpoint de cancelación dedicado ni cancelación implícita al cerrar SSE; si el cliente cierra, simplemente deja de recibir eventos. La interacción sigue hasta completar o timeout.
 - `POST /sys/agents/:instance_id/stop` y `DELETE /sys/agents/:instance_id` **sí** cancelan provisioning/interacciones in-flight best-effort; el cliente de `interact` observa un error `agent_error` con mensaje `"cancelled"` (sync: RFC7807 422; streaming: evento terminal `RUN_ERROR`/`task_status failed`).
 - En modo diferido, `DELETE /tasks/:task_id` cancela una tarea en `running` y la deja en estado terminal `cancelled`.
+- `failed` indica un error del agente/bridge; `cancelled` indica una detención explícita desde SAAR (stop/delete/tasks).
 
 ### 5.3 Interacción diferida (ResponseModeDeferred)
 
