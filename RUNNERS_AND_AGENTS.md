@@ -42,21 +42,22 @@ Example (vNext): `docs/arquitectura/examples/profiles/lightrag/lightrag_vnext.js
 
 ## Response delivery modes
 
-A capability also defines how SAAR delivers the result to clients.
+A capability also defines how SAAR delivers the result to clients via `response_mode`.
 
 ### Sync
 
-SAAR returns the final response in the same HTTP request.
+SAAR returns the final response in the same HTTP request. This is the default when `response_mode` is omitted.
 
 ### Stream
 
 SAAR returns `text/event-stream` and emits incremental events until a terminal event.
 
-This requires `streaming: true` and that the runner/upstream can produce incremental output.
+This requires `response_mode: "stream"`, `streaming: true`, and that the runner/upstream can produce incremental output.
 
 ### Deferred (tasks)
 
 SAAR returns immediately with a task identifier. The client later fetches the result via task APIs (polling or SSE task subscription).
+This requires `response_mode: "deferred"` and `streaming: false`.
 
 Operational notes:
 - SAAR does not maintain a per-instance queue. If the agent is busy, new interactions are rejected.

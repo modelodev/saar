@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": null,
+  "current_sprint": "S21",
   "sprints": {
     "S01": {
       "status": "completed",
@@ -560,6 +560,19 @@
         "S19-T01": {"status": "completed", "branch": "feat/s19-t01-expand-props", "commit": "752d940278509619ba3d281d0bc37de7f1f05b3c"},
         "S19-T02": {"status": "completed", "branch": "feat/s19-t02-edge-cases", "commit": "72fb9b95404c7527622e69a0170d2de141f014e3"},
         "S19-T03": {"status": "completed", "branch": "feat/s19-t03-git-sources-robust", "commit": "c15a14ad92f91e6cfaec11b20fd644fadab6e57e"}
+      }
+    },
+    "S21": {
+      "status": "in_progress",
+      "branch": "sprint/s21-interacciones-diferidas",
+      "started_at": "2026-01-20T12:04:14Z",
+      "completed_at": null,
+      "current_story": "S21-T01",
+      "stories": {
+        "S21-T01": {
+          "status": "in_progress",
+          "branch": "feat/s21-t01-response-mode"
+        }
       }
     }
   }

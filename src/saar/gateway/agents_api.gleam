@@ -500,6 +500,7 @@ fn encode_capabilities(interface: types_profile.Interface) -> json.Json {
           capability_view(
             name,
             cap.streaming,
+            cap.response_mode,
             cap.input_schema,
             cap.description,
             cap.limits,
@@ -515,6 +516,7 @@ fn encode_capabilities(interface: types_profile.Interface) -> json.Json {
           capability_view(
             name,
             cap.streaming,
+            cap.response_mode,
             cap.input_schema,
             cap.description,
             cap.limits,
@@ -527,6 +529,7 @@ fn encode_capabilities(interface: types_profile.Interface) -> json.Json {
 fn capability_view(
   name: String,
   streaming: Bool,
+  response_mode: types_profile.ResponseMode,
   input_schema: Option(types_profile.InputSchema),
   description: Option(String),
   limits: Option(types_profile.CapabilityLimits),
@@ -535,11 +538,16 @@ fn capability_view(
     name,
     json.object([
       #("streaming", json.bool(streaming)),
+      #("response_mode", json.string(encode_response_mode(response_mode))),
       #("input_schema", encode_input_schema(input_schema)),
       #("description", encode_optional_string(description)),
       #("limits", encode_capability_limits(limits)),
     ]),
   )
+}
+
+fn encode_response_mode(mode: types_profile.ResponseMode) -> String {
+  types_profile.response_mode_to_string(mode)
 }
 
 fn encode_capability_limits(

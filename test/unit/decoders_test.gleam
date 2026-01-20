@@ -116,6 +116,50 @@ pub fn http_method_decoder_empty() {
   Nil
 }
 
+pub fn response_mode_defaults_to_sync() {
+  let payload = runner_capability_payload("\"streaming\":false")
+  let assert Ok(value) = json.parse(payload, decode.dynamic)
+
+  let interface = decoders.decode_interface(value) |> should.be_ok
+  let assert types_profile.RunnerInterface(capabilities: caps) = interface
+  let assert Ok(capability) = dict.get(caps, "c")
+  let types_profile.RunnerCapability(response_mode: response_mode, ..) =
+    capability
+
+  response_mode |> should.equal(types_profile.ResponseModeSync)
+}
+
+pub fn response_mode_stream_requires_streaming_true() {
+  let payload =
+    runner_capability_payload(
+      "\"streaming\":false,\"response_mode\":\"stream\"",
+    )
+  let assert Ok(value) = json.parse(payload, decode.dynamic)
+
+  decoders.decode_interface(value)
+  |> should.be_error
+}
+
+pub fn response_mode_deferred_requires_streaming_false() {
+  let payload =
+    runner_capability_payload(
+      "\"streaming\":true,\"response_mode\":\"deferred\"",
+    )
+  let assert Ok(value) = json.parse(payload, decode.dynamic)
+
+  decoders.decode_interface(value)
+  |> should.be_error
+}
+
+pub fn response_mode_invalid_value_rejected() {
+  let payload =
+    runner_capability_payload("\"streaming\":false,\"response_mode\":\"bogus\"")
+  let assert Ok(value) = json.parse(payload, decode.dynamic)
+
+  decoders.decode_interface(value)
+  |> should.be_error
+}
+
 fn assert_decoded_http_method(raw: String, expected: types_profile.HttpMethod) {
   let payload = http_interface_payload(raw)
   let assert Ok(value) = json.parse(payload, decode.dynamic)
@@ -139,6 +183,15 @@ fn http_interface_payload(method: String) -> String {
   <> "\"method\":\""
   <> method
   <> "\""
+  <> "}}}"
+}
+
+fn runner_capability_payload(fields: String) -> String {
+  "{"
+  <> "\"protocol\":\"runner\","
+  <> "\"capabilities\":{"
+  <> "\"c\":{"
+  <> fields
   <> "}}}"
 }
 

@@ -464,6 +464,7 @@ pub fn interact_respects_timeout() {
             input_schema: option.None,
             description: option.None,
             streaming: False,
+            response_mode: types_profile.ResponseModeSync,
             limits: option.Some(
               types_profile.CapabilityLimits(call_timeout_ms: option.Some(10)),
             ),

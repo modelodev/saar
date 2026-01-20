@@ -764,17 +764,29 @@ fn runner_capability_decoder() -> decode.Decoder(types_profile.RunnerCapability)
       decode.optional(decode.string),
     )
     use streaming <- decode.optional_field("streaming", False, decode.bool)
+    use response_mode <- decode.optional_field(
+      "response_mode",
+      types_profile.ResponseModeSync,
+      response_mode_decoder(),
+    )
     use limits <- decode.optional_field(
       "limits",
       None,
       decode.optional(capability_limits_decoder()),
     )
-    decode.success(types_profile.RunnerCapability(
-      input_schema: input_schema,
-      description: description,
-      streaming: streaming,
-      limits: limits,
-    ))
+    case validate_response_mode(streaming, response_mode) {
+      Ok(_) ->
+        decode.success(types_profile.RunnerCapability(
+          input_schema: input_schema,
+          description: description,
+          streaming: streaming,
+          response_mode: response_mode,
+          limits: limits,
+        ))
+
+      Error(expected) ->
+        decode.failure(runner_capability_placeholder(), expected: expected)
+    }
   }
   decoder
 }
@@ -799,22 +811,90 @@ fn http_capability_decoder() -> decode.Decoder(types_profile.HttpCapability) {
       decode.optional(decode.string),
     )
     use streaming <- decode.optional_field("streaming", False, decode.bool)
+    use response_mode <- decode.optional_field(
+      "response_mode",
+      types_profile.ResponseModeSync,
+      response_mode_decoder(),
+    )
     use limits <- decode.optional_field(
       "limits",
       None,
       decode.optional(capability_limits_decoder()),
     )
-    decode.success(types_profile.HttpCapability(
-      path: path,
-      method: method,
-      input_schema: input_schema,
-      response: response,
-      description: description,
-      streaming: streaming,
-      limits: limits,
-    ))
+    case validate_response_mode(streaming, response_mode) {
+      Ok(_) ->
+        decode.success(types_profile.HttpCapability(
+          path: path,
+          method: method,
+          input_schema: input_schema,
+          response: response,
+          description: description,
+          streaming: streaming,
+          response_mode: response_mode,
+          limits: limits,
+        ))
+
+      Error(expected) ->
+        decode.failure(http_capability_placeholder(), expected: expected)
+    }
   }
   decoder
+}
+
+fn response_mode_decoder() -> decode.Decoder(types_profile.ResponseMode) {
+  let decoder = {
+    use raw <- decode.then(decode.string)
+    case types_profile.response_mode_from_string(raw) {
+      Ok(mode) -> decode.success(mode)
+      Error(_) ->
+        decode.failure(types_profile.ResponseModeSync, expected: "ResponseMode")
+    }
+  }
+  decoder
+}
+
+fn validate_response_mode(
+  streaming: Bool,
+  response_mode: types_profile.ResponseMode,
+) -> Result(Nil, String) {
+  case response_mode {
+    types_profile.ResponseModeStream ->
+      case streaming {
+        True -> Ok(Nil)
+        False -> Error("ResponseModeStreamRequiresStreaming")
+      }
+
+    types_profile.ResponseModeDeferred ->
+      case streaming {
+        True -> Error("ResponseModeDeferredRequiresStreamingFalse")
+        False -> Ok(Nil)
+      }
+
+    types_profile.ResponseModeSync -> Ok(Nil)
+  }
+}
+
+fn runner_capability_placeholder() -> types_profile.RunnerCapability {
+  types_profile.RunnerCapability(
+    input_schema: None,
+    description: None,
+    streaming: False,
+    response_mode: types_profile.ResponseModeSync,
+    limits: None,
+  )
+}
+
+fn http_capability_placeholder() -> types_profile.HttpCapability {
+  types_profile.HttpCapability(
+    path: "/",
+    method: types_profile.HttpPost,
+    input_schema: None,
+    response: None,
+    description: None,
+    streaming: False,
+    response_mode: types_profile.ResponseModeSync,
+    limits: None,
+  )
 }
 
 fn response_mapping_decoder() -> decode.Decoder(types_profile.ResponseMapping) {

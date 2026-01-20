@@ -13,7 +13,7 @@ Se centra en:
 Una instancia de SAAR expone sus capacidades a través del API `/agents`.
 
 - `GET /agents/:instance_id` devuelve un objeto que incluye `capabilities`.
-- Cada entrada de `capabilities` describe el esquema de entrada (`input_schema`), si soporta SSE (`streaming`) y límites opcionales (`limits`).
+- Cada entrada de `capabilities` describe el esquema de entrada (`input_schema`), el modo de entrega (`response_mode`), si soporta SSE (`streaming`) y límites opcionales (`limits`).
 
 El diccionario `capabilities` es la lista autoritativa de operaciones que un cliente puede invocar.
 
@@ -40,11 +40,11 @@ Es un contrato de SAAR: el perfil decide cómo se implementa cada capacidad.
 
 ## 3. Modos de entrega de respuesta
 
-Cada capacidad determina cómo SAAR entregará el resultado al cliente.
+Cada capacidad determina cómo SAAR entregará el resultado al cliente. El campo `response_mode` controla este comportamiento.
 
 ### 3.1 Respuesta inmediata (JSON)
 
-SAAR devuelve la respuesta final en la misma llamada HTTP.
+SAAR devuelve la respuesta final en la misma llamada HTTP. Es el modo por defecto cuando `response_mode` no está presente.
 
 Comportamiento esperado del cliente:
 
@@ -54,7 +54,7 @@ Comportamiento esperado del cliente:
 
 ### 3.2 Respuesta por SSE (emisión progresiva)
 
-SAAR devuelve `text/event-stream` (SSE) y emite eventos hasta un evento terminal.
+SAAR devuelve `text/event-stream` (SSE) y emite eventos hasta un evento terminal. Este modo requiere `response_mode = "stream"` y `streaming = true`.
 
 Comportamiento esperado del cliente:
 
@@ -64,7 +64,7 @@ Comportamiento esperado del cliente:
 
 ### 3.3 Respuesta diferida (tarea + sondeo / suscripción)
 
-SAAR devuelve inmediatamente un identificador de tarea, y el cliente recupera el resultado más tarde.
+SAAR devuelve inmediatamente un identificador de tarea, y el cliente recupera el resultado más tarde. Este modo requiere `response_mode = "deferred"` y `streaming = false`.
 
 #### 3.3.1 Crear tarea (API nativa)
 

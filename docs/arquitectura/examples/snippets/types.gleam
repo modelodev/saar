@@ -495,6 +495,13 @@ pub type CapabilityLimits {
   )
 }
 
+/// Declares how a capability delivers its response to clients.
+pub type ResponseMode {
+  ResponseModeSync
+  ResponseModeStream
+  ResponseModeDeferred
+}
+
 // --- HTTP request body (JSON / multipart) ---
 
 /// En capabilities HTTP, SAAR puede construir el request body en dos modos:
@@ -555,6 +562,8 @@ pub type HttpCapability {
     /// - Se aplican los mismos límites por línea/evento que en runners (ver `protocolos_runner.md`).
     /// Default: False
     streaming: Bool,
+    /// Modo de entrega de respuesta expuesto a clientes.
+    response_mode: ResponseMode,
     /// Límites específicos para esta capability
     limits: Option(CapabilityLimits),
   )
@@ -579,6 +588,8 @@ pub type RunnerCapability {
     /// - STDERR está fuera de contrato (diagnóstico local); SAAR no depende de capturarlo.
     /// Default: False
     streaming: Bool,
+    /// Modo de entrega de respuesta expuesto a clientes.
+    response_mode: ResponseMode,
     /// Límites específicos para esta capability
     limits: Option(CapabilityLimits),
   )
