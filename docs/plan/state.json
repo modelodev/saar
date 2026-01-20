@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": "S21",
+  "current_sprint": null,
   "sprints": {
     "S01": {
       "status": "completed",
@@ -563,10 +563,10 @@
       }
     },
     "S21": {
-      "status": "in_progress",
+      "status": "completed",
       "branch": "sprint/s21-interacciones-diferidas",
       "started_at": "2026-01-20T12:04:14Z",
-      "completed_at": null,
+      "completed_at": "2026-01-20T17:09:17Z",
       "current_story": null,
       "stories": {
         "S21-T01": {
@@ -578,6 +578,26 @@
           "status": "completed",
           "branch": "feat/s21-t02-task-store",
           "commit": "3b4c83d2dcfde67efc28def96ec91895329c8ac5"
+        },
+        "S21-T03": {
+          "status": "completed",
+          "branch": "feat/s21-t03-interact-deferred",
+          "commit": "3fbf69393f72a020a1c1677038c469397726fa68"
+        },
+        "S21-T04": {
+          "status": "completed",
+          "branch": "feat/s21-t04-task-subscribe-idempotency",
+          "commit": "c2d330a66961aa4161ef3c9a1188320a9c65815b"
+        },
+        "S21-T05": {
+          "status": "completed",
+          "branch": "feat/s21-t05-a2a-tasks",
+          "commit": "e1fcfce00ba30e5e70aeacb4e54b9b6d854931ae"
+        },
+        "S21-T06": {
+          "status": "completed",
+          "branch": "feat/s21-t06-docs-tests",
+          "commit": "a16d3b3ff3e287e16d85d3fbbf0525e01fb504af"
         }
       }
     }
