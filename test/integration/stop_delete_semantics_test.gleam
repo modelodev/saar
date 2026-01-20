@@ -708,6 +708,7 @@ fn echo_cli_profile_with_delay_and_timeout(
         description: description,
         streaming: streaming,
         response_mode: response_mode,
+        files: files,
         ..,
       ) = cap0
 
@@ -722,6 +723,7 @@ fn echo_cli_profile_with_delay_and_timeout(
               call_timeout_ms,
             )),
           ),
+          files: files,
         )
 
       types_profile.RunnerInterface(capabilities: dict.insert(
