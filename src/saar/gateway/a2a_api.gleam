@@ -24,9 +24,10 @@ import gleam/erlang/process
 import gleam/http
 import gleam/http/request
 import gleam/http/response
+import gleam/int
 import gleam/json
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import gleam/yielder
@@ -901,6 +902,20 @@ fn prepare_interaction(
 
   let payload = a2a.message_to_payload(message)
 
+  let files_semantics = capability_files_semantics(info.interface, capability)
+
+  use _ <- result.try(
+    validate_files_cardinality(files_semantics, payload)
+    |> result.map_error(fn(err) {
+      let #(max_files, received_files) = err
+      problem.from_error_kind_a2a(
+        types_enums.BadRequest,
+        trace_id,
+        files_cardinality_detail(capability, max_files, received_files),
+      )
+    }),
+  )
+
   let ctx =
     types_input.RequestContext(
       trace_id: trace_id,
@@ -1107,6 +1122,55 @@ fn capability_response_mode(
         Error(_) -> types_profile.ResponseModeSync
       }
   }
+}
+
+fn capability_files_semantics(
+  interface: types_profile.Interface,
+  capability: String,
+) -> Option(types_profile.FilesSemantics) {
+  case interface {
+    types_profile.RunnerInterface(caps) ->
+      case dict.get(caps, capability) {
+        Ok(cap) -> cap.files
+        Error(_) -> None
+      }
+
+    types_profile.HttpInterface(_, _, _, caps) ->
+      case dict.get(caps, capability) {
+        Ok(cap) -> cap.files
+        Error(_) -> None
+      }
+  }
+}
+
+fn validate_files_cardinality(
+  files_semantics: Option(types_profile.FilesSemantics),
+  payload: types_input.InputPayload,
+) -> Result(Nil, #(Int, Int)) {
+  case files_semantics {
+    None -> Ok(Nil)
+    Some(types_profile.FilesSemantics(max_files: max_files, ..)) -> {
+      let received_files = types_input.payload_file_count(payload)
+
+      case received_files > max_files {
+        True -> Error(#(max_files, received_files))
+        False -> Ok(Nil)
+      }
+    }
+  }
+}
+
+fn files_cardinality_detail(
+  capability: String,
+  max_files: Int,
+  received_files: Int,
+) -> String {
+  "invalid files cardinality: capability="
+  <> capability
+  <> " max_files="
+  <> int.to_string(max_files)
+  <> " received_files="
+  <> int.to_string(received_files)
 }
 
 fn json_response(

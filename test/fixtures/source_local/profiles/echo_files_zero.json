@@ -1,0 +1,25 @@
+{
+  "meta": {
+    "id": "echo_files_zero",
+    "lifecycle": "transient",
+    "description": "Echo CLI for files disabled"
+  },
+  "parameters": {
+    "delay_ms": {"source": "fixed", "value": 100, "type": "int"}
+  },
+  "runner": {
+    "type": "echo_cli",
+    "tool_config": {"script": "echo_cli.py"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {
+      "files": {
+        "input_schema": "std:files",
+        "streaming": false,
+        "limits": {"call_timeout_ms": 50},
+        "files": {"accepts": false, "max_files": 0}
+      }
+    }
+  }
+}
