@@ -987,7 +987,7 @@ test/
 
 ---
 
-### 7.11 Port Pool (`test/unit/port_pool_test.gleam`)
+### 7.11 Port Pool (`test/unit/port_pool/pool_test.gleam`)
 
 **Framework:** gleeunit
 
@@ -1021,7 +1021,7 @@ test/
 
 ---
 
-### 7.11.2 Port pool con bind-check (`test/unit/port_pool_checked_test.gleam`, `test/integration/port_pool_checked_test.gleam` - agregar)
+### 7.11.2 Port pool con bind-check (`test/unit/port_pool/checked_test.gleam`, `test/integration/port_pool/checked_test.gleam` - agregar)
 
 **Framework:** gleeunit
 
