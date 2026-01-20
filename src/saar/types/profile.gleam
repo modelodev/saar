@@ -17,6 +17,7 @@
 //// - Used by parameter resolution and API capability exposure.
 
 import gleam/dict.{type Dict}
+import gleam/json.{type Json}
 import gleam/option.{type Option}
 import saar/types/core
 import saar/types/enums
@@ -211,10 +212,29 @@ pub type ResponseMapping {
   Both(String, String)
 }
 
+/// Additional response metadata captured from HTTP responses.
+///
+/// Values map metadata keys to JSON pointers.
+pub type ResponseConfig {
+  ResponseConfig(mapping: ResponseMapping, capture: Dict(String, String))
+}
+
+/// HTTP request body definition for HTTP capabilities.
+pub type HttpRequestBody {
+  JsonBody(template: Json)
+  MultipartBody(fields: Dict(String, String), files: List(MultipartFilePart))
+}
+
+/// File part definition for multipart bodies.
+pub type MultipartFilePart {
+  MultipartFilePart(field: String, source_pointer: String)
+}
+
 /// A single HTTP-exposed capability.
 ///
-/// `path` and `method` identify the endpoint; `response` can optionally map
-/// response fields. `response_mode` declares the delivery mode for clients and
+/// `path` and `method` identify the endpoint. `body` optionally defines the
+/// upstream request body, while `response` maps response fields and captures
+/// metadata. `response_mode` declares the delivery mode for clients and
 /// defaults to `ResponseModeSync` when omitted in JSON.
 /// `files` adds file cardinality and ingest semantics when applicable.
 pub type HttpCapability {
@@ -222,7 +242,8 @@ pub type HttpCapability {
     path: String,
     method: HttpMethod,
     input_schema: Option(InputSchema),
-    response: Option(ResponseMapping),
+    body: Option(HttpRequestBody),
+    response: Option(ResponseConfig),
     description: Option(String),
     streaming: Bool,
     response_mode: ResponseMode,

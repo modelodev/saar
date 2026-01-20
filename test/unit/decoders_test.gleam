@@ -234,6 +234,7 @@ fn assert_decoded_http_method(raw: String, expected: types_profile.HttpMethod) {
     path: _,
     method: method,
     input_schema: _,
+    body: _,
     response: _,
     description: _,
     streaming: _,
