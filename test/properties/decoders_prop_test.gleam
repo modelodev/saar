@@ -132,8 +132,18 @@ pub fn prop_http_method_roundtrip() {
 
     case interface {
       types_profile.HttpInterface(capabilities: caps, ..) -> {
-        let assert Ok(types_profile.HttpCapability(method: decoded, ..)) =
-          dict.get(caps, "c")
+        let assert Ok(types_profile.HttpCapability(
+          path: _,
+          method: decoded,
+          input_schema: _,
+          body: _,
+          response: _,
+          description: _,
+          streaming: _,
+          response_mode: _,
+          limits: _,
+          files: _,
+        )) = dict.get(caps, "c")
 
         decoded |> should.equal(method)
       }

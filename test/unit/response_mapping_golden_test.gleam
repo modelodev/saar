@@ -26,8 +26,19 @@ pub fn response_mapping_profile_fixture_test() {
 
   let assert types_profile.HttpInterface(capabilities: caps, ..) = interface
   let assert Ok(capability) = dict.get(caps, "echo")
-  let types_profile.HttpCapability(response: response, ..) = capability
-  let assert Some(mapping) = response
+  let types_profile.HttpCapability(
+    path: _,
+    method: _,
+    input_schema: _,
+    body: _,
+    response: response,
+    description: _,
+    streaming: _,
+    response_mode: _,
+    limits: _,
+    files: _,
+  ) = capability
+  let assert Some(config) = response
 
   let body =
     dynamic.properties([
@@ -41,10 +52,14 @@ pub fn response_mapping_profile_fixture_test() {
       ),
     ])
 
-  let assert Ok(response_mapping.MappingResult(text: text, artifacts: artifacts)) =
+  let assert Ok(response_mapping.MappingResult(
+    text: text,
+    artifacts: artifacts,
+    metadata: _,
+  )) =
     response_mapping.apply_response_mapping(
       types_core.trace_id("trace-1"),
-      Some(mapping),
+      Some(config),
       body,
     )
 
