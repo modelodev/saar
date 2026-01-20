@@ -639,13 +639,7 @@ fn ingest_part_json(ingest: json.Json) -> json.Json {
 fn message_ingest_json(ingest: json.Json) -> json.Json {
   json.object([
     #("role", json.string("assistant")),
-    #(
-      "parts",
-      json.array(
-        [ingest_part_json(ingest)],
-        fn(item) { item },
-      ),
-    ),
+    #("parts", json.array([ingest_part_json(ingest)], fn(item) { item })),
   ])
 }
 
@@ -882,14 +876,8 @@ fn skill_json(
     #("id", json.string(id)),
     #("name", json.string(id)),
     #("description", json.string(desc)),
-    #(
-      "inputModes",
-      json.array(input_modes, fn(item) { json.string(item) }),
-    ),
-    #(
-      "outputModes",
-      json.array(output_modes, fn(item) { json.string(item) }),
-    ),
+    #("inputModes", json.array(input_modes, fn(item) { json.string(item) })),
+    #("outputModes", json.array(output_modes, fn(item) { json.string(item) })),
     #("extensions", extensions),
   ])
 }
@@ -959,9 +947,13 @@ fn skill_extensions(files: Option(types_profile.FilesSemantics)) -> json.Json {
 
 fn agent_card_extensions(interface: types_profile.Interface) -> json.Json {
   case interface_has_files_semantics(interface) {
-    True -> json.array([
-      json.string("urn:saar:extensions:files-semantics:v1"),
-    ], fn(item) { item })
+    True ->
+      json.array(
+        [
+          json.string("urn:saar:extensions:files-semantics:v1"),
+        ],
+        fn(item) { item },
+      )
     False -> json.array([], fn(item) { item })
   }
 }

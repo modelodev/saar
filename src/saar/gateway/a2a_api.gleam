@@ -214,10 +214,11 @@ fn message_send_with_agent(
                 agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms)
               {
                 Ok(result) -> {
-                  let result = ingest_metadata.attach_ingest_metadata(
-                    files_semantics,
-                    result,
-                  )
+                  let result =
+                    ingest_metadata.attach_ingest_metadata(
+                      files_semantics,
+                      result,
+                    )
                   json_response(
                     200,
                     a2a.message_send_response(result, context_id),
@@ -914,7 +915,8 @@ fn prepare_interaction(
 
   let files_semantics = capability_files_semantics(info.interface, capability)
 
-  let ingest_payload = ingest_metadata.ingest_payload(files_semantics, dict.new())
+  let ingest_payload =
+    ingest_metadata.ingest_payload(files_semantics, dict.new())
 
   use _ <- result.try(
     validate_files_cardinality(files_semantics, payload)
@@ -929,10 +931,11 @@ fn prepare_interaction(
   )
 
   let extra = case ingest_payload {
-    Some(payload) -> dict.from_list([
-      #("context_id", context_id),
-      #("ingest_payload", json.to_string(payload)),
-    ])
+    Some(payload) ->
+      dict.from_list([
+        #("context_id", context_id),
+        #("ingest_payload", json.to_string(payload)),
+      ])
     None -> dict.from_list([#("context_id", context_id)])
   }
 

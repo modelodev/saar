@@ -112,9 +112,9 @@ pub fn agent_card_skill_input_modes_match_input_schema() {
     http_client.request_sync_string(
       http.Get,
       base_url
-      <> "/instances/"
-      <> files_instance_id
-      <> "/.well-known/agent-card.json",
+        <> "/instances/"
+        <> files_instance_id
+        <> "/.well-known/agent-card.json",
       tasks_helpers.auth_headers(),
       None,
       5000,
@@ -134,9 +134,9 @@ pub fn agent_card_skill_input_modes_match_input_schema() {
     http_client.request_sync_string(
       http.Get,
       base_url
-      <> "/instances/"
-      <> chat_instance_id
-      <> "/.well-known/agent-card.json",
+        <> "/instances/"
+        <> chat_instance_id
+        <> "/.well-known/agent-card.json",
       tasks_helpers.auth_headers(),
       None,
       5000,
@@ -159,10 +159,7 @@ pub fn agent_card_skill_extensions_include_max_files_and_ingest_effect() {
   let resp =
     http_client.request_sync_string(
       http.Get,
-      base_url
-      <> "/instances/"
-      <> instance_id
-      <> "/.well-known/agent-card.json",
+      base_url <> "/instances/" <> instance_id <> "/.well-known/agent-card.json",
       tasks_helpers.auth_headers(),
       None,
       5000,
@@ -171,10 +168,7 @@ pub fn agent_card_skill_extensions_include_max_files_and_ingest_effect() {
     |> test_assertions.assert_ok
 
   resp.status |> should.equal(200)
-  string.contains(
-    resp.body,
-    "\"urn:saar:extensions:files-semantics:v1\"",
-  )
+  string.contains(resp.body, "\"urn:saar:extensions:files-semantics:v1\"")
   |> should.equal(True)
   string.contains(resp.body, "\"maxFiles\":1") |> should.equal(True)
   string.contains(resp.body, "\"ingestEffect\":\"eventual\"")
@@ -191,10 +185,7 @@ pub fn agent_card_root_extensions_advertises_files_semantics_uri() {
   let resp =
     http_client.request_sync_string(
       http.Get,
-      base_url
-      <> "/instances/"
-      <> instance_id
-      <> "/.well-known/agent-card.json",
+      base_url <> "/instances/" <> instance_id <> "/.well-known/agent-card.json",
       tasks_helpers.auth_headers(),
       None,
       5000,

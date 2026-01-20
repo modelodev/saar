@@ -314,7 +314,8 @@ fn interact_sync(
 
   case out {
     Ok(result) -> {
-      let result = ingest_metadata.attach_ingest_metadata(files_semantics, result)
+      let result =
+        ingest_metadata.attach_ingest_metadata(files_semantics, result)
       json_response(200, encode_interaction_result(result))
     }
 
@@ -849,7 +850,8 @@ fn encode_files_semantics(
         #("accepts", json.bool(accepts)),
         #("max_files", json.int(max_files)),
         #("ingest_effect", case ingest_effect {
-          Some(effect) -> json.string(types_profile.ingest_effect_to_string(effect))
+          Some(effect) ->
+            json.string(types_profile.ingest_effect_to_string(effect))
           None -> json.null()
         }),
       ])

@@ -44,9 +44,12 @@ pub fn add_ingest_metadata(
         None -> metadata
       }
 
-      let metadata = dict.insert(metadata, "ingest_effect", ingest_effect_json(
-        ingest_effect,
-      ))
+      let metadata =
+        dict.insert(
+          metadata,
+          "ingest_effect",
+          ingest_effect_json(ingest_effect),
+        )
       let metadata = dict.insert(metadata, "max_files", json.int(max_files))
 
       case dict.has_key(metadata, "track_id") {
@@ -70,11 +73,13 @@ pub fn ingest_payload(
       ingest_effect: ingest_effect,
       ..,
     )) ->
-      Some(json.object([
-        #("effect", ingest_effect_json(ingest_effect)),
-        #("trackId", track_id_value(metadata)),
-        #("maxFiles", json.int(max_files)),
-      ]))
+      Some(
+        json.object([
+          #("effect", ingest_effect_json(ingest_effect)),
+          #("trackId", track_id_value(metadata)),
+          #("maxFiles", json.int(max_files)),
+        ]),
+      )
   }
 }
 
@@ -106,7 +111,6 @@ fn ingest_effect_json(effect: Option(types_profile.IngestEffect)) -> json.Json {
     Some(value) -> json.string(types_profile.ingest_effect_to_string(value))
   }
 }
-
 
 fn track_id_value(metadata: dict.Dict(String, json.Json)) -> json.Json {
   case dict.get(metadata, "track_id") {
