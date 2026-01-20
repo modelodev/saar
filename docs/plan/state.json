@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": "S22",
+  "current_sprint": null,
   "sprints": {
     "S01": {
       "status": "completed",
@@ -602,10 +602,10 @@
       }
     },
     "S22": {
-      "status": "in_progress",
+      "status": "completed",
       "branch": "sprint/s22-files-semantics-discovery",
       "started_at": "2026-01-20T18:54:22Z",
-      "completed_at": null,
+      "completed_at": "2026-01-20T21:06:05Z",
       "current_story": null,
       "stories": {
         "S22-T01": {
