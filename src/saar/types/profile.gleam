@@ -114,14 +114,47 @@ pub type CapabilityLimits {
   CapabilityLimits(call_timeout_ms: Option(Int))
 }
 
+/// Declares how a capability delivers its response to clients.
+///
+/// - `ResponseModeSync`: reply immediately in the same request.
+/// - `ResponseModeStream`: stream incremental output via SSE.
+/// - `ResponseModeDeferred`: return a task id for later polling/subscribe.
+pub type ResponseMode {
+  ResponseModeSync
+  ResponseModeStream
+  ResponseModeDeferred
+}
+
+/// Parses a response mode from its stable string representation.
+pub fn response_mode_from_string(raw: String) -> Result(ResponseMode, Nil) {
+  case raw {
+    "sync" -> Ok(ResponseModeSync)
+    "stream" -> Ok(ResponseModeStream)
+    "deferred" -> Ok(ResponseModeDeferred)
+    _ -> Error(Nil)
+  }
+}
+
+/// Converts a response mode into its stable string representation.
+pub fn response_mode_to_string(mode: ResponseMode) -> String {
+  case mode {
+    ResponseModeSync -> "sync"
+    ResponseModeStream -> "stream"
+    ResponseModeDeferred -> "deferred"
+  }
+}
+
 /// A capability provided by a runner interface.
 ///
 /// This is used when the interface is runner-native rather than HTTP.
+/// `response_mode` declares how results are delivered to clients; when omitted
+/// in JSON it defaults to `ResponseModeSync`.
 pub type RunnerCapability {
   RunnerCapability(
     input_schema: Option(InputSchema),
     description: Option(String),
     streaming: Bool,
+    response_mode: ResponseMode,
     limits: Option(CapabilityLimits),
   )
 }
@@ -143,7 +176,8 @@ pub type ResponseMapping {
 /// A single HTTP-exposed capability.
 ///
 /// `path` and `method` identify the endpoint; `response` can optionally map
-/// response fields.
+/// response fields. `response_mode` declares the delivery mode for clients and
+/// defaults to `ResponseModeSync` when omitted in JSON.
 pub type HttpCapability {
   HttpCapability(
     path: String,
@@ -152,6 +186,7 @@ pub type HttpCapability {
     response: Option(ResponseMapping),
     description: Option(String),
     streaming: Bool,
+    response_mode: ResponseMode,
     limits: Option(CapabilityLimits),
   )
 }

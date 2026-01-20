@@ -706,6 +706,7 @@ fn echo_cli_profile_with_delay_and_timeout(
         input_schema: schema,
         description: description,
         streaming: streaming,
+        response_mode: response_mode,
         ..,
       ) = cap0
 
@@ -714,6 +715,7 @@ fn echo_cli_profile_with_delay_and_timeout(
           input_schema: schema,
           description: description,
           streaming: streaming,
+          response_mode: response_mode,
           limits: Some(
             types_profile.CapabilityLimits(call_timeout_ms: Some(
               call_timeout_ms,
