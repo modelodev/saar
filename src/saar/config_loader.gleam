@@ -216,6 +216,9 @@ fn validate_top_level_key(
         "max_request_body_bytes",
         "max_http_response_bytes",
         "max_file_fetch_bytes",
+        "task_retention_ms",
+        "max_tasks",
+        "max_task_result_bytes",
         "sse_keep_alive_interval_ms",
         "port_range_min",
         "port_range_max",
@@ -666,6 +669,9 @@ type SaarLimitsOverrides {
     max_request_body_bytes: Option(Int),
     max_http_response_bytes: Option(Int),
     max_file_fetch_bytes: Option(Int),
+    task_retention_ms: Option(Int),
+    max_tasks: Option(Int),
+    max_task_result_bytes: Option(Int),
   )
 }
 
@@ -772,6 +778,17 @@ fn read_saar_limits_overrides(
     "max_file_fetch_bytes",
     "limits.max_file_fetch_bytes",
   ))
+  use task_retention_ms <- result.try(optional_int(
+    v,
+    "task_retention_ms",
+    "limits.task_retention_ms",
+  ))
+  use max_tasks <- result.try(optional_int(v, "max_tasks", "limits.max_tasks"))
+  use max_task_result_bytes <- result.try(optional_int(
+    v,
+    "max_task_result_bytes",
+    "limits.max_task_result_bytes",
+  ))
 
   Ok(SaarLimitsOverrides(
     log_buffer_bytes: log_buffer_bytes,
@@ -780,6 +797,9 @@ fn read_saar_limits_overrides(
     max_request_body_bytes: max_request_body_bytes,
     max_http_response_bytes: max_http_response_bytes,
     max_file_fetch_bytes: max_file_fetch_bytes,
+    task_retention_ms: task_retention_ms,
+    max_tasks: max_tasks,
+    max_task_result_bytes: max_task_result_bytes,
   ))
 }
 
@@ -863,6 +883,9 @@ fn apply_saar_limits_overrides(
     max_request_body_bytes: old_max_body,
     max_http_response_bytes: old_max_http,
     max_file_fetch_bytes: old_max_fetch,
+    task_retention_ms: old_task_retention,
+    max_tasks: old_max_tasks,
+    max_task_result_bytes: old_max_result_bytes,
   ) = limits_cfg
 
   let SaarLimitsOverrides(
@@ -872,6 +895,9 @@ fn apply_saar_limits_overrides(
     max_request_body_bytes: max_request_body_bytes,
     max_http_response_bytes: max_http_response_bytes,
     max_file_fetch_bytes: max_file_fetch_bytes,
+    task_retention_ms: task_retention_ms,
+    max_tasks: max_tasks,
+    max_task_result_bytes: max_task_result_bytes,
   ) = overrides
 
   let next_limits =
@@ -891,6 +917,12 @@ fn apply_saar_limits_overrides(
         old_max_http,
       ),
       max_file_fetch_bytes: option.unwrap(max_file_fetch_bytes, old_max_fetch),
+      task_retention_ms: option.unwrap(task_retention_ms, old_task_retention),
+      max_tasks: option.unwrap(max_tasks, old_max_tasks),
+      max_task_result_bytes: option.unwrap(
+        max_task_result_bytes,
+        old_max_result_bytes,
+      ),
     )
 
   types_config.SaarConfig(..cfg, limits: next_limits)

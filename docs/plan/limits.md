@@ -32,6 +32,9 @@ Regenerate: `make docs-limits`.
 | limits.max_request_body_bytes | int | 1048576 | S02/S13 | mist.read_body -> 413 |
 | limits.max_http_response_bytes | int | 10485760 | S02/S08 | HTTP non-streaming |
 | limits.max_file_fetch_bytes | int | 52428800 | S02/S08 | fetch FileRef (si aplica) |
+| limits.task_retention_ms | int | 604800000 | S21 | task retention window |
+| limits.max_tasks | int | 10000 | S21 | task store capacity |
+| limits.max_task_result_bytes | int | 262144 | S21 | task result size |
 | limits.sse_keep_alive_interval_ms | int | 15000 | S02/S09 | SSE keep-alive |
 | limits.port_range_min | int | 9000 | S02/S07 | managed_port pool |
 | limits.port_range_max | int | 9999 | S02/S07 | managed_port pool |
