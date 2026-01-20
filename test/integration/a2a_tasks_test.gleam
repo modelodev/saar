@@ -160,7 +160,7 @@ pub fn a2a_subscribe_first_event_is_task_snapshot() {
     )
     |> test_assertions.assert_ok
 
-  let data = wait_for_sse_data(conn, 60)
+  let data = tasks_helpers.wait_for_sse_data(conn, 60)
   should.equal(string.contains(data, "\"state\":\"working\""), True)
   http_client.close_sse(conn)
 }
@@ -194,10 +194,10 @@ pub fn a2a_subscribe_closes_on_terminal_state() {
     )
     |> test_assertions.assert_ok
 
-  let _ = wait_for_sse_data(conn, 60)
-  let terminal = wait_for_sse_data(conn, 120)
+  let _ = tasks_helpers.wait_for_sse_data(conn, 60)
+  let terminal = tasks_helpers.wait_for_sse_data(conn, 120)
   should.equal(string.contains(terminal, "\"state\":\"completed\""), True)
-  wait_for_sse_close(conn, 120)
+  tasks_helpers.wait_for_sse_close(conn, 120)
 }
 
 fn post_a2a_send(
@@ -316,32 +316,6 @@ fn wait_a2a_task_state(
         }
       }
     }
-  }
-}
-
-fn wait_for_sse_data(conn: http_client.SseConnection, attempts: Int) -> String {
-  case attempts {
-    0 -> panic as "Timed out waiting for SSE data"
-
-    _ ->
-      case http_client.sse_receive(conn, 200) {
-        http_client.SseTimeout -> wait_for_sse_data(conn, attempts - 1)
-        http_client.SseClosed -> panic as "SSE closed before data"
-        http_client.SseData(data) -> data
-      }
-  }
-}
-
-fn wait_for_sse_close(conn: http_client.SseConnection, attempts: Int) -> Nil {
-  case attempts {
-    0 -> panic as "Timed out waiting for SSE close"
-
-    _ ->
-      case http_client.sse_receive(conn, 200) {
-        http_client.SseTimeout -> wait_for_sse_close(conn, attempts - 1)
-        http_client.SseClosed -> Nil
-        http_client.SseData(_) -> wait_for_sse_close(conn, attempts - 1)
-      }
   }
 }
 

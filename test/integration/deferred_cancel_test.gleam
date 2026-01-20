@@ -1,7 +1,4 @@
-import gleam/dynamic/decode
-import gleam/erlang/process
 import gleam/http
-import gleam/json
 import gleam/option
 import gleeunit
 import gleeunit/should
@@ -30,14 +27,14 @@ pub fn delete_task_running_cancels_task_state_cancelled() {
     )
 
   resp.status |> should.equal(202)
-  let task_id = decode_task_id(resp.body)
+  let task_id = tasks_helpers.decode_task_id(resp.body)
 
   let cancel_resp = tasks_helpers.delete_task(base_url, task_id)
   cancel_resp.status |> should.equal(200)
-  decode_task_state(cancel_resp.body) |> should.equal("cancelled")
+  tasks_helpers.decode_task_state(cancel_resp.body) |> should.equal("cancelled")
 
   let get_resp = tasks_helpers.get_task(base_url, task_id)
-  decode_task_state(get_resp.body) |> should.equal("cancelled")
+  tasks_helpers.decode_task_state(get_resp.body) |> should.equal("cancelled")
 }
 
 pub fn stop_instance_cancels_running_task_state_cancelled() {
@@ -57,10 +54,10 @@ pub fn stop_instance_cancels_running_task_state_cancelled() {
     )
 
   resp.status |> should.equal(202)
-  let task_id = decode_task_id(resp.body)
+  let task_id = tasks_helpers.decode_task_id(resp.body)
 
   let _ = stop_instance(base_url, instance_id)
-  let _ = wait_task_state(base_url, task_id, "cancelled", 40)
+  let _ = tasks_helpers.wait_task_state(base_url, task_id, "cancelled", 40)
   Nil
 }
 
@@ -81,10 +78,10 @@ pub fn delete_instance_cancels_running_task_state_cancelled() {
     )
 
   resp.status |> should.equal(202)
-  let task_id = decode_task_id(resp.body)
+  let task_id = tasks_helpers.decode_task_id(resp.body)
 
   let _ = delete_instance(base_url, instance_id)
-  let _ = wait_task_state(base_url, task_id, "cancelled", 40)
+  let _ = tasks_helpers.wait_task_state(base_url, task_id, "cancelled", 40)
   Nil
 }
 
@@ -116,50 +113,4 @@ fn delete_instance(base_url: String, instance_id: String) -> Nil {
   |> fn(resp) { resp.status |> should.equal(200) }
 
   Nil
-}
-
-fn wait_task_state(
-  base_url: String,
-  task_id: String,
-  expected_state: String,
-  attempts: Int,
-) -> String {
-  case attempts {
-    0 -> panic as "Timed out waiting for task state"
-
-    _ -> {
-      let resp = tasks_helpers.get_task(base_url, task_id)
-      let state = decode_task_state(resp.body)
-
-      case state == expected_state {
-        True -> resp.body
-        False -> {
-          process.sleep(50)
-          wait_task_state(base_url, task_id, expected_state, attempts - 1)
-        }
-      }
-    }
-  }
-}
-
-fn decode_task_id(body: String) -> String {
-  let dynamic_body = parse_dynamic(body)
-  let decoder = {
-    use task_id <- decode.field("task_id", decode.string)
-    decode.success(task_id)
-  }
-  decode.run(dynamic_body, decoder) |> test_assertions.assert_ok
-}
-
-fn decode_task_state(body: String) -> String {
-  let dynamic_body = parse_dynamic(body)
-  let decoder = {
-    use state <- decode.field("state", decode.string)
-    decode.success(state)
-  }
-  decode.run(dynamic_body, decoder) |> test_assertions.assert_ok
-}
-
-fn parse_dynamic(body: String) {
-  json.parse(body, decode.dynamic) |> test_assertions.assert_ok
 }

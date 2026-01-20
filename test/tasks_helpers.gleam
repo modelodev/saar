@@ -1,8 +1,10 @@
 // Shared helpers for deferred task integration tests.
 import gleam/dict
+import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/http
 import gleam/int
+import gleam/json
 import gleam/option
 import gleam/string
 import gleeunit/should
@@ -183,6 +185,77 @@ pub fn delete_task(
   |> test_assertions.assert_ok
 }
 
+pub fn wait_task_state(
+  base_url: String,
+  task_id: String,
+  expected_state: String,
+  attempts: Int,
+) -> String {
+  case attempts {
+    0 -> panic as "Timed out waiting for task state"
+
+    _ -> {
+      let resp = get_task(base_url, task_id)
+      let state = decode_task_state(resp.body)
+
+      case state == expected_state {
+        True -> resp.body
+        False -> {
+          process.sleep(50)
+          wait_task_state(base_url, task_id, expected_state, attempts - 1)
+        }
+      }
+    }
+  }
+}
+
+pub fn decode_task_id(body: String) -> String {
+  let dynamic_body = parse_dynamic(body)
+  let decoder = {
+    use task_id <- decode.field("task_id", decode.string)
+    decode.success(task_id)
+  }
+  decode.run(dynamic_body, decoder) |> test_assertions.assert_ok
+}
+
+pub fn decode_task_state(body: String) -> String {
+  let dynamic_body = parse_dynamic(body)
+  let decoder = {
+    use state <- decode.field("state", decode.string)
+    decode.success(state)
+  }
+  decode.run(dynamic_body, decoder) |> test_assertions.assert_ok
+}
+
+pub fn wait_for_sse_data(
+  conn: http_client.SseConnection,
+  attempts: Int,
+) -> String {
+  case attempts {
+    0 -> panic as "Timed out waiting for SSE data"
+
+    _ ->
+      case http_client.sse_receive(conn, 200) {
+        http_client.SseTimeout -> wait_for_sse_data(conn, attempts - 1)
+        http_client.SseClosed -> panic as "SSE closed before data"
+        http_client.SseData(data) -> data
+      }
+  }
+}
+
+pub fn wait_for_sse_close(conn: http_client.SseConnection, attempts: Int) -> Nil {
+  case attempts {
+    0 -> panic as "Timed out waiting for SSE close"
+
+    _ ->
+      case http_client.sse_receive(conn, 200) {
+        http_client.SseTimeout -> wait_for_sse_close(conn, attempts - 1)
+        http_client.SseClosed -> Nil
+        http_client.SseData(_) -> wait_for_sse_close(conn, attempts - 1)
+      }
+  }
+}
+
 fn start_saar_with_cfg_and_profiles(
   cfg0: types_config.SaarConfig,
   initial_profiles: dict.Dict(types_core.ProfileId, types_profile.Profile),
@@ -201,4 +274,8 @@ fn start_saar_with_cfg_and_profiles(
   let assert Ok(_) = root_supervisor.start(state, names)
 
   "http://" <> host <> ":" <> int.to_string(port)
+}
+
+fn parse_dynamic(body: String) {
+  json.parse(body, decode.dynamic) |> test_assertions.assert_ok
 }
