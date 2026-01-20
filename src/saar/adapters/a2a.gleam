@@ -648,9 +648,7 @@ fn message_from_result(result: types_output.InteractionResult) -> json.Json {
   ])
 }
 
-fn artifacts_from_result(
-  result: types_output.InteractionResult,
-) -> json.Json {
+fn artifacts_from_result(result: types_output.InteractionResult) -> json.Json {
   json.array(result.artifacts, encode_a2a_artifact)
 }
 
@@ -670,12 +668,8 @@ pub fn interaction_result_to_task(
 
 /// Builds an A2A Task payload from a stored task record.
 pub fn task_record_to_task(record: types_task.TaskRecord) -> json.Json {
-  let types_task.TaskRecord(
-    id: id,
-    context_id: context_id,
-    status: status,
-    ..,
-  ) = record
+  let types_task.TaskRecord(id: id, context_id: context_id, status: status, ..) =
+    record
 
   let fields = [
     #("id", json.string(types_core.trace_id_to_string(id))),
@@ -708,8 +702,7 @@ fn task_status_json(
   task_id: types_core.TraceId,
 ) -> json.Json {
   case status {
-    types_task.TaskRunning ->
-      json.object([#("state", json.string("working"))])
+    types_task.TaskRunning -> json.object([#("state", json.string("working"))])
 
     types_task.TaskCompleted(_) ->
       json.object([#("state", json.string("completed"))])

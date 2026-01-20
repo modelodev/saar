@@ -301,7 +301,7 @@ Defaults canonicos: `docs/plan/limits.toml` (tabla generada en `docs/plan/limits
 | `limits.max_http_response_bytes` | Límite duro del body que SAAR acepta desde agentes HTTP non-streaming. | `10_485_760` (10MB) |
 | `limits.max_file_fetch_bytes` | Límite duro para descargas al construir multipart desde `FileRef` (SAAR → agente). | `52_428_800` (50MB) |
 | `limits.task_retention_ms` | Retención de tareas diferidas en TaskStore. | `604_800_000` (7d) |
-| `limits.max_tasks` | Máximo de tareas diferidas almacenadas. | `1000` |
+| `limits.max_tasks` | Máximo de tareas diferidas almacenadas. | `10_000` |
 | `limits.max_task_result_bytes` | Límite de bytes para el resultado almacenado en tareas. | `262_144` |
 | `limits.shutdown_timeout_ms` | Tiempo de gracia para SIGTERM→SIGKILL en stop/delete. | `10_000` |
 | `limits.sse_keep_alive_interval_ms` | Intervalo de keep-alive SSE (comentarios) para conexiones largas. `0` desactiva. | `15_000` |
@@ -342,7 +342,7 @@ max_request_body_bytes = 1048576
 max_http_response_bytes = 10485760
 max_file_fetch_bytes = 52428800
 task_retention_ms = 604800000
-max_tasks = 1000
+max_tasks = 10000
 max_task_result_bytes = 262144
 port_range_min = 9000
 port_range_max = 9999

@@ -135,10 +135,7 @@ pub fn subscribe_after_completion_returns_terminal_snapshot_immediately() {
   wait_for_sse_close(conn, 60)
 }
 
-fn wait_for_sse_data(
-  conn: http_client.SseConnection,
-  attempts: Int,
-) -> String {
+fn wait_for_sse_data(conn: http_client.SseConnection, attempts: Int) -> String {
   case attempts {
     0 -> panic as "Timed out waiting for SSE data"
 

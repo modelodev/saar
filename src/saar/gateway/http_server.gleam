@@ -61,8 +61,7 @@ pub fn start(
     )
 
   let agents_deps = agents_api.Deps(registry: registry, task_store: task_store)
-  let a2a_deps =
-    a2a_api.Deps(registry: registry, task_store: task_store)
+  let a2a_deps = a2a_api.Deps(registry: registry, task_store: task_store)
   let artifacts_deps = artifacts_api.Deps(artifact_registry: artifact_registry)
   let tasks_deps = tasks_api.Deps(registry: registry, task_store: task_store)
   let ui_deps = ui_proxy_api.Deps(registry: registry, profiles: profiles)

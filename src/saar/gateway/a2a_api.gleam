@@ -206,7 +206,9 @@ fn message_send_with_agent(
               interact_deferred_a2a(cfg, deps, agent_ref, prepared)
 
             _ ->
-              case agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms) {
+              case
+                agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms)
+              {
                 Ok(result) ->
                   json_response(
                     200,
@@ -339,7 +341,9 @@ fn handle_task_get(
       case parse_task_id_or_400(task_id_raw, trace_id) {
         Error(resp) -> resp
         Ok(task_id) ->
-          case find_task_for_instance(cfg, deps, trace_id, task_id, instance_id) {
+          case
+            find_task_for_instance(cfg, deps, trace_id, task_id, instance_id)
+          {
             Error(resp) -> resp
             Ok(record) -> json_response(200, a2a.task_record_to_task(record))
           }
@@ -362,7 +366,9 @@ fn handle_task_cancel(
       case parse_task_id_or_400(task_id_raw, trace_id) {
         Error(resp) -> resp
         Ok(task_id) ->
-          case find_task_for_instance(cfg, deps, trace_id, task_id, instance_id) {
+          case
+            find_task_for_instance(cfg, deps, trace_id, task_id, instance_id)
+          {
             Error(resp) -> resp
             Ok(record) -> cancel_task_record(cfg, deps, trace_id, record)
           }
@@ -385,7 +391,9 @@ fn handle_task_subscribe(
       case parse_task_id_or_400(task_id_raw, trace_id) {
         Error(resp) -> resp
         Ok(task_id) ->
-          case find_task_for_instance(cfg, deps, trace_id, task_id, instance_id) {
+          case
+            find_task_for_instance(cfg, deps, trace_id, task_id, instance_id)
+          {
             Error(resp) -> resp
             Ok(record) ->
               subscribe_task_response(cfg, deps, instance_id, record)
@@ -681,8 +689,7 @@ fn handle_created_task(
   let record = types_task.task_create_record(result)
 
   case result {
-    types_task.TaskExisting(_) ->
-      json_response(200, a2a_task_response(record))
+    types_task.TaskExisting(_) -> json_response(200, a2a_task_response(record))
 
     types_task.TaskCreated(_) ->
       case agent.status(agent_ref, status_timeout_ms(cfg)) {

@@ -14,8 +14,8 @@
 //// - Uses `saar/bridge/http_client` for HTTP and SSE calls.
 
 import gleam/dict
-import gleam/dynamic/decode
 import gleam/dynamic.{type Dynamic}
+import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/http
 import gleam/json
@@ -230,7 +230,7 @@ fn post_a2a_send(
     http.Post,
     url,
     tasks_helpers.auth_headers()
-    |> dict.insert("content-type", "application/json"),
+      |> dict.insert("content-type", "application/json"),
     option.Some(body),
     5000,
     1024 * 1024,
@@ -261,8 +261,12 @@ fn cancel_a2a_task(
 ) -> http_client.HttpResponse {
   http_client.request_sync_string(
     http.Post,
-    base_url <> "/instances/" <> instance_id <> "/a2a/tasks/" <> task_id
-    <> ":cancel",
+    base_url
+      <> "/instances/"
+      <> instance_id
+      <> "/a2a/tasks/"
+      <> task_id
+      <> ":cancel",
     tasks_helpers.auth_headers(),
     option.None,
     2000,
@@ -276,7 +280,11 @@ fn a2a_task_subscribe_url(
   instance_id: String,
   task_id: String,
 ) -> String {
-  base_url <> "/instances/" <> instance_id <> "/a2a/tasks/" <> task_id
+  base_url
+  <> "/instances/"
+  <> instance_id
+  <> "/a2a/tasks/"
+  <> task_id
   <> ":subscribe"
 }
 
@@ -311,10 +319,7 @@ fn wait_a2a_task_state(
   }
 }
 
-fn wait_for_sse_data(
-  conn: http_client.SseConnection,
-  attempts: Int,
-) -> String {
+fn wait_for_sse_data(conn: http_client.SseConnection, attempts: Int) -> String {
   case attempts {
     0 -> panic as "Timed out waiting for SSE data"
 
