@@ -22,6 +22,17 @@ Para decidir cómo consumir la respuesta, el cliente debe leer:
 - `capabilities.<cap>.response_mode` (`sync`, `stream`, `deferred`).
 - `capabilities.<cap>.streaming` (si soporta SSE).
 
+### 1.1 Semantica de ficheros por capability
+
+Si una capability acepta ficheros, la vista nativa incluye un bloque `files`:
+
+- `files.accepts`: indica si acepta ficheros.
+- `files.max_files`: cardinalidad maxima permitida.
+- `files.ingest_effect`: `immediate` o `eventual`.
+
+Si `ingest_effect = "eventual"`, el cliente no debe asumir que un upload afecta
+de forma inmediata a consultas posteriores.
+
 ## 2. Invocar una capacidad (API nativa)
 
 Los clientes invocan capacidades usando:
@@ -33,6 +44,17 @@ El cuerpo incluye:
 - `capability`: el nombre de la capacidad (clave dentro de `capabilities`).
 - `inputs`: un objeto JSON que respeta `input_schema`.
 - `context.trace_id`: un identificador aportado por el cliente para correlación y trazabilidad.
+
+### 2.1 Metadatos de ingesta en respuestas
+
+Cuando la capability implica ingesta de ficheros, SAAR incluye metadatos
+estables en `data.metadata`:
+
+- `ingest_effect`: `immediate` o `eventual`.
+- `max_files`: cardinalidad maxima.
+- `track_id`: identificador opcional si el agente lo devuelve.
+
+Estos metadatos son informativos; no implican garantia de indexacion inmediata.
 
 ### 2.2 Estado ocupado (422)
 
