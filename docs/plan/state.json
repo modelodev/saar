@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "current_sprint": null,
+  "current_sprint": "S22",
   "sprints": {
     "S01": {
       "status": "completed",
@@ -599,6 +599,25 @@
           "branch": "feat/s21-t06-docs-tests",
           "commit": "a16d3b3ff3e287e16d85d3fbbf0525e01fb504af"
         }
+      }
+    },
+    "S22": {
+      "status": "in_progress",
+      "branch": "sprint/s22-files-semantics-discovery",
+      "started_at": "2026-01-20T18:54:22Z",
+      "completed_at": null,
+      "current_story": null,
+      "stories": {
+        "S22-T01": {
+          "status": "completed",
+          "branch": "feat/s22-t01-files-semantics-types",
+          "commit": "1645d1e80000b43e4cd064ffaca7b36d6ef82c17"
+        },
+        "S22-T02": {"status": "pending", "branch": null, "commit": null},
+        "S22-T03": {"status": "pending", "branch": null, "commit": null},
+        "S22-T04": {"status": "pending", "branch": null, "commit": null},
+        "S22-T05": {"status": "pending", "branch": null, "commit": null},
+        "S22-T06": {"status": "pending", "branch": null, "commit": null}
       }
     }
   }
