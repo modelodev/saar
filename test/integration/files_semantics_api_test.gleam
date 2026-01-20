@@ -12,7 +12,7 @@
 
 import gleam/dict
 import gleam/http
-import gleam/option.{Some}
+import gleam/option.{None, Some}
 import gleam/string
 import gleeunit
 import gleeunit/should
@@ -52,6 +52,32 @@ pub fn upload_returns_ingest_effect_eventual_in_metadata() {
   resp.status |> should.equal(200)
   string.contains(resp.body, "\"ingest_effect\":\"eventual\"")
   |> should.equal(True)
+  string.contains(resp.body, "\"max_files\":1") |> should.equal(True)
+}
+
+pub fn files_upload_returns_metadata_with_ingest_effect() {
+  upload_returns_ingest_effect_eventual_in_metadata()
+}
+
+pub fn files_capability_discovery_exposes_max_files() {
+  let base_url = tasks_helpers.start_saar()
+
+  let instance_id = "inst-files-discovery"
+  tasks_helpers.create_agent(base_url, "echo_files_eventual", instance_id)
+  tasks_helpers.wait_phase(base_url, instance_id, "ready_transient", 200)
+
+  let resp =
+    http_client.request_sync_string(
+      http.Get,
+      base_url <> "/agents/" <> instance_id,
+      tasks_helpers.auth_headers(),
+      None,
+      5000,
+      1024 * 1024,
+    )
+    |> test_assertions.assert_ok
+
+  resp.status |> should.equal(200)
   string.contains(resp.body, "\"max_files\":1") |> should.equal(True)
 }
 
