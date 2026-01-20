@@ -18,10 +18,10 @@ import saar/core/messages.{
   type AgentManagerMsg, type ArtifactRegistryMsg, type PortPoolMsg,
   type ProfilesMsg, type RegistryMsg, type StartArgs,
 }
-import saar/core/task_store_protocol
 import saar/core/port_pool_actor
 import saar/core/profiles
 import saar/core/registry
+import saar/core/task_store_protocol
 import saar/gateway/http_server
 import saar/types.{type Profile, type ProfileId}
 

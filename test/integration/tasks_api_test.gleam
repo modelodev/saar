@@ -1,13 +1,10 @@
-import gleam/dict
 import gleam/dynamic/decode
 import gleam/erlang/process
-import gleam/http
 import gleam/json
 import gleam/option
 import gleam/string
 import gleeunit
 import gleeunit/should
-import saar/bridge/http_client
 import tasks_helpers
 import test_assertions
 
@@ -23,7 +20,7 @@ pub fn post_deferred_returns_202_and_task_id() {
   tasks_helpers.wait_phase(base_url, instance_id, "ready_transient", 200)
 
   let resp =
-    post_deferred(
+    tasks_helpers.post_deferred(
       base_url,
       instance_id,
       "echo",
@@ -45,7 +42,7 @@ pub fn post_deferred_when_busy_returns_422_agent_busy() {
   tasks_helpers.wait_phase(base_url, instance_id, "ready_transient", 200)
 
   let resp1 =
-    post_deferred(
+    tasks_helpers.post_deferred(
       base_url,
       instance_id,
       "echo",
@@ -57,7 +54,7 @@ pub fn post_deferred_when_busy_returns_422_agent_busy() {
   let task_id = decode_task_id(resp1.body)
 
   let resp2 =
-    post_deferred(
+    tasks_helpers.post_deferred(
       base_url,
       instance_id,
       "echo",
@@ -68,23 +65,14 @@ pub fn post_deferred_when_busy_returns_422_agent_busy() {
   resp2.status |> should.equal(422)
   should.equal(string.contains(resp2.body, "\"kind\":\"agent_error\""), True)
 
-  let _ = delete_task(base_url, task_id)
+  let _ = tasks_helpers.delete_task(base_url, task_id)
   Nil
 }
 
 pub fn get_task_404_when_missing() {
   let base_url = tasks_helpers.start_saar()
 
-  let resp =
-    http_client.request_sync_string(
-      http.Get,
-      base_url <> "/tasks/missing-task",
-      tasks_helpers.auth_headers(),
-      option.None,
-      2000,
-      1024 * 1024,
-    )
-    |> test_assertions.assert_ok
+  let resp = tasks_helpers.get_task_raw(base_url, "missing-task")
 
   resp.status |> should.equal(404)
 }
@@ -97,7 +85,7 @@ pub fn get_task_running_then_completed_after_delay() {
   tasks_helpers.wait_phase(base_url, instance_id, "ready_transient", 200)
 
   let resp =
-    post_deferred(
+    tasks_helpers.post_deferred(
       base_url,
       instance_id,
       "echo",
@@ -108,7 +96,7 @@ pub fn get_task_running_then_completed_after_delay() {
   resp.status |> should.equal(202)
   let task_id = decode_task_id(resp.body)
 
-  let running = get_task(base_url, task_id)
+  let running = tasks_helpers.get_task(base_url, task_id)
   let running_state = decode_task_state(running.body)
   running_state |> should.equal("running")
 
@@ -124,7 +112,7 @@ pub fn get_task_eventually_completed_contains_result() {
   tasks_helpers.wait_phase(base_url, instance_id, "ready_transient", 200)
 
   let resp =
-    post_deferred(
+    tasks_helpers.post_deferred(
       base_url,
       instance_id,
       "echo",
@@ -148,7 +136,7 @@ pub fn get_task_completed_includes_artifacts() {
   tasks_helpers.wait_phase(base_url, instance_id, "ready_transient", 200)
 
   let resp =
-    post_deferred(
+    tasks_helpers.post_deferred(
       base_url,
       instance_id,
       "generate",
@@ -171,7 +159,7 @@ pub fn task_failed_state_when_agent_errors() {
   tasks_helpers.wait_phase(base_url, instance_id, "ready_transient", 200)
 
   let resp =
-    post_deferred(
+    tasks_helpers.post_deferred(
       base_url,
       instance_id,
       "echo",
@@ -195,7 +183,7 @@ pub fn delete_task_terminal_removes_task() {
   tasks_helpers.wait_phase(base_url, instance_id, "ready_transient", 200)
 
   let resp =
-    post_deferred(
+    tasks_helpers.post_deferred(
       base_url,
       instance_id,
       "echo",
@@ -208,78 +196,11 @@ pub fn delete_task_terminal_removes_task() {
 
   let _ = wait_task_state(base_url, task_id, "completed", 40)
 
-  let delete_resp = delete_task(base_url, task_id)
+  let delete_resp = tasks_helpers.delete_task(base_url, task_id)
   delete_resp.status |> should.equal(204)
 
-  let after_delete = get_task_raw(base_url, task_id)
+  let after_delete = tasks_helpers.get_task_raw(base_url, task_id)
   after_delete.status |> should.equal(404)
-}
-
-fn post_deferred(
-  base_url: String,
-  instance_id: String,
-  capability: String,
-  trace_id: String,
-  content: String,
-) -> http_client.HttpResponse {
-  let body =
-    "{"
-    <> "\"capability\":\""
-    <> capability
-    <> "\","
-    <> "\"inputs\":{\"messages\":[{\"role\":\"user\",\"content\":\""
-    <> content
-    <> "\"}]},"
-    <> "\"context\":{\"trace_id\":\""
-    <> trace_id
-    <> "\"}"
-    <> "}"
-
-  http_client.request_sync_string(
-    http.Post,
-    base_url <> "/agents/" <> instance_id <> "/interact",
-    dict.insert(tasks_helpers.auth_headers(), "content-type", "application/json"),
-    option.Some(body),
-    5000,
-    1024 * 1024,
-  )
-  |> test_assertions.assert_ok
-}
-
-fn get_task(base_url: String, task_id: String) -> http_client.HttpResponse {
-  let resp = get_task_raw(base_url, task_id)
-  resp.status |> should.equal(200)
-  resp
-}
-
-fn get_task_raw(
-  base_url: String,
-  task_id: String,
-) -> http_client.HttpResponse {
-  http_client.request_sync_string(
-    http.Get,
-    base_url <> "/tasks/" <> task_id,
-    tasks_helpers.auth_headers(),
-    option.None,
-    2000,
-    1024 * 1024,
-  )
-  |> test_assertions.assert_ok
-}
-
-fn delete_task(
-  base_url: String,
-  task_id: String,
-) -> http_client.HttpResponse {
-  http_client.request_sync_string(
-    http.Delete,
-    base_url <> "/tasks/" <> task_id,
-    tasks_helpers.auth_headers(),
-    option.None,
-    2000,
-    1024 * 1024,
-  )
-  |> test_assertions.assert_ok
 }
 
 fn decode_task_id(body: String) -> String {
@@ -344,7 +265,7 @@ fn wait_task_state(
     0 -> panic as "Timed out waiting for task state"
 
     _ -> {
-      let resp = get_task(base_url, task_id)
+      let resp = tasks_helpers.get_task(base_url, task_id)
       let state = decode_task_state(resp.body)
 
       case state == expected_state {

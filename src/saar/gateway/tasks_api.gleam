@@ -29,6 +29,7 @@ import saar/core/agent
 import saar/core/messages
 import saar/core/task_store
 import saar/core/task_store_protocol
+import saar/ffi
 import saar/gateway/lookup
 import saar/gateway/problem
 import saar/otp/safe_call
@@ -37,7 +38,6 @@ import saar/types/core as types_core
 import saar/types/enums as types_enums
 import saar/types/output as types_output
 import saar/types/task as types_task
-import saar/ffi
 
 pub type Deps {
   Deps(
@@ -86,7 +86,13 @@ fn handle_task_subscribe(
 ) -> response.Response(mist.ResponseData) {
   case req.method {
     http.Get ->
-      get_task_for_subscribe(req, cfg, deps, trace_id, types_core.trace_id(task_id_raw))
+      get_task_for_subscribe(
+        req,
+        cfg,
+        deps,
+        trace_id,
+        types_core.trace_id(task_id_raw),
+      )
     _ -> empty_response(405)
   }
 }
@@ -135,7 +141,8 @@ fn delete_task_record(
   let types_task.TaskRecord(status: status, ..) = record
 
   case status {
-    types_task.TaskRunning -> cancel_running_task(req, cfg, deps, trace_id, record)
+    types_task.TaskRunning ->
+      cancel_running_task(req, cfg, deps, trace_id, record)
     _ -> delete_terminal_task(req, cfg, deps, trace_id, task_id)
   }
 }
@@ -151,7 +158,13 @@ fn cancel_running_task(
   cancel_agent_task(cfg, deps, record)
 
   case
-    task_store.cancel_task(store, task_timeout_ms(cfg), record.id, cancel_error(record.id), ffi.now_ms())
+    task_store.cancel_task(
+      store,
+      task_timeout_ms(cfg),
+      record.id,
+      cancel_error(record.id),
+      ffi.now_ms(),
+    )
   {
     Ok(updated) -> json_response(200, encode_task_record(updated))
     Error(safe_call.CallFailed(call_err)) ->
@@ -418,9 +431,19 @@ fn task_store_error_response(
   case err {
     types_task.TaskNotFound -> problem.not_found(trace_id, path)
     types_task.TaskLimitReached(_) ->
-      problem.from_error_kind(types_enums.InfraError, trace_id, path, "max tasks reached")
+      problem.from_error_kind(
+        types_enums.InfraError,
+        trace_id,
+        path,
+        "max tasks reached",
+      )
     types_task.TaskResultTooLarge(_, _) ->
-      problem.from_error_kind(types_enums.InfraError, trace_id, path, "task result too large")
+      problem.from_error_kind(
+        types_enums.InfraError,
+        trace_id,
+        path,
+        "task result too large",
+      )
   }
 }
 

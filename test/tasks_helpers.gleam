@@ -116,6 +116,73 @@ pub fn wait_phase(
   }
 }
 
+pub fn post_deferred(
+  base_url: String,
+  instance_id: String,
+  capability: String,
+  trace_id: String,
+  content: String,
+) -> http_client.HttpResponse {
+  let body =
+    "{"
+    <> "\"capability\":\""
+    <> capability
+    <> "\","
+    <> "\"inputs\":{\"messages\":[{\"role\":\"user\",\"content\":\""
+    <> content
+    <> "\"}]},"
+    <> "\"context\":{\"trace_id\":\""
+    <> trace_id
+    <> "\"}"
+    <> "}"
+
+  http_client.request_sync_string(
+    http.Post,
+    base_url <> "/agents/" <> instance_id <> "/interact",
+    dict.insert(auth_headers(), "content-type", "application/json"),
+    option.Some(body),
+    5000,
+    1024 * 1024,
+  )
+  |> test_assertions.assert_ok
+}
+
+pub fn get_task_raw(
+  base_url: String,
+  task_id: String,
+) -> http_client.HttpResponse {
+  http_client.request_sync_string(
+    http.Get,
+    base_url <> "/tasks/" <> task_id,
+    auth_headers(),
+    option.None,
+    2000,
+    1024 * 1024,
+  )
+  |> test_assertions.assert_ok
+}
+
+pub fn get_task(base_url: String, task_id: String) -> http_client.HttpResponse {
+  let resp = get_task_raw(base_url, task_id)
+  resp.status |> should.equal(200)
+  resp
+}
+
+pub fn delete_task(
+  base_url: String,
+  task_id: String,
+) -> http_client.HttpResponse {
+  http_client.request_sync_string(
+    http.Delete,
+    base_url <> "/tasks/" <> task_id,
+    auth_headers(),
+    option.None,
+    2000,
+    1024 * 1024,
+  )
+  |> test_assertions.assert_ok
+}
+
 fn start_saar_with_cfg_and_profiles(
   cfg0: types_config.SaarConfig,
   initial_profiles: dict.Dict(types_core.ProfileId, types_profile.Profile),
@@ -128,7 +195,8 @@ fn start_saar_with_cfg_and_profiles(
   let names = supervisor_names.new_names_with_suffix(int.to_string(port))
 
   let cfg = types_config.SaarConfig(..cfg0, server_port: port)
-  let state = app_state.AppState(config: cfg, initial_profiles: initial_profiles)
+  let state =
+    app_state.AppState(config: cfg, initial_profiles: initial_profiles)
 
   let assert Ok(_) = root_supervisor.start(state, names)
 

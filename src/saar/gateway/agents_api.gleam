@@ -40,11 +40,12 @@ import saar/core/task_store_protocol
 import saar/decoders
 import saar/gateway/lookup_http
 import saar/gateway/problem
-import saar/gateway/tasks_api
 import saar/gateway/request_url
+import saar/gateway/tasks_api
 import saar/otp/safe_call
 import saar/streams/sink
 
+import saar/ffi
 import saar/types/agent as types_agent
 import saar/types/config as types_config
 import saar/types/core as types_core
@@ -54,7 +55,6 @@ import saar/types/output as types_output
 import saar/types/profile as types_profile
 import saar/types/stream
 import saar/types/task as types_task
-import saar/ffi
 import youid/uuid
 
 pub type Deps {
@@ -478,7 +478,8 @@ fn start_deferred_interaction(
 
   let _ =
     process.spawn(fn() {
-      let result = agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms)
+      let result =
+        agent.interact(agent_ref, req0, sink.NonStreaming, timeout_ms)
       let now_ms = ffi.now_ms()
 
       case result {

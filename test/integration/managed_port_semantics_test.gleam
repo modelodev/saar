@@ -227,7 +227,8 @@ fn start_root(
 
   let assert Ok(actor.Started(..)) = root_supervisor.start(state, names)
 
-  let supervisor_names.RootNames(_, _, _, _, _, agent_manager_name, _, _) = names
+  let supervisor_names.RootNames(_, _, _, _, _, agent_manager_name, _, _) =
+    names
   process.named_subject(agent_manager_name)
 }
 

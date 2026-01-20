@@ -196,7 +196,14 @@ fn handle_message(
       reply_to,
     ) -> {
       let #(next, result) =
-        create_task_state(state, id, instance_id, capability, context_id, now_ms)
+        create_task_state(
+          state,
+          id,
+          instance_id,
+          capability,
+          context_id,
+          now_ms,
+        )
       process.send(reply_to, result)
       actor.continue(next)
     }
