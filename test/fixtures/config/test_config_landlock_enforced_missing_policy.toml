@@ -1,0 +1,8 @@
+[auth]
+api_key = "ok"
+
+[workspaces]
+directory = "/tmp/saar-landlock-test-workspaces"
+
+[security]
+landlock_mode = "enforced"

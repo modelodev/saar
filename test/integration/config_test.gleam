@@ -66,6 +66,7 @@ pub fn missing_env_var_fails_test() {
 }
 
 pub fn unknown_key_fails_test() {
+  ensure_test_workspace_dir()
   let path = "build/test-workspaces/config-unknown-key.toml"
 
   let contents =
@@ -109,6 +110,7 @@ pub fn missing_config_file_fails_test() {
 }
 
 pub fn missing_api_key_fails_test() {
+  ensure_test_workspace_dir()
   let path = "build/test-workspaces/config-missing-api-key.toml"
 
   let contents = "[server]\n" <> "host = \"127.0.0.1\"\n" <> "port = 0\n"
@@ -131,6 +133,8 @@ pub fn missing_api_key_fails_test() {
 
 pub fn limits_values_are_loaded_test() {
   envoy.set("SAAR_TEST_API_KEY", "abc")
+
+  ensure_test_workspace_dir()
 
   let path = "build/test-workspaces/config-limits.toml"
 
@@ -160,4 +164,9 @@ pub fn limits_values_are_loaded_test() {
   let types_config.StreamConfig(sse_keep_alive_interval_ms: keep_alive, ..) =
     stream
   keep_alive |> should.equal(456)
+}
+
+fn ensure_test_workspace_dir() {
+  simplifile.create_directory_all("build/test-workspaces")
+  |> test_assertions.assert_ok
 }

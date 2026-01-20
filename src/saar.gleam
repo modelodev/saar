@@ -308,7 +308,8 @@ fn plan_serve(
 
   let cfg = case loaded_cfg {
     Ok(cfg0) -> apply_port_override(cfg0, cli_port)
-    Error(_) -> apply_port_override(types_config.default_saar_config(), cli_port)
+    Error(_) ->
+      apply_port_override(types_config.default_saar_config(), cli_port)
   }
 
   let port = server_port(cfg)

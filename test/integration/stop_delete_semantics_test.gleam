@@ -621,7 +621,8 @@ fn config_with_port_range(port: Int) -> types_config.SaarConfig {
     )
 
   // Keep stop tests fast.
-  let timeouts = types_config.SaarTimeouts(..timeouts0, shutdown_timeout_ms: 250)
+  let timeouts =
+    types_config.SaarTimeouts(..timeouts0, shutdown_timeout_ms: 250)
 
   types_config.SaarConfig(..cfg0, runner: runner, timeouts: timeouts)
 }

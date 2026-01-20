@@ -9,7 +9,7 @@ Regenerate: `make docs-limits`.
 1) Flags CLI (si aplica)
 2) Env vars del proceso (solo ruta config y api key)
 3) config.toml (interpolacion solo env vars)
-4) Defaults en SadConfig.default_*
+4) Defaults en SaarConfig.default_*
 
 ## Tabla de keys (minimo v0)
 | Key | Tipo | Default | Sprint | Uso |

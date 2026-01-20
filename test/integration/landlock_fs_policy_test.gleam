@@ -3,6 +3,7 @@ import filepath
 import gleam/dict
 import gleam/http
 import gleam/int
+import gleam/json
 import gleam/option
 import gleam/string
 import gleeunit
@@ -10,6 +11,7 @@ import gleeunit/should
 import port_helpers
 import saar/app_state
 import saar/bridge/http_client
+import saar/bridge/port_process
 import saar/config_loader
 import saar/core/root_supervisor
 import saar/core/supervisor_names
@@ -140,6 +142,50 @@ pub fn landlock_enforced_allows_workspace_read_write_and_denies_outside_test() {
   envoy.unset("SAAR_TEST_API_KEY")
 }
 
+pub fn landlock_enforced_wrapper_is_dumb_policy_must_include_workspace_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let workspace = "/tmp/saar-landlock-policy-missing-workspace"
+  let _ = simplifile.delete(file_or_dir_at: workspace)
+  simplifile.create_directory_all(workspace) |> test_assertions.assert_ok
+
+  let policy_json =
+    json.object([
+      #("allow_read", json.array(["/etc"], json.string)),
+      #(
+        "allow_exec",
+        json.array(["/usr", "/bin", "/lib", "/lib64"], json.string),
+      ),
+      #("allow_write", json.array(["/var/tmp"], json.string)),
+    ])
+    |> json.to_string
+
+  let target = filepath.join(workspace, "out.txt")
+  let env =
+    port_helpers.base_env(200, [
+      #("SAAR_LANDLOCK_MODE", "enforced"),
+      #("SAAR_LANDLOCK_POLICY_JSON", policy_json),
+      #("SAAR_WORKSPACE", workspace),
+    ])
+
+  let process =
+    port_process.start(
+      "/bin/sh",
+      ["-c", "echo hi > " <> target],
+      env,
+      ".",
+      262_144,
+    )
+    |> test_assertions.assert_ok
+
+  let exit_code =
+    wait_for_exit_code(process, 200, 40) |> test_assertions.assert_ok
+
+  exit_code |> should.not_equal(0)
+
+  let _ = simplifile.delete(file_or_dir_at: workspace)
+}
+
 pub fn landlock_enforced_policy_requires_absolute_paths_fails_early_test() {
   envoy.set("SAAR_TEST_API_KEY", api_key)
 
@@ -152,6 +198,23 @@ pub fn landlock_enforced_policy_requires_absolute_paths_fails_early_test() {
     |> test_assertions.assert_error
 
   string.contains(string.inspect(err), "LANDLOCK_POLICY_PATH_NOT_ABSOLUTE")
+  |> should.equal(True)
+
+  envoy.unset("SAAR_TEST_API_KEY")
+}
+
+pub fn landlock_enforced_policy_missing_fails_early_test() {
+  envoy.set("SAAR_TEST_API_KEY", api_key)
+
+  let err =
+    config_loader.load_from_path(
+      "test/fixtures/config/test_config_landlock_enforced_missing_policy.toml",
+      envoy.get,
+      simplifile.read,
+    )
+    |> test_assertions.assert_error
+
+  string.contains(string.inspect(err), "LANDLOCK_POLICY_MISSING")
   |> should.equal(True)
 
   envoy.unset("SAAR_TEST_API_KEY")
@@ -191,6 +254,23 @@ pub fn landlock_enforced_policy_rejects_dotdot_segments_fails_early_test() {
   envoy.unset("SAAR_TEST_API_KEY")
 }
 
+pub fn landlock_enforced_policy_rejects_dot_segments_fails_early_test() {
+  envoy.set("SAAR_TEST_API_KEY", api_key)
+
+  let err =
+    config_loader.load_from_path(
+      "test/fixtures/config/test_config_landlock_enforced_invalid_dot.toml",
+      envoy.get,
+      simplifile.read,
+    )
+    |> test_assertions.assert_error
+
+  string.contains(string.inspect(err), "LANDLOCK_POLICY_PATH_HAS_DOT_SEGMENT")
+  |> should.equal(True)
+
+  envoy.unset("SAAR_TEST_API_KEY")
+}
+
 pub fn landlock_enforced_policy_rejects_symlink_paths_fails_early_test() {
   // Create a symlink path used by the TOML.
   let link = "/tmp/saar-landlock-symlink"
@@ -213,4 +293,37 @@ pub fn landlock_enforced_policy_rejects_symlink_paths_fails_early_test() {
 
   envoy.unset("SAAR_TEST_API_KEY")
   let _ = simplifile.delete(file_or_dir_at: link)
+}
+
+pub fn landlock_enforced_workspaces_dir_not_absolute_fails_early_test() {
+  envoy.set("SAAR_TEST_API_KEY", api_key)
+
+  let err =
+    config_loader.load_from_path(
+      "test/fixtures/config/test_config_landlock_enforced_invalid_workspace_dir.toml",
+      envoy.get,
+      simplifile.read,
+    )
+    |> test_assertions.assert_error
+
+  string.contains(string.inspect(err), "LANDLOCK_WORKSPACES_DIR_NOT_ABSOLUTE")
+  |> should.equal(True)
+
+  envoy.unset("SAAR_TEST_API_KEY")
+}
+
+fn wait_for_exit_code(
+  process: port_process.PortProcess,
+  timeout_ms: Int,
+  attempts: Int,
+) -> Result(Int, Nil) {
+  case attempts {
+    0 -> Error(Nil)
+    _ ->
+      case port_process.receive(process, timeout_ms) {
+        Ok(port_process.PortExit(code)) -> Ok(code)
+        Ok(_) -> wait_for_exit_code(process, timeout_ms, attempts - 1)
+        Error(_) -> wait_for_exit_code(process, timeout_ms, attempts - 1)
+      }
+  }
 }

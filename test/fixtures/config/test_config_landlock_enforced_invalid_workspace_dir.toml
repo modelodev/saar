@@ -1,0 +1,13 @@
+[auth]
+api_key = "ok"
+
+[workspaces]
+directory = "./test-workspaces"
+
+[security]
+landlock_mode = "enforced"
+
+[security.landlock]
+allow_exec = ["/usr", "/bin", "/lib", "/lib64", "/home"]
+allow_read = ["/etc", "/proc", "/home"]
+allow_write = ["/tmp"]
