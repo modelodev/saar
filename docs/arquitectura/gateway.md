@@ -186,7 +186,7 @@ Authorization: Bearer <api_key>
 - Formato `instance_id`: slug ASCII `[A-Za-z0-9_-]`, longitud 1..64
 - `init_params` son `Dict(String, ConfigValue)` (solo escalares)
 - instance_id invalido => 400 (bad_request)
-- El perfil se resuelve contra el `ProfilesActor` (en memoria, sin IO). El IO de cargar perfiles desde disco ocurre en `/sys/reload-profiles` o durante el arranque.
+- El perfil se resuelve contra el `ProfilesActor` (en memoria, sin IO). Profile IO happens during startup, `POST /sys/reload-profiles`, or `POST /sys/reload` (which also refreshes `[params]`).
 
 **Respuesta exitosa (201):**
 
@@ -384,7 +384,30 @@ Authorization: Bearer <api_key>
 }
 ```
 
-### 4.7 Recargar perfiles
+### 4.7 Reload config and profiles
+
+```http
+POST /sys/reload
+Authorization: Bearer <api_key>
+```
+
+**Behavior:**
+- Reloads the config from disk, but only merges `[params]` and `profiles.*` into the live config.
+- Uses a short debounce window to avoid multiple reloads in quick succession (returns `status = "debounced"`).
+- If config parsing fails, returns **400** with `extensions.code = CONFIG_RELOAD_FAILED` and keeps the previous config.
+- If profiles reload fails, returns **400** with `extensions.code = PROFILES_RELOAD_FAILED` and keeps the previous profiles.
+
+**Successful response (200):**
+
+```json
+{
+  "status": "success",
+  "profiles_loaded": 5,
+  "profiles": ["aider", "vanna", "gpt-researcher"]
+}
+```
+
+### 4.8 Recargar perfiles
 
 ```http
 POST /sys/reload-profiles
@@ -481,9 +504,9 @@ pub fn reload_profiles(req: Request, app_state: AppState, sup_ref: SupervisorRef
 (borde). El supervisor solo recibe un `Dict(ProfileId, Profile)` ya parseado, manteniendo
 el principio de core puro.
 
-### 4.8 Listar perfiles disponibles
+### 4.9 Listar perfiles disponibles
 
-### 4.9 Adapters (AG-UI / A2A / A2UI)
+### 4.10 Adapters (AG-UI / A2A / A2UI)
 
 - AG-UI: el gateway traduce `StreamEvent` → eventos AG-UI (solo texto soportado). `taskId` = `trace_id`.
 - A2A: Agent Card desde instancia (profile snapshot + instance_id); endpoints `/instances/:instance_id/a2a/message:send` (sync) y `/instances/:instance_id/a2a/message:stream` (SSE). `taskId` = `trace_id`, `contextId` passthrough. No hay push notifications.

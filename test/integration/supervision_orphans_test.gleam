@@ -16,6 +16,8 @@ import saar/types/enums as types_enums
 import saar/types/profile as types_profile
 import test_assertions
 
+const default_config_path = "test/fixtures/config/test_config.toml"
+
 pub fn main() {
   gleeunit.main()
 }
@@ -23,7 +25,12 @@ pub fn main() {
 pub fn registry_crash_rest_for_one_kills_and_restarts_subtree_test() {
   let cfg = agent_helpers.default_config()
   let names = supervisor_names.new_names()
-  let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
+  let state =
+    app_state.AppState(
+      config: cfg,
+      config_path: default_config_path,
+      initial_profiles: dict.new(),
+    )
 
   let assert Ok(actor.Started(..)) = root_supervisor.start(state, names)
 
@@ -71,7 +78,12 @@ pub fn registry_crash_rest_for_one_kills_and_restarts_subtree_test() {
 pub fn killing_agent_manager_actor_kills_agents_test() {
   let cfg = agent_helpers.default_config()
   let names = supervisor_names.new_names()
-  let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
+  let state =
+    app_state.AppState(
+      config: cfg,
+      config_path: default_config_path,
+      initial_profiles: dict.new(),
+    )
 
   let assert Ok(actor.Started(..)) = root_supervisor.start(state, names)
 

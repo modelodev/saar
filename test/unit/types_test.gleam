@@ -106,6 +106,7 @@ pub fn default_config_invariants_test() {
     api_key: api_key,
     timeouts: timeouts,
     profiles: profiles,
+    params: _params,
     runner: runner_cfg,
     storage: storage,
     limits: limits,

@@ -200,6 +200,7 @@ fn validate_top_level_key(
     "server" -> validate_table_fields("server", value, ["host", "port"])
     "auth" -> validate_table_fields("auth", value, ["api_key"])
     "profiles" -> validate_profiles_table(value)
+    "params" -> validate_params_table(value)
     "runners" -> validate_table_fields("runners", value, ["python_bin"])
     "workspaces" -> validate_table_fields("workspaces", value, ["directory"])
 
@@ -419,6 +420,7 @@ fn decode_with_defaults(
   use cfg <- result.try(apply_server(cfg, root))
   use cfg <- result.try(apply_auth(cfg, root))
   use cfg <- result.try(apply_profiles(cfg, root))
+  use cfg <- result.try(apply_params(cfg, root))
   use cfg <- result.try(apply_runners(cfg, root))
   use cfg <- result.try(apply_workspaces(cfg, root))
   use cfg <- result.try(apply_limits(cfg, root))
@@ -513,6 +515,19 @@ fn apply_profiles(
   }
 }
 
+fn apply_params(
+  cfg: types_config.SaarConfig,
+  root: Dict(String, tom.Toml),
+) -> Result(types_config.SaarConfig, ConfigLoadError) {
+  case dict.get(root, "params") {
+    Error(_) -> Ok(cfg)
+    Ok(v) -> {
+      use params <- result.try(decode_params_table(v))
+      Ok(types_config.SaarConfig(..cfg, params: params))
+    }
+  }
+}
+
 fn optional_profile_sources(
   profiles_table: tom.Toml,
 ) -> Result(Option(List(types_config.ProfileSource)), ConfigLoadError) {
@@ -538,6 +553,77 @@ fn optional_profile_sources(
       |> result.map(Some)
     }
   }
+}
+
+fn validate_params_table(value: tom.Toml) -> Result(Nil, ConfigLoadError) {
+  decode_params_table(value)
+  |> result.map(fn(_) { Nil })
+}
+
+fn decode_params_table(
+  value: tom.Toml,
+) -> Result(Dict(String, types_core.Value), ConfigLoadError) {
+  use table <- result.try(
+    tom.as_table(value)
+    |> result.map_error(fn(_) {
+      InvalidValue(key: "params", message: "expected table")
+    }),
+  )
+
+  table
+  |> dict.to_list
+  |> list.try_map(fn(pair) {
+    let #(key, entry) = pair
+    decode_param_value(key, entry)
+    |> result.map(fn(value) { #(key, value) })
+  })
+  |> result.map(dict.from_list)
+}
+
+fn decode_param_value(
+  key: String,
+  value: tom.Toml,
+) -> Result(types_core.Value, ConfigLoadError) {
+  let full_key = "params." <> key
+
+  case tom.as_string(value) {
+    Ok(v) -> Ok(types_core.StringVal(v))
+    Error(_) ->
+      case tom.as_int(value) {
+        Ok(v) -> Ok(types_core.IntVal(v))
+        Error(_) ->
+          case tom.as_float(value) {
+            Ok(v) -> Ok(types_core.FloatVal(v))
+            Error(_) ->
+              case tom.as_bool(value) {
+                Ok(v) -> Ok(types_core.BoolVal(v))
+                Error(_) ->
+                  case tom.as_array(value) {
+                    Ok(items) -> decode_param_string_list(full_key, items)
+                    Error(_) ->
+                      Error(InvalidValue(
+                        key: full_key,
+                        message: "expected string/int/float/bool/list",
+                      ))
+                  }
+              }
+          }
+      }
+  }
+}
+
+fn decode_param_string_list(
+  key: String,
+  items: List(tom.Toml),
+) -> Result(types_core.Value, ConfigLoadError) {
+  items
+  |> list.try_map(fn(item) {
+    tom.as_string(item)
+    |> result.map_error(fn(_) {
+      InvalidValue(key: key, message: "expected list of strings")
+    })
+  })
+  |> result.map(types_core.ListVal)
 }
 
 fn decode_profile_source(

@@ -89,8 +89,11 @@ pub fn start(
 
   let agent_factory = factory_supervisor.get_by_name(agent_factory_name)
 
-  let app_state.AppState(config: config, initial_profiles: initial_profiles) =
-    state
+  let app_state.AppState(
+    config: config,
+    config_path: config_path,
+    initial_profiles: initial_profiles,
+  ) = state
   let types_config.SaarConfig(runner: runner_cfg, ..) = config
   let types_config.RunnerSystemConfig(
     port_range_min: min_port,
@@ -125,6 +128,7 @@ pub fn start(
     ))
     |> supervisor.add(http_server_child_spec(
       config,
+      config_path,
       registry_subject,
       artifact_registry_subject,
       profiles_subject,
@@ -243,6 +247,7 @@ fn gateway_shutdown_child_spec(
 
 fn http_server_child_spec(
   config: types_config.SaarConfig,
+  config_path: String,
   registry: process.Subject(messages.RegistryMsg),
   artifact_registry: process.Subject(
     artifact_registry_protocol.ArtifactRegistryMsg,
@@ -255,6 +260,7 @@ fn http_server_child_spec(
   supervision.worker(fn() {
     http_server.start(
       config,
+      config_path,
       registry,
       artifact_registry,
       profiles,

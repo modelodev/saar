@@ -31,6 +31,8 @@ const api_key = "test-key"
 
 const host = "127.0.0.1"
 
+const default_config_path = "test/fixtures/config/test_config.toml"
+
 pub fn main() {
   gleeunit.main()
 }
@@ -959,7 +961,7 @@ fn wait_sse_contains(
 
 fn load_cfg0() -> types_config.SaarConfig {
   config_loader.load_from_path(
-    "./test/fixtures/config/test_config.toml",
+    default_config_path,
     fn(name) {
       case name {
         "SAAR_TEST_API_KEY" -> Ok(api_key)
@@ -974,6 +976,7 @@ fn load_cfg0() -> types_config.SaarConfig {
 fn start_saar_with_cfg_and_profiles(
   cfg0: types_config.SaarConfig,
   initial_profiles: dict.Dict(types_core.ProfileId, types_profile.Profile),
+  config_path: String,
 ) -> String {
   port_helpers.ensure_wrapper_path()
 
@@ -985,7 +988,11 @@ fn start_saar_with_cfg_and_profiles(
   let cfg = types_config.SaarConfig(..cfg0, server_port: port)
 
   let state =
-    app_state.AppState(config: cfg, initial_profiles: initial_profiles)
+    app_state.AppState(
+      config: cfg,
+      config_path: config_path,
+      initial_profiles: initial_profiles,
+    )
 
   let assert Ok(actor.Started(..)) = root_supervisor.start(state, names)
 
@@ -995,7 +1002,11 @@ fn start_saar_with_cfg_and_profiles(
 fn start_saar_with_profiles(
   initial_profiles: dict.Dict(types_core.ProfileId, types_profile.Profile),
 ) -> String {
-  start_saar_with_cfg_and_profiles(load_cfg0(), initial_profiles)
+  start_saar_with_cfg_and_profiles(
+    load_cfg0(),
+    initial_profiles,
+    default_config_path,
+  )
 }
 
 fn cfg_with_sse_keep_alive_interval_ms(
@@ -1016,13 +1027,13 @@ fn start_saar_with_sse_keep_alive_interval_ms(keep_alive_ms: Int) -> String {
   let cfg0 = load_cfg0()
   let cfg1 = cfg_with_sse_keep_alive_interval_ms(cfg0, keep_alive_ms)
   let profiles = profiles_sources.load_profiles_from_sources(cfg1) |> assert_ok
-  start_saar_with_cfg_and_profiles(cfg1, profiles)
+  start_saar_with_cfg_and_profiles(cfg1, profiles, default_config_path)
 }
 
 fn start_saar() -> String {
   let cfg0 = load_cfg0()
   let profiles = profiles_sources.load_profiles_from_sources(cfg0) |> assert_ok
-  start_saar_with_cfg_and_profiles(cfg0, profiles)
+  start_saar_with_cfg_and_profiles(cfg0, profiles, default_config_path)
 }
 
 fn start_saar_with_profile_source_dir(root: String) -> String {
@@ -1038,7 +1049,7 @@ fn start_saar_with_profile_source_dir(root: String) -> String {
   let cfg1 = types_config.SaarConfig(..cfg0, profiles: profiles_cfg)
 
   let profiles = profiles_sources.load_profiles_from_sources(cfg1) |> assert_ok
-  start_saar_with_cfg_and_profiles(cfg1, profiles)
+  start_saar_with_cfg_and_profiles(cfg1, profiles, default_config_path)
 }
 
 fn reset_profiles_source(root: String) -> Nil {

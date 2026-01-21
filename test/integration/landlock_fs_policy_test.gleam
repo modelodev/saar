@@ -89,7 +89,12 @@ fn start_saar_with_config(
     profiles_sources.load_profiles_from_sources(cfg)
     |> test_assertions.assert_ok
 
-  let state = app_state.AppState(config: cfg, initial_profiles: profiles)
+  let state =
+    app_state.AppState(
+      config: cfg,
+      config_path: config_path,
+      initial_profiles: profiles,
+    )
   let assert Ok(_) = root_supervisor.start(state, names)
 
   #(cfg, "http://" <> host <> ":" <> int.to_string(port))
