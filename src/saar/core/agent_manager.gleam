@@ -64,6 +64,7 @@ pub fn start(
 ) -> actor.StartResult(process.Subject(messages.AgentManagerMsg)) {
   actor.new(State(
     config: config,
+    last_reload_ms: None,
     registry: registry,
     artifact_registry: artifact_registry,
     port_pool: port_pool,
@@ -78,6 +79,7 @@ pub fn start(
 type State {
   State(
     config: types_config.SaarConfig,
+    last_reload_ms: Option(Int),
     registry: process.Subject(messages.RegistryMsg),
     artifact_registry: process.Subject(
       artifact_registry_protocol.ArtifactRegistryMsg,
@@ -122,7 +124,34 @@ fn handle_cmd(
       handle_delete_agent(state, instance_id, reply_to)
 
     messages.ListAgents(reply_to) -> handle_list_agents(state, reply_to)
+
+    messages.GetConfig(reply_to) -> handle_get_config(state, reply_to)
+
+    messages.UpdateConfig(config, last_reload_ms, reply_to) ->
+      handle_update_config(state, config, last_reload_ms, reply_to)
   }
+}
+
+fn handle_get_config(
+  state: State,
+  reply_to: process.Subject(messages.ConfigSnapshot),
+) -> actor.Next(State, messages.AgentManagerMsg) {
+  let State(config: config, last_reload_ms: last_reload_ms, ..) = state
+  process.send(
+    reply_to,
+    messages.ConfigSnapshot(config: config, last_reload_ms: last_reload_ms),
+  )
+  actor.continue(state)
+}
+
+fn handle_update_config(
+  state: State,
+  config: types_config.SaarConfig,
+  last_reload_ms: Option(Int),
+  reply_to: process.Subject(Nil),
+) -> actor.Next(State, messages.AgentManagerMsg) {
+  process.send(reply_to, Nil)
+  actor.continue(State(..state, config: config, last_reload_ms: last_reload_ms))
 }
 
 fn handle_internal(

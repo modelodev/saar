@@ -114,6 +114,11 @@ pub type StartArgs {
   )
 }
 
+/// Snapshot of the current runtime config used by core actors.
+pub type ConfigSnapshot {
+  ConfigSnapshot(config: SaarConfig, last_reload_ms: Option(Int))
+}
+
 /// Message protocol for the AgentManagerActor.
 ///
 /// Public callers should only send `Cmd` values.
@@ -138,6 +143,8 @@ pub type AgentManagerCmd {
   StartExistingAgent(types_core.InstanceId, Subject(Result(Nil, Nil)))
   DeleteAgent(types_core.InstanceId, Subject(Result(Nil, DeleteError)))
   ListAgents(Subject(List(types_agent.InstanceSummary)))
+  GetConfig(Subject(ConfigSnapshot))
+  UpdateConfig(SaarConfig, Option(Int), Subject(Nil))
 }
 
 /// Internal events handled by the AgentManagerActor.

@@ -2,7 +2,7 @@
 //// Mission: carry the pure startup inputs required to boot the SAAR OTP tree.
 ////
 //// Responsibilities:
-//// - Bundle runtime configuration and initial in-memory data.
+//// - Bundle runtime configuration, config path, and initial in-memory data.
 //// - Provide a single value that can be assembled at the boundary (CLI/main).
 ////
 //// Non-responsibilities:
@@ -20,6 +20,7 @@ import saar/types/profile as types_profile
 pub type AppState {
   AppState(
     config: types_config.SaarConfig,
+    config_path: String,
     initial_profiles: dict.Dict(types_core.ProfileId, types_profile.Profile),
   )
 }

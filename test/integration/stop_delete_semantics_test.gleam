@@ -32,6 +32,8 @@ import test_assertions
 
 const host = "127.0.0.1"
 
+const default_config_path = "test/fixtures/config/test_config.toml"
+
 pub fn main() {
   gleeunit.main()
 }
@@ -533,7 +535,12 @@ fn start_root(
   let cfg = types_config.SaarConfig(..cfg, server_port: 0)
 
   let names = supervisor_names.new_names()
-  let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
+  let state =
+    app_state.AppState(
+      config: cfg,
+      config_path: default_config_path,
+      initial_profiles: dict.new(),
+    )
 
   let assert Ok(actor.Started(..)) = root_supervisor.start(state, names)
 

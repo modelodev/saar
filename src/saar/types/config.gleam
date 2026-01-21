@@ -18,6 +18,7 @@
 import gleam/dict
 import gleam/list
 import gleam/option.{type Option, None}
+import gleam/string
 import saar/types/core
 import saar/types/enums
 
@@ -157,6 +158,7 @@ pub type SaarConfig {
     api_key: core.SecretValue,
     timeouts: SaarTimeouts,
     profiles: ProfilesConfig,
+    params: dict.Dict(String, core.Value),
     runner: RunnerSystemConfig,
     storage: StorageConfig,
     limits: SaarLimits,
@@ -217,7 +219,7 @@ pub fn server_address(cfg: SaarConfig) -> #(String, Int) {
 /// This is used when resolving `ConfigParam` profile parameters.
 ///
 /// The key strings are aligned with the plan (e.g. `server.host`,
-/// `runners.python_bin`, `workspaces.directory`).
+/// `runners.python_bin`, `workspaces.directory`, `params.model`).
 ///
 /// Returns `None` when a key is unknown or intentionally not exposable.
 pub fn config_value(cfg: SaarConfig, key: String) -> option.Option(core.Value) {
@@ -226,6 +228,7 @@ pub fn config_value(cfg: SaarConfig, key: String) -> option.Option(core.Value) {
     server_port: server_port,
     timeouts: timeouts,
     profiles: profiles,
+    params: params,
     runner: runner,
     storage: storage,
     limits: limits,
@@ -233,59 +236,70 @@ pub fn config_value(cfg: SaarConfig, key: String) -> option.Option(core.Value) {
     ..,
   ) = cfg
 
-  case key {
-    "server.host" -> option.Some(core.StringVal(server_host))
-    "server.port" -> option.Some(core.IntVal(server_port))
-
-    "profiles.git_cache_dir" -> {
-      let ProfilesConfig(git_cache_dir: dir, ..) = profiles
-      option.Some(core.StringVal(dir))
+  case string.starts_with(key, "params.") {
+    True -> {
+      let name = string.slice(key, 7, string.length(key))
+      case dict.get(params, name) {
+        Ok(value) -> option.Some(value)
+        Error(_) -> option.None
+      }
     }
 
-    "runners.python_bin" -> {
-      let RunnerSystemConfig(python_bin: python_bin, ..) = runner
-      option.Some(core.StringVal(python_bin))
-    }
+    False ->
+      case key {
+        "server.host" -> option.Some(core.StringVal(server_host))
+        "server.port" -> option.Some(core.IntVal(server_port))
 
-    "workspaces.directory" -> {
-      let StorageConfig(workspaces_directory: dir, ..) = storage
-      option.Some(core.StringVal(dir))
-    }
+        "profiles.git_cache_dir" -> {
+          let ProfilesConfig(git_cache_dir: dir, ..) = profiles
+          option.Some(core.StringVal(dir))
+        }
 
-    // Timeouts
-    "limits.call_timeout_ms" -> {
-      let SaarTimeouts(call_timeout_ms: v, ..) = timeouts
-      option.Some(core.IntVal(v))
-    }
+        "runners.python_bin" -> {
+          let RunnerSystemConfig(python_bin: python_bin, ..) = runner
+          option.Some(core.StringVal(python_bin))
+        }
 
-    // Stream
-    "limits.sse_keep_alive_interval_ms" -> {
-      let StreamConfig(sse_keep_alive_interval_ms: v, ..) = stream
-      option.Some(core.IntVal(v))
-    }
+        "workspaces.directory" -> {
+          let StorageConfig(workspaces_directory: dir, ..) = storage
+          option.Some(core.StringVal(dir))
+        }
 
-    // Size limits
-    "limits.max_request_body_bytes" -> {
-      let SaarLimits(max_request_body_bytes: v, ..) = limits
-      option.Some(core.IntVal(v))
-    }
+        // Timeouts
+        "limits.call_timeout_ms" -> {
+          let SaarTimeouts(call_timeout_ms: v, ..) = timeouts
+          option.Some(core.IntVal(v))
+        }
 
-    "limits.task_retention_ms" -> {
-      let SaarLimits(task_retention_ms: v, ..) = limits
-      option.Some(core.IntVal(v))
-    }
+        // Stream
+        "limits.sse_keep_alive_interval_ms" -> {
+          let StreamConfig(sse_keep_alive_interval_ms: v, ..) = stream
+          option.Some(core.IntVal(v))
+        }
 
-    "limits.max_tasks" -> {
-      let SaarLimits(max_tasks: v, ..) = limits
-      option.Some(core.IntVal(v))
-    }
+        // Size limits
+        "limits.max_request_body_bytes" -> {
+          let SaarLimits(max_request_body_bytes: v, ..) = limits
+          option.Some(core.IntVal(v))
+        }
 
-    "limits.max_task_result_bytes" -> {
-      let SaarLimits(max_task_result_bytes: v, ..) = limits
-      option.Some(core.IntVal(v))
-    }
+        "limits.task_retention_ms" -> {
+          let SaarLimits(task_retention_ms: v, ..) = limits
+          option.Some(core.IntVal(v))
+        }
 
-    _ -> option.None
+        "limits.max_tasks" -> {
+          let SaarLimits(max_tasks: v, ..) = limits
+          option.Some(core.IntVal(v))
+        }
+
+        "limits.max_task_result_bytes" -> {
+          let SaarLimits(max_task_result_bytes: v, ..) = limits
+          option.Some(core.IntVal(v))
+        }
+
+        _ -> option.None
+      }
   }
 }
 
@@ -328,6 +342,7 @@ pub fn default_saar_config() -> SaarConfig {
       sources: [ProfileSourceDir(path: ".")],
       git_cache_dir: "./.saar/cache/git",
     ),
+    params: dict.new(),
     runner: RunnerSystemConfig(
       python_bin: "python3",
       io: RunnerIoConfig(read_timeout_ms: 200, max_read_attempts: 200),

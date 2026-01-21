@@ -29,6 +29,8 @@ const api_key = "test-key"
 
 const host = "127.0.0.1"
 
+const default_config_path = "test/fixtures/config/test_config.toml"
+
 pub fn main() {
   gleeunit.main()
 }
@@ -257,7 +259,12 @@ fn start_saar() -> SaarEnv {
 
   let profiles = profiles_sources.load_profiles_from_sources(cfg) |> assert_ok
 
-  let state = app_state.AppState(config: cfg, initial_profiles: profiles)
+  let state =
+    app_state.AppState(
+      config: cfg,
+      config_path: default_config_path,
+      initial_profiles: profiles,
+    )
   let assert Ok(actor.Started(..)) = root_supervisor.start(state, names)
 
   let supervisor_names.RootNames(_registry, artifact_registry_name, ..) = names
