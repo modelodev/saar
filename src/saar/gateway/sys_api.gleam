@@ -565,19 +565,7 @@ fn handle_reload_profiles(
         profiles_sources.reload_profiles(profiles, cfg, call_timeout_ms(cfg))
       {
         Ok(profiles_sources.ReloadSummary(count: count, profile_ids: ids)) ->
-          json_response(
-            200,
-            json.object([
-              #("status", json.string("success")),
-              #("profiles_loaded", json.int(count)),
-              #(
-                "profiles",
-                json.array(ids, fn(id) {
-                  json.string(types_core.profile_id_to_string(id))
-                }),
-              ),
-            ]),
-          )
+          reload_success_response(count, ids)
 
         Error(err) ->
           problem.from_error_kind(
@@ -676,20 +664,7 @@ fn handle_reload(
                 Error(call_err) ->
                   problem.from_call_error(call_err, trace_id, req.path)
 
-                Ok(_) ->
-                  json_response(
-                    200,
-                    json.object([
-                      #("status", json.string("success")),
-                      #("profiles_loaded", json.int(count)),
-                      #(
-                        "profiles",
-                        json.array(ids, fn(id) {
-                          json.string(types_core.profile_id_to_string(id))
-                        }),
-                      ),
-                    ]),
-                  )
+                Ok(_) -> reload_success_response(count, ids)
               }
             }
 
@@ -712,6 +687,25 @@ fn handle_reload(
 
     _ -> empty_response(405)
   }
+}
+
+fn reload_success_response(
+  count: Int,
+  ids: List(types_core.ProfileId),
+) -> response.Response(mist.ResponseData) {
+  json_response(
+    200,
+    json.object([
+      #("status", json.string("success")),
+      #("profiles_loaded", json.int(count)),
+      #(
+        "profiles",
+        json.array(ids, fn(id) {
+          json.string(types_core.profile_id_to_string(id))
+        }),
+      ),
+    ]),
+  )
 }
 
 fn handle_sys_profiles(
