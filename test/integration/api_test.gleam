@@ -444,6 +444,29 @@ pub fn get_agent_capabilities() {
   should.equal(string.contains(resp.body, "\"echo\""), True)
 }
 
+pub fn get_agent_capabilities_exposes_response_mode() {
+  let base_url = start_saar()
+
+  let instance_id = "inst-cap-response-mode"
+  create_agent(base_url, "echo_cli", instance_id)
+
+  wait_phase(base_url, instance_id, "ready_transient", 200)
+
+  let resp =
+    http_client.request_sync_string(
+      http.Get,
+      base_url <> "/agents/" <> instance_id,
+      auth_headers(),
+      None,
+      2000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  resp.status |> should.equal(200)
+  should.equal(string.contains(resp.body, "\"response_mode\":\"sync\""), True)
+}
+
 pub fn post_agents_interact_transient() {
   let base_url = start_saar()
 

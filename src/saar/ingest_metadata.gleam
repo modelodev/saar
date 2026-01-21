@@ -5,6 +5,7 @@
 //// Responsibilities:
 //// - Derive ingest metadata from `FilesSemantics` and response metadata.
 //// - Attach ingest metadata fields to response metadata dictionaries.
+//// - Encode and decode ingest payloads stored in request context metadata.
 ////
 //// Non-responsibilities:
 //// - Validating file cardinality or profile definitions.
@@ -15,8 +16,10 @@
 //// - Uses `saar/types/profile` for ingest semantics.
 
 import gleam/dict
+import gleam/dynamic/decode
 import gleam/json
 import gleam/option.{type Option, None, Some}
+import saar/json_pointer
 import saar/types/output as types_output
 import saar/types/profile as types_profile
 
@@ -80,6 +83,38 @@ pub fn ingest_payload(
           #("maxFiles", json.int(max_files)),
         ]),
       )
+  }
+}
+
+/// Builds context metadata for A2A ingest propagation.
+///
+/// The returned dict always includes `context_id` and optionally a serialized
+/// `ingest_payload` when provided.
+pub fn ingest_context_extra(
+  context_id: String,
+  ingest_payload: Option(json.Json),
+) -> dict.Dict(String, String) {
+  let base = dict.from_list([#("context_id", context_id)])
+
+  case ingest_payload {
+    Some(payload) ->
+      dict.insert(base, "ingest_payload", json.to_string(payload))
+    None -> base
+  }
+}
+
+/// Reads an ingest payload from request context metadata.
+pub fn ingest_payload_from_context(
+  extra: dict.Dict(String, String),
+) -> Option(json.Json) {
+  case dict.get(extra, "ingest_payload") {
+    Ok(payload) ->
+      case json.parse(payload, decode.dynamic) {
+        Ok(value) -> Some(json_pointer.dynamic_to_json(value))
+        Error(_) -> None
+      }
+
+    Error(_) -> None
   }
 }
 

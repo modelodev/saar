@@ -131,3 +131,20 @@ pub fn subscribe_after_completion_returns_terminal_snapshot_immediately() {
   should.equal(string.contains(snapshot, "\"state\":\"completed\""), True)
   tasks_helpers.wait_for_sse_close(conn, 60)
 }
+
+pub fn subscribe_missing_task_returns_404() {
+  let base_url = tasks_helpers.start_saar()
+
+  let resp =
+    http_client.request_sync_string(
+      http.Get,
+      base_url <> "/tasks/missing-task/subscribe",
+      tasks_helpers.auth_headers(),
+      option.None,
+      1000,
+      1024 * 1024,
+    )
+    |> test_assertions.assert_ok
+
+  resp.status |> should.equal(404)
+}

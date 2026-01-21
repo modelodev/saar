@@ -930,14 +930,7 @@ fn prepare_interaction(
     }),
   )
 
-  let extra = case ingest_payload {
-    Some(payload) ->
-      dict.from_list([
-        #("context_id", context_id),
-        #("ingest_payload", json.to_string(payload)),
-      ])
-    None -> dict.from_list([#("context_id", context_id)])
-  }
+  let extra = ingest_metadata.ingest_context_extra(context_id, ingest_payload)
 
   let ctx = types_input.RequestContext(trace_id: trace_id, extra: extra)
 

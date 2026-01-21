@@ -40,6 +40,7 @@ import saar/bridge/serialization
 import saar/bridge/wrapper_env
 import saar/core/artifact_registry_protocol
 import saar/ffi
+import saar/ingest_metadata
 import saar/json_pointer
 import saar/response_mapping
 import saar/streams/sink
@@ -234,15 +235,9 @@ fn init_a2a_flags(
 fn ingest_event_from_context(
   extra: dict.Dict(String, String),
 ) -> Option(types_stream.StreamEvent) {
-  case dict.get(extra, "ingest_payload") {
-    Ok(payload) ->
-      case json.parse(payload, decode.dynamic) {
-        Ok(value) ->
-          Some(a2a.ingest_data_event(json_pointer.dynamic_to_json(value)))
-        Error(_) -> None
-      }
-
-    Error(_) -> None
+  case ingest_metadata.ingest_payload_from_context(extra) {
+    Some(payload) -> Some(a2a.ingest_data_event(payload))
+    None -> None
   }
 }
 
