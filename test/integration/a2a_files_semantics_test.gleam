@@ -149,6 +149,29 @@ pub fn agent_card_skill_input_modes_match_input_schema() {
   |> should.equal(True)
 }
 
+pub fn agent_card_skill_output_modes_include_data_for_files() {
+  let base_url = tasks_helpers.start_saar()
+
+  let instance_id = "inst-a2a-files-output"
+  tasks_helpers.create_agent(base_url, "echo_files_eventual", instance_id)
+  tasks_helpers.wait_phase(base_url, instance_id, "ready_transient", 200)
+
+  let resp =
+    http_client.request_sync_string(
+      http.Get,
+      base_url <> "/instances/" <> instance_id <> "/.well-known/agent-card.json",
+      tasks_helpers.auth_headers(),
+      None,
+      5000,
+      1024 * 1024,
+    )
+    |> test_assertions.assert_ok
+
+  resp.status |> should.equal(200)
+  string.contains(resp.body, "\"outputModes\":[\"text\",\"data\"]")
+  |> should.equal(True)
+}
+
 pub fn agent_card_skill_extensions_include_max_files_and_ingest_effect() {
   let base_url = tasks_helpers.start_saar()
 

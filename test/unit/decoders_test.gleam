@@ -218,6 +218,39 @@ pub fn files_semantics_ingest_effect_requires_accepts_true() {
   |> should.be_error
 }
 
+pub fn files_semantics_lightrag_fixture_decodes_eventual_upload() {
+  let assert Ok(contents) =
+    simplifile.read(
+      from: "docs/arquitectura/examples/profiles/lightrag/lightrag_vnext.json",
+    )
+
+  let assert Ok(profile) = json.parse(contents, decoders.profile_decoder())
+  let types_profile.Profile(interface: interface, ..) = profile
+
+  let assert types_profile.HttpInterface(capabilities: caps, ..) = interface
+  let assert Ok(types_profile.HttpCapability(
+    path: _,
+    method: _,
+    input_schema: _,
+    body: _,
+    response: _,
+    description: _,
+    streaming: _,
+    response_mode: _,
+    limits: _,
+    files: files,
+  )) = dict.get(caps, "files")
+
+  let assert Some(types_profile.FilesSemantics(
+    max_files: max_files,
+    ingest_effect: ingest_effect,
+    ..,
+  )) = files
+
+  max_files |> should.equal(1)
+  ingest_effect |> should.equal(Some(types_profile.IngestEventual))
+}
+
 fn assert_decoded_http_method(raw: String, expected: types_profile.HttpMethod) {
   let payload = http_interface_payload(raw)
   let assert Ok(value) = json.parse(payload, decode.dynamic)
