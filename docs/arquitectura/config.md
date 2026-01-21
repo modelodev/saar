@@ -58,6 +58,9 @@ Un perfil JSON define completamente un agente.
 | `secret` | Variable de entorno | **No** |
 | `init` | Request de creación | Sí |
 
+**Nota:** los defaults globales de agentes usan `source = "config"` con
+`key = "params.<name>"` (ver §2.4).
+
 ```json
 "parameters": {
   "api_key": {
@@ -183,7 +186,35 @@ Para cada parámetro:
   5. Validar tipo del valor
 ```
 
-### 2.4 Errores
+### 2.4 Defaults globales (`[params]`)
+
+SAAR permite definir defaults globales para parámetros de agentes en
+`config.toml` usando la sección `[params]`. Para evitar colisiones con
+configuración del sistema, los perfiles deben referenciar estos valores con el
+prefijo `params.`.
+
+```toml
+[params]
+model = "gpt-4o-mini"
+embedding_model = "text-embedding-3-large"
+openrouter_url = "https://openrouter.ai/api/v1"
+```
+
+Ejemplo en perfil:
+
+```json
+"parameters": {
+  "llm_model": {"source": "config", "key": "params.model", "type": "string"},
+  "embedding_model": {"source": "config", "key": "params.embedding_model", "type": "string"}
+}
+```
+
+**Reglas:**
+- Solo valores simples (string/int/float/bool/list).
+- No se permiten secrets en `[params]`.
+- Si falta una clave `params.*` y no hay default en el perfil → error.
+
+### 2.5 Errores
 
 ```gleam
   pub type ParamResolutionError {
@@ -194,7 +225,7 @@ Para cada parámetro:
   }
 ```
 
-### 2.5 Flujo
+### 2.6 Flujo
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
