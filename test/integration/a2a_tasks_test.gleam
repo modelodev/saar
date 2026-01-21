@@ -104,6 +104,17 @@ pub fn a2a_get_task_returns_terminal_state() {
   decode_task_state(body) |> should.equal("completed")
 }
 
+pub fn a2a_get_task_missing_returns_404() {
+  let base_url = tasks_helpers.start_saar()
+
+  let instance_id = "inst-a2a-missing"
+  tasks_helpers.create_agent(base_url, "echo_cli_deferred", instance_id)
+  tasks_helpers.wait_phase(base_url, instance_id, "ready_transient", 200)
+
+  let resp = get_a2a_task(base_url, instance_id, "missing-task")
+  resp.status |> should.equal(404)
+}
+
 pub fn a2a_cancel_task_moves_to_cancelled() {
   let base_url = tasks_helpers.start_saar()
 
