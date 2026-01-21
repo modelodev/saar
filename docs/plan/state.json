@@ -639,6 +639,25 @@
           "commit": "856ff4f3b12f4c096bb6828dc3ab13ec4a2e4664"
         }
       }
+    },
+    "S23": {
+      "status": "completed",
+      "branch": "sprint/s23-config-hot-reload",
+      "started_at": "2026-01-21T12:16:37Z",
+      "completed_at": "2026-01-21T13:07:16Z",
+      "current_story": null,
+      "stories": {
+        "S23-T01": {
+          "status": "completed",
+          "branch": "feat/s23-t01-config-hot-reload",
+          "commit": "5ff2af4644dbd3eb4f0a3f4198f7d39a3d55ca48"
+        },
+        "S23-T02": {
+          "status": "completed",
+          "branch": "feat/s23-t02-params-namespace",
+          "commit": "5ff2af4644dbd3eb4f0a3f4198f7d39a3d55ca48"
+        }
+      }
     }
   }
 }
