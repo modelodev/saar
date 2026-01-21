@@ -179,7 +179,7 @@ fn execute_plan(plan: RunPlan) -> Nil {
   }
 }
 
-fn serve_foreground(cfg: types_config.SaarConfig, _config_path: String) -> Nil {
+fn serve_foreground(cfg: types_config.SaarConfig, config_path: String) -> Nil {
   let profiles = profiles_sources.load_profiles_from_sources(cfg)
 
   case profiles {
@@ -193,7 +193,11 @@ fn serve_foreground(cfg: types_config.SaarConfig, _config_path: String) -> Nil {
       let names = supervisor_names.new_names_with_suffix(suffix)
 
       let state =
-        app_state.AppState(config: cfg, initial_profiles: initial_profiles)
+        app_state.AppState(
+          config: cfg,
+          config_path: config_path,
+          initial_profiles: initial_profiles,
+        )
 
       case root_supervisor.start(state, names) {
         Ok(actor.Started(data: ref, ..)) -> {

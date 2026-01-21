@@ -18,6 +18,8 @@ import saar/types/enums as types_enums
 import saar/types/profile as types_profile
 import saar/types/runner as types_runner
 
+const default_config_path = "test/fixtures/config/test_config.toml"
+
 pub fn main() {
   gleeunit.main()
 }
@@ -100,7 +102,12 @@ pub fn root_supervisor_start_fail_fast() {
   let cfg = types_config.SaarConfig(..cfg0, runner: bad_runner)
 
   let names = supervisor_names.new_names()
-  let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
+  let state =
+    app_state.AppState(
+      config: cfg,
+      config_path: default_config_path,
+      initial_profiles: dict.new(),
+    )
 
   case root_supervisor.start(state, names) {
     Ok(_) -> panic as "Expected root supervisor start to fail"
@@ -111,7 +118,12 @@ pub fn root_supervisor_start_fail_fast() {
 pub fn root_supervisor_rest_for_one_order() {
   let cfg = agent_helpers.default_config()
   let names = supervisor_names.new_names()
-  let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
+  let state =
+    app_state.AppState(
+      config: cfg,
+      config_path: default_config_path,
+      initial_profiles: dict.new(),
+    )
 
   let assert Ok(actor.Started(data: _ref, ..)) =
     root_supervisor.start(state, names)
@@ -149,7 +161,12 @@ pub fn root_supervisor_rest_for_one_order() {
 pub fn root_supervisor_restart_tolerance() {
   let cfg = agent_helpers.default_config()
   let names = supervisor_names.new_names()
-  let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
+  let state =
+    app_state.AppState(
+      config: cfg,
+      config_path: default_config_path,
+      initial_profiles: dict.new(),
+    )
 
   let assert Ok(actor.Started(pid: sup_pid, ..)) =
     root_supervisor.start(state, names)
@@ -264,7 +281,12 @@ fn start_root(
   config: types_config.SaarConfig,
 ) -> #(root_supervisor.SupervisorRef, supervisor_names.RootNames, process.Pid) {
   let names = supervisor_names.new_names()
-  let state = app_state.AppState(config: config, initial_profiles: dict.new())
+  let state =
+    app_state.AppState(
+      config: config,
+      config_path: default_config_path,
+      initial_profiles: dict.new(),
+    )
 
   let assert Ok(actor.Started(pid: pid, data: ref)) =
     root_supervisor.start(state, names)

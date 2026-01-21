@@ -4,7 +4,7 @@
 ////
 //// Responsibilities:
 //// - Implement `/sys/agents` management endpoints.
-//// - Implement `/sys/reload-profiles` and `/sys/profiles`.
+//// - Implement `/sys/reload`, `/sys/reload-profiles`, and `/sys/profiles`.
 //// - Provide per-instance `a2a_base_url` construction.
 ////
 //// Non-responsibilities:
@@ -15,6 +15,7 @@
 //// - Bridges HTTP requests to core actors via `saar/otp/safe_call`.
 //// - Uses `saar/gateway/problem` for RFC7807 responses.
 
+import envoy
 import gleam/bit_array
 import gleam/bytes_tree
 import gleam/dict.{type Dict}
@@ -25,6 +26,7 @@ import gleam/http
 import gleam/http/request
 import gleam/http/response
 import gleam/int
+import gleam/io
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
@@ -32,9 +34,12 @@ import gleam/result
 import gleam/string
 import gleam/yielder
 import mist
+import saar/config_loader
+import saar/config_reloader
 import saar/core/agent
 import saar/core/messages
 import saar/decoders
+import saar/ffi
 import saar/gateway/lookup
 import saar/gateway/lookup_http
 import saar/gateway/problem
@@ -47,10 +52,12 @@ import saar/types/core as types_core
 import saar/types/enums as types_enums
 import saar/types/log as types_log
 import saar/types/profile as types_profile
+import simplifile
 
 pub type Deps {
   Deps(
     registry: process.Subject(messages.RegistryMsg),
+    config_path: String,
     profiles: process.Subject(messages.ProfilesMsg),
     agent_manager: process.Subject(messages.AgentManagerMsg),
   )
@@ -83,6 +90,7 @@ pub fn handle(
     ["sys", "agents", instance_id] ->
       handle_agent_item(req, cfg, deps, trace_id, instance_id)
 
+    ["sys", "reload"] -> handle_reload(req, cfg, deps, trace_id)
     ["sys", "reload-profiles"] ->
       handle_reload_profiles(req, cfg, deps, trace_id)
     ["sys", "profiles"] -> handle_sys_profiles(req, cfg, deps, trace_id)
@@ -578,6 +586,127 @@ fn handle_reload_profiles(
             req.path,
             string.inspect(err),
           )
+      }
+    }
+
+    _ -> empty_response(405)
+  }
+}
+
+fn handle_reload(
+  req: request.Request(mist.Connection),
+  cfg: types_config.SaarConfig,
+  deps: Deps,
+  trace_id: types_core.TraceId,
+) -> response.Response(mist.ResponseData) {
+  case req.method {
+    http.Post -> {
+      let Deps(
+        profiles: profiles,
+        agent_manager: manager,
+        config_path: config_path,
+        ..,
+      ) = deps
+
+      case
+        safe_call.call(manager, call_timeout_ms(cfg), fn(reply_to) {
+          messages.Cmd(messages.GetConfig(reply_to))
+        })
+      {
+        Error(call_err) -> problem.from_call_error(call_err, trace_id, req.path)
+
+        Ok(messages.ConfigSnapshot(
+          config: current_config,
+          last_reload_ms: last_reload_ms,
+        )) -> {
+          let state =
+            config_reloader.ReloadState(
+              config: current_config,
+              config_path: config_path,
+              last_reload_ms: last_reload_ms,
+              debounce_ms: config_reloader.default_debounce_ms,
+            )
+
+          let now_ms = ffi.now_ms()
+
+          let #(next_state, outcome) =
+            config_reloader.reload(
+              state,
+              now_ms,
+              fn(path) {
+                config_loader.load_from_path(path, envoy.get, simplifile.read)
+              },
+              fn(next_cfg) {
+                profiles_sources.reload_profiles(
+                  profiles,
+                  next_cfg,
+                  call_timeout_ms(cfg),
+                )
+              },
+            )
+
+          case outcome {
+            config_reloader.Debounced ->
+              json_response(
+                200,
+                json.object([#("status", json.string("debounced"))]),
+              )
+
+            config_reloader.Reloaded(
+              config: next_config,
+              summary: profiles_sources.ReloadSummary(
+                count: count,
+                profile_ids: ids,
+              ),
+            ) -> {
+              let config_reloader.ReloadState(
+                last_reload_ms: next_reload_ms,
+                ..,
+              ) = next_state
+
+              case
+                safe_call.call(manager, call_timeout_ms(cfg), fn(reply_to) {
+                  messages.Cmd(messages.UpdateConfig(
+                    next_config,
+                    next_reload_ms,
+                    reply_to,
+                  ))
+                })
+              {
+                Error(call_err) ->
+                  problem.from_call_error(call_err, trace_id, req.path)
+
+                Ok(_) ->
+                  json_response(
+                    200,
+                    json.object([
+                      #("status", json.string("success")),
+                      #("profiles_loaded", json.int(count)),
+                      #(
+                        "profiles",
+                        json.array(ids, fn(id) {
+                          json.string(types_core.profile_id_to_string(id))
+                        }),
+                      ),
+                    ]),
+                  )
+              }
+            }
+
+            config_reloader.Rejected(err) -> {
+              let detail = config_reloader.reload_error_detail(err)
+              let code = config_reloader.reload_error_code(err)
+
+              case err {
+                config_reloader.ConfigReloadFailed(_) ->
+                  io.println("CONFIG_RELOAD_FAILED detail=" <> detail)
+                _ -> Nil
+              }
+
+              problem.bad_request_with_code(trace_id, req.path, detail, code)
+            }
+          }
+        }
       }
     }
 

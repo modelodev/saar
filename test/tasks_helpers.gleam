@@ -26,9 +26,11 @@ const api_key = "test-key"
 
 const host = "127.0.0.1"
 
+const default_config_path = "test/fixtures/config/test_config.toml"
+
 pub fn load_cfg0() -> types_config.SaarConfig {
   config_loader.load_from_path(
-    "./test/fixtures/config/test_config.toml",
+    default_config_path,
     fn(name) {
       case name {
         "SAAR_TEST_API_KEY" -> Ok(api_key)
@@ -269,7 +271,11 @@ fn start_saar_with_cfg_and_profiles(
 
   let cfg = types_config.SaarConfig(..cfg0, server_port: port)
   let state =
-    app_state.AppState(config: cfg, initial_profiles: initial_profiles)
+    app_state.AppState(
+      config: cfg,
+      config_path: default_config_path,
+      initial_profiles: initial_profiles,
+    )
 
   let assert Ok(_) = root_supervisor.start(state, names)
 

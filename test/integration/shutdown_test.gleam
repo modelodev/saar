@@ -408,7 +408,12 @@ fn start_inprocess_saar() -> #(String, process.Subject(messages.RegistryMsg)) {
   let names = supervisor_names.new_names_with_suffix(int.to_string(port))
   let cfg = types_config.SaarConfig(..cfg0, server_port: port)
 
-  let state = app_state.AppState(config: cfg, initial_profiles: profiles)
+  let state =
+    app_state.AppState(
+      config: cfg,
+      config_path: config_path,
+      initial_profiles: profiles,
+    )
 
   let assert Ok(actor.Started(data: ref, ..)) =
     root_supervisor.start(state, names)

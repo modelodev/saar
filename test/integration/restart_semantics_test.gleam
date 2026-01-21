@@ -24,6 +24,8 @@ import saar/types/runner as types_runner
 import simplifile
 import test_assertions
 
+const default_config_path = "test/fixtures/config/test_config.toml"
+
 pub fn main() {
   gleeunit.main()
 }
@@ -45,7 +47,12 @@ pub fn manager_restart_does_not_orphan_port_pool_reservations_test() {
     |> config_with_port_range(base_port, base_port + 20)
 
   let names = supervisor_names.new_names()
-  let state = app_state.AppState(config: cfg, initial_profiles: dict.new())
+  let state =
+    app_state.AppState(
+      config: cfg,
+      config_path: default_config_path,
+      initial_profiles: dict.new(),
+    )
 
   let assert Ok(actor.Started(..)) = root_supervisor.start(state, names)
 

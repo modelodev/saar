@@ -42,6 +42,7 @@ import youid/uuid
 
 pub fn start(
   config: types_config.SaarConfig,
+  config_path: String,
   registry: process.Subject(messages.RegistryMsg),
   artifact_registry: process.Subject(
     artifact_registry_protocol.ArtifactRegistryMsg,
@@ -56,6 +57,7 @@ pub fn start(
   let sys_deps =
     sys_api.Deps(
       registry: registry,
+      config_path: config_path,
       profiles: profiles,
       agent_manager: agent_manager,
     )
