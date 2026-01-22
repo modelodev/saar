@@ -130,6 +130,7 @@ pub fn agent_card_uses_meta_id() {
       env_map: dict.new(),
       args: [],
       artifact_config: types_runner.default_artifact_config(),
+      exec_path: None,
     )
 
   let status =

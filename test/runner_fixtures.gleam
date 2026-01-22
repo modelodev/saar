@@ -37,6 +37,7 @@ pub fn base_input(
       env_map: dict.new(),
       args: [],
       artifact_config: artifact_config,
+      exec_path: option.None,
     ),
   )
 }

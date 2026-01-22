@@ -303,25 +303,28 @@ fn resolve_runner_in_source(
   let types_runner.Runner(type_: runner_type, tool_config: tool_config, ..) =
     runner
 
-  case tool_config {
-    types_runner.ToolConfigScript(_) -> {
-      let profile_id = types_core.profile_id_to_string(profile.meta.id)
+  let profile_id = types_core.profile_id_to_string(profile.meta.id)
 
-      use script_path <- result.try(resolve_runner_script(
-        source_root,
-        profile_id,
-        runner_type,
-      ))
-      let next_runner =
-        types_runner.Runner(
-          ..runner,
-          tool_config: types_runner.ToolConfigScript(script: script_path),
-        )
-      Ok(types_profile.Profile(..profile, runner: next_runner))
-    }
+  use script_path <- result.try(resolve_runner_script(
+    source_root,
+    profile_id,
+    runner_type,
+  ))
 
-    _ -> Ok(profile)
+  let next_tool_config = case tool_config {
+    types_runner.ToolConfigScript(_) ->
+      types_runner.ToolConfigScript(script: script_path)
+    _ -> tool_config
   }
+
+  let next_runner =
+    types_runner.Runner(
+      ..runner,
+      tool_config: next_tool_config,
+      exec_path: option.Some(script_path),
+    )
+
+  Ok(types_profile.Profile(..profile, runner: next_runner))
 }
 
 fn resolve_runner_script(

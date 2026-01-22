@@ -128,6 +128,7 @@ fn dummy_profile(profile_id: types_core.ProfileId) -> types_profile.Profile {
       env_map: dict.new(),
       args: [],
       artifact_config: types_runner.default_artifact_config(),
+      exec_path: option.None,
     ),
     interface: types_profile.RunnerInterface(capabilities: dict.new()),
   )

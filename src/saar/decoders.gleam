@@ -554,6 +554,7 @@ pub fn runner_decoder() -> decode.Decoder(types_runner.Runner) {
       env_map: env_map,
       args: args,
       artifact_config: artifact_config,
+      exec_path: option.None,
     ))
   }
   decoder

@@ -17,6 +17,7 @@
 
 import gleam/dict.{type Dict}
 import gleam/json.{type Json}
+import gleam/list
 import gleam/option.{type Option, None, Some}
 import saar/types/enums
 
@@ -175,5 +176,26 @@ pub type Runner {
     env_map: Dict(String, String),
     args: List(String),
     artifact_config: ArtifactConfig,
+    exec_path: Option(String),
   )
+}
+
+/// Computes the executable command for a runner.
+pub fn runner_exec_command(
+  runner: Runner,
+  python_bin: String,
+) -> #(String, List(String)) {
+  case runner.exec_path {
+    Some(path) -> #(python_bin, [path, ..runner.args])
+    None -> {
+      case runner.tool_config {
+        ToolConfigScript(script) -> #(python_bin, [script, ..runner.args])
+
+        ToolConfigPackage(package, command, with_packages) -> {
+          let args = list.append([package, ..with_packages], runner.args)
+          #(command, args)
+        }
+      }
+    }
+  }
 }

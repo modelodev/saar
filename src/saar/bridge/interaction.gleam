@@ -919,14 +919,7 @@ fn runner_command(
   let types_config.SaarConfig(runner: runner_cfg, ..) = config
   let types_config.RunnerSystemConfig(python_bin: python_bin, ..) = runner_cfg
 
-  case runner_def.tool_config {
-    types_runner.ToolConfigScript(script) -> #(python_bin, [script])
-
-    types_runner.ToolConfigPackage(package, command, with_packages) -> #(
-      command,
-      [package, ..with_packages],
-    )
-  }
+  types_runner.runner_exec_command(runner_def, python_bin)
 }
 
 fn managed_port_host(config: types_config.SaarConfig) -> String {

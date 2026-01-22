@@ -201,6 +201,58 @@ pub fn reload_missing_runner_fails_test() {
   }
 }
 
+pub fn reload_package_runner_with_script_ok_test() {
+  let root = "build/test-workspaces/source-package-runner-ok"
+  let _ = simplifile.delete(file_or_dir_at: root)
+  simplifile.create_directory_all(root <> "/profiles")
+  |> test_assertions.assert_ok
+  simplifile.create_directory_all(root <> "/runners")
+  |> test_assertions.assert_ok
+
+  write_profile(root, "uvx_pkg.json", package_profile_json("uvx_pkg"))
+
+  simplifile.write(to: root <> "/runners/generic_uvx.py", contents: "")
+  |> test_assertions.assert_ok
+
+  let profiles_actor = start_profiles(dict.new())
+  let cfg = config_with_dir_source(root)
+
+  let profiles_sources.ReloadSummary(count: count, profile_ids: ids) =
+    profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
+    |> test_assertions.assert_ok
+
+  count |> should.equal(1)
+
+  ids
+  |> list.map(types_core.profile_id_to_string)
+  |> should.equal(["uvx_pkg"])
+}
+
+pub fn reload_package_runner_missing_script_fails_test() {
+  let root = "build/test-workspaces/source-package-runner-missing"
+  let _ = simplifile.delete(file_or_dir_at: root)
+  simplifile.create_directory_all(root <> "/profiles")
+  |> test_assertions.assert_ok
+
+  write_profile(root, "uvx_pkg.json", package_profile_json("uvx_pkg"))
+
+  let profiles_actor = start_profiles(dict.new())
+  let cfg = config_with_dir_source(root)
+
+  let err =
+    profiles_sources.reload_profiles(profiles_actor, cfg, 5000)
+    |> test_assertions.assert_error
+
+  case err {
+    profiles_sources.RunnerMissing(
+      profile_id: "uvx_pkg",
+      runner_type: "generic_uvx",
+    ) -> Nil
+    other ->
+      panic as { "Expected RunnerMissing, got " <> string.inspect(other) }
+  }
+}
+
 pub fn reload_git_source_failure_keeps_previous() {
   let profiles_actor = start_profiles(dict.new())
 
@@ -377,6 +429,33 @@ fn echo_cli_profile_json(id: String, description: String) -> String {
   <> "  \"runner\": {\n"
   <> "    \"type\": \"echo_cli\",\n"
   <> "    \"tool_config\": {\"script\": \"echo_cli.py\"}\n"
+  <> "  },\n"
+  <> "  \"interface\": {\n"
+  <> "    \"protocol\": \"runner\",\n"
+  <> "    \"capabilities\": {\n"
+  <> "      \"echo\": {\"input_schema\": \"std:chat\", \"streaming\": false}\n"
+  <> "    }\n"
+  <> "  }\n"
+  <> "}\n"
+}
+
+fn package_profile_json(id: String) -> String {
+  "{\n"
+  <> "  \"meta\": {\n"
+  <> "    \"id\": \""
+  <> id
+  <> "\",\n"
+  <> "    \"lifecycle\": \"transient\",\n"
+  <> "    \"description\": \"Package runner\"\n"
+  <> "  },\n"
+  <> "  \"parameters\": {},\n"
+  <> "  \"runner\": {\n"
+  <> "    \"type\": \"generic_uvx\",\n"
+  <> "    \"tool_config\": {\n"
+  <> "      \"package\": \"aider-chat\",\n"
+  <> "      \"command\": \"aider\",\n"
+  <> "      \"with_packages\": []\n"
+  <> "    }\n"
   <> "  },\n"
   <> "  \"interface\": {\n"
   <> "    \"protocol\": \"runner\",\n"

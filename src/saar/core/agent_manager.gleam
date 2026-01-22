@@ -956,17 +956,7 @@ fn runner_command(
   let types_config.SaarConfig(runner: runner_cfg, ..) = config
   let types_config.RunnerSystemConfig(python_bin: python_bin, ..) = runner_cfg
 
-  case runner_def.tool_config {
-    types_runner.ToolConfigScript(script) -> #(python_bin, [
-      script,
-      ..runner_def.args
-    ])
-
-    types_runner.ToolConfigPackage(package, command, with_packages) -> {
-      let args = list.append([package, ..with_packages], runner_def.args)
-      #(command, args)
-    }
-  }
+  types_runner.runner_exec_command(runner_def, python_bin)
 }
 
 fn provisioning_input(

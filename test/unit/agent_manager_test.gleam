@@ -202,6 +202,7 @@ pub fn create_agent_uses_profiles_actor_test() {
         env_map: dict.new(),
         args: [],
         artifact_config: types_runner.default_artifact_config(),
+        exec_path: option.None,
       ),
       interface: types_profile.RunnerInterface(capabilities: dict.new()),
     )
