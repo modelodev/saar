@@ -27,6 +27,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/result
+import gleam/string
 import saar/app_state
 import saar/cli
 import saar/config_loader
@@ -310,70 +311,74 @@ fn plan_serve(
   let loaded_cfg =
     config_loader.load_from_path(resolved_config_path, get_env, read_file)
 
-  let cfg = case loaded_cfg {
-    Ok(cfg0) -> apply_port_override(cfg0, cli_port)
-    Error(_) ->
-      apply_port_override(types_config.default_saar_config(), cli_port)
-  }
-
-  let port = server_port(cfg)
-
-  case mode {
-    cli.Status -> {
-      let pidfile = daemon_paths.resolve_pidfile_path()
-      let st = status_fn(pidfile)
-      let msg = daemon_control.status_message(st, port)
-      let code = daemon_control.status_exit_code(st)
-      RunPlan(code, [msg], [], NoAction)
+  case loaded_cfg {
+    Error(err) -> {
+      let msg = "config load failed: " <> string.inspect(err)
+      RunPlan(exit_operational, [], [msg], NoAction)
     }
 
-    cli.Kill -> {
-      let pidfile = daemon_paths.resolve_pidfile_path()
-      let timeout_ms = shutdown_timeout_ms(cfg)
-      let res = kill_fn(pidfile, timeout_ms)
-      let code = daemon_control.kill_exit_code(res)
+    Ok(cfg0) -> {
+      let cfg = apply_port_override(cfg0, cli_port)
+      let port = server_port(cfg)
 
-      case res {
-        Ok(_) -> RunPlan(code, [], [], NoAction)
-        Error(daemon_control.NoServer) -> RunPlan(code, [], [], NoAction)
-        Error(_) -> RunPlan(code, [], ["failed to kill"], NoAction)
+      case mode {
+        cli.Status -> {
+          let pidfile = daemon_paths.resolve_pidfile_path()
+          let st = status_fn(pidfile)
+          let msg = daemon_control.status_message(st, port)
+          let code = daemon_control.status_exit_code(st)
+          RunPlan(code, [msg], [], NoAction)
+        }
+
+        cli.Kill -> {
+          let pidfile = daemon_paths.resolve_pidfile_path()
+          let timeout_ms = shutdown_timeout_ms(cfg)
+          let res = kill_fn(pidfile, timeout_ms)
+          let code = daemon_control.kill_exit_code(res)
+
+          case res {
+            Ok(_) -> RunPlan(code, [], [], NoAction)
+            Error(daemon_control.NoServer) -> RunPlan(code, [], [], NoAction)
+            Error(_) -> RunPlan(code, [], ["failed to kill"], NoAction)
+          }
+        }
+
+        cli.Background -> {
+          let host = server_host(cfg)
+          let banner = effective_config_banner(host, port, resolved_config_path)
+
+          let pidfile = daemon_paths.resolve_pidfile_path()
+          let logfile = daemon_paths.resolve_logfile_path()
+          let args = background_args(port, resolved_config_path, cli_config)
+
+          RunPlan(
+            exit_ok,
+            [banner],
+            [],
+            ServeBackground(BackgroundPlan(
+              program: program,
+              args: args,
+              pidfile: pidfile,
+              logfile: logfile,
+            )),
+          )
+        }
+
+        cli.Foreground -> {
+          let host = server_host(cfg)
+          let banner = effective_config_banner(host, port, resolved_config_path)
+
+          RunPlan(
+            exit_ok,
+            [banner],
+            [],
+            ServeForeground(ForegroundPlan(
+              config: cfg,
+              config_path: resolved_config_path,
+            )),
+          )
+        }
       }
-    }
-
-    cli.Background -> {
-      let host = server_host(cfg)
-      let banner = effective_config_banner(host, port, resolved_config_path)
-
-      let pidfile = daemon_paths.resolve_pidfile_path()
-      let logfile = daemon_paths.resolve_logfile_path()
-      let args = background_args(port, resolved_config_path, cli_config)
-
-      RunPlan(
-        exit_ok,
-        [banner],
-        [],
-        ServeBackground(BackgroundPlan(
-          program: program,
-          args: args,
-          pidfile: pidfile,
-          logfile: logfile,
-        )),
-      )
-    }
-
-    cli.Foreground -> {
-      let host = server_host(cfg)
-      let banner = effective_config_banner(host, port, resolved_config_path)
-
-      RunPlan(
-        exit_ok,
-        [banner],
-        [],
-        ServeForeground(ForegroundPlan(
-          config: cfg,
-          config_path: resolved_config_path,
-        )),
-      )
     }
   }
 }

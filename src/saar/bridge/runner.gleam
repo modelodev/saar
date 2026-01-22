@@ -140,6 +140,7 @@ pub fn run_provision(
     wrapper: wrapper,
   ) = types_config.runner_exec_settings(config)
   let args = list.append(runner_args, ["--provision"])
+  let env = list.append(env, [#("SAAR_WORKSPACE", cwd)])
 
   use events <- result.try(run_and_collect_events(
     runner_path,
@@ -203,6 +204,7 @@ pub fn start_server(
     ..,
   ) = types_config.runner_exec_settings(config)
 
+  let env = list.append(env, [#("SAAR_WORKSPACE", cwd)])
   let env =
     wrapper_env.append(
       env,
