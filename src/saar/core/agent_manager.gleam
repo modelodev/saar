@@ -19,6 +19,7 @@
 //// - Spawns AgentActor children via a named `factory_supervisor`.
 
 import envoy
+import filepath
 import gleam/dict
 import gleam/erlang/process
 import gleam/http
@@ -274,6 +275,9 @@ fn handle_start_agent(
     workspace: workspace_dir,
     ..,
   ) = args
+
+  let workspace_dir = resolve_workspace_dir(workspace_dir)
+  let args = messages.StartArgs(..args, workspace: workspace_dir)
 
   case simplifile.create_directory_all(workspace_dir) {
     Error(err) -> {
@@ -596,7 +600,7 @@ fn start_provisioning_worker(
   agent_ref: agent.AgentRef,
 ) -> process.Pid {
   process.spawn(fn() {
-  let outcome = provision(config, port_pool, args, agent_ref)
+    let outcome = provision(config, port_pool, args, agent_ref)
     agent.internal_provisioning_done(agent_ref, outcome)
     update_registry_status_best_effort(config, registry, agent_ref)
   })
@@ -612,6 +616,7 @@ fn provision(
     profile: profile,
     instance_id: instance_id,
     params: params,
+    workspace: workspace,
     ..,
   ) = args
 
@@ -625,6 +630,7 @@ fn provision(
         profile,
         instance_id,
         params,
+        workspace,
         agent_ref,
       )
   }
@@ -636,6 +642,7 @@ fn provision_continuous(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
+  workspace: String,
   agent_ref: agent.AgentRef,
 ) -> Result(#(agent.AgentState, Option(Int)), types_agent.FailureReason) {
   case profile.runner.runtime {
@@ -648,6 +655,7 @@ fn provision_continuous(
         profile,
         instance_id,
         params,
+        workspace,
         agent_ref,
       )
   }
@@ -781,6 +789,7 @@ fn provision_continuous_managed_port(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
+  workspace: String,
   agent_ref: agent.AgentRef,
 ) -> Result(#(agent.AgentState, Option(Int)), types_agent.FailureReason) {
   provision_continuous_managed_port_retry(
@@ -789,6 +798,7 @@ fn provision_continuous_managed_port(
     profile,
     instance_id,
     params,
+    workspace,
     agent_ref,
     5,
     None,
@@ -801,6 +811,7 @@ fn provision_continuous_managed_port_retry(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
+  workspace: String,
   agent_ref: agent.AgentRef,
   remaining: Int,
   last_failure: Option(types_agent.FailureReason),
@@ -822,6 +833,7 @@ fn provision_continuous_managed_port_retry(
           profile,
           instance_id,
           params,
+          workspace,
           agent_ref,
           host,
         )
@@ -849,6 +861,7 @@ fn provision_continuous_managed_port_retry(
             profile,
             instance_id,
             params,
+            workspace,
             agent_ref,
             next_remaining,
             next_last,
@@ -864,6 +877,7 @@ fn attempt_provision_continuous_managed_port(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
+  workspace: String,
   agent_ref: agent.AgentRef,
   host: String,
 ) -> Result(#(agent.AgentState, Int), types_agent.FailureReason) {
@@ -877,14 +891,17 @@ fn attempt_provision_continuous_managed_port(
   // Port availability is checked once by the port pool allocation.
   process.sleep(20)
 
-  case start_port_owner(
-    config,
-    profile,
-    instance_id,
-    params,
-    port,
-    agent_ref,
-  ) {
+  case
+    start_port_owner(
+      config,
+      profile,
+      instance_id,
+      params,
+      workspace,
+      port,
+      agent_ref,
+    )
+  {
     Ok(owner) ->
       case wait_for_health_ready(profile.interface, host, port, config) {
         Ok(_) -> {
@@ -934,28 +951,29 @@ fn start_port_owner(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
+  workspace: String,
   port: Int,
   agent_ref: agent.AgentRef,
 ) -> Result(port_owner.PortOwnerRef, types_agent.FailureReason) {
   let host = managed_port_host(config)
   let trace_raw = "provision-" <> types_core.instance_id_to_string(instance_id)
   let trace_id = types_core.trace_id(trace_raw)
-  let ctx =
-    types_input.RequestContext(trace_id: trace_id, extra: dict.new())
+  let ctx = types_input.RequestContext(trace_id: trace_id, extra: dict.new())
   let payload = types_input.PayloadChat([], dict.new())
 
-  let resolved_runner =
-    case runner_prep.interpolate_runner_def(
+  let resolved_runner = case
+    runner_prep.interpolate_runner_def(
       profile.runner,
       params,
       payload,
       ctx,
       Some(host),
       Some(port),
-    ) {
-      Ok(runner) -> Ok(runner)
-      Error(_) -> Error(types_agent.StartServerFailed)
-    }
+    )
+  {
+    Ok(runner) -> Ok(runner)
+    Error(_) -> Error(types_agent.StartServerFailed)
+  }
 
   case resolved_runner {
     Error(reason) -> Error(reason)
@@ -971,7 +989,7 @@ fn start_port_owner(
           runner_path,
           runner_args,
           runner_env(),
-          ".",
+          workspace,
           input,
           config,
           Some(port),
@@ -1051,6 +1069,17 @@ fn release_port_best_effort(
       messages.Release(instance_id, reply_to)
     })
   Nil
+}
+
+fn resolve_workspace_dir(path: String) -> String {
+  case filepath.is_absolute(path) {
+    True -> path
+    False ->
+      case simplifile.current_directory() {
+        Ok(cwd) -> filepath.join(cwd, path)
+        Error(_) -> path
+      }
+  }
 }
 
 fn update_registry_status_best_effort(

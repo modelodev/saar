@@ -73,6 +73,7 @@ Nota: en v0 el wrapper deriva `<source_root>` desde el directorio actual del run
 - El runner puede ejecutar binarios del sistema y del source.
 - El runner solo puede escribir en el workspace y en `/tmp`/`/var/tmp`.
 - No se puede leer `/proc` global ni `/sys`.
+- El runner siempre se ejecuta con `cwd` apuntando al workspace de la instancia.
 
 ## Errores y fallback
 - `best_effort`: si Landlock no esta soportado, se ejecuta sin restriccion y se continua.

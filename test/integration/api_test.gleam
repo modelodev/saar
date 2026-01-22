@@ -1,3 +1,4 @@
+import filepath
 import gleam/bit_array
 import gleam/bytes_tree
 import gleam/dict
@@ -8,7 +9,9 @@ import gleam/list
 import gleam/otp/actor
 import httpp/streaming
 
+import gleam/dynamic/decode
 import gleam/int
+import gleam/json
 import gleam/option.{None, Some}
 
 import gleam/string
@@ -25,6 +28,7 @@ import saar/profiles_sources
 import saar/types/config as types_config
 import saar/types/core as types_core
 import saar/types/profile as types_profile
+import saar/workspace
 import simplifile
 
 const api_key = "test-key"
@@ -235,6 +239,36 @@ pub fn logs_stream_managed_port_includes_runner_logs() {
   should.equal(string.contains(payload, "server-start"), True)
 
   http_client.close_sse(conn)
+}
+
+pub fn managed_port_cwd_is_workspace_test() {
+  let cfg0 = load_cfg0()
+  let base_url =
+    start_saar_with_cfg_and_profiles(
+      cfg0,
+      profiles_sources.load_profiles_from_sources(cfg0) |> assert_ok,
+      default_config_path,
+    )
+
+  let instance_id = "inst-sys-log-cwd-1"
+  create_agent(base_url, "log_server", instance_id)
+  wait_phase(base_url, instance_id, "ready_continuous", 300)
+
+  let expected_workspace = resolve_workspace_path(cfg0, instance_id)
+  let port = fetch_assigned_port(base_url, instance_id)
+  let resp =
+    http_client.request_sync_string(
+      http.Get,
+      "http://" <> host <> ":" <> int.to_string(port) <> "/health",
+      dict.new(),
+      None,
+      2000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  let cwd = decode_health_cwd(resp.body)
+  should.equal(cwd, expected_workspace)
 }
 
 pub fn post_reload_profiles_auth_required() {
@@ -1055,6 +1089,28 @@ fn start_saar() -> String {
   start_saar_with_cfg_and_profiles(cfg0, profiles, default_config_path)
 }
 
+fn resolve_workspace_path(
+  cfg: types_config.SaarConfig,
+  instance_id: String,
+) -> String {
+  let types_config.SaarConfig(storage: storage, ..) = cfg
+  let types_config.StorageConfig(workspaces_directory: base_dir, ..) = storage
+  let instance_id = types_core.instance_id(instance_id) |> assert_ok
+  let workspace_path0 = workspace.workspace_for_instance(base_dir, instance_id)
+  let workspace_path = case string.starts_with(workspace_path0, "./") {
+    True -> string.drop_start(workspace_path0, 2)
+    False -> workspace_path0
+  }
+
+  case filepath.is_absolute(workspace_path) {
+    True -> workspace_path
+    False -> {
+      let cwd = simplifile.current_directory() |> assert_ok
+      filepath.join(cwd, workspace_path)
+    }
+  }
+}
+
 fn start_saar_with_profile_source_dir(root: String) -> String {
   let cfg0 = load_cfg0()
 
@@ -1153,6 +1209,35 @@ fn wait_sse_data(conn: http_client.SseConnection, timeout_ms: Int) -> String {
     http_client.SseClosed -> panic as "SSE closed"
     http_client.SseTimeout -> wait_sse_data(conn, timeout_ms)
   }
+}
+
+fn fetch_assigned_port(base_url: String, instance_id: String) -> Int {
+  let resp =
+    http_client.request_sync_string(
+      http.Get,
+      base_url <> "/sys/agents/" <> instance_id <> "/status",
+      auth_headers(),
+      None,
+      2000,
+      1024 * 1024,
+    )
+    |> assert_ok
+
+  let assert Ok(payload) = json.parse(resp.body, decode.dynamic)
+  let decoder = {
+    use port <- decode.field("assigned_port", decode.int)
+    decode.success(port)
+  }
+  decode.run(payload, decoder) |> assert_ok
+}
+
+fn decode_health_cwd(body: String) -> String {
+  let assert Ok(payload) = json.parse(body, decode.dynamic)
+  let decoder = {
+    use cwd <- decode.field("cwd", decode.string)
+    decode.success(cwd)
+  }
+  decode.run(payload, decoder) |> assert_ok
 }
 
 fn assert_log_payload_fields(payload: String) -> Nil {

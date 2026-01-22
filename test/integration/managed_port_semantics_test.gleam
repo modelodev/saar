@@ -10,6 +10,7 @@ import gleam/string
 import gleeunit
 import gleeunit/should
 import port_helpers
+import profile_helpers
 import runner_fixtures
 import saar/app_state
 import saar/bridge/http_client
@@ -143,21 +144,17 @@ pub fn port_injected_into_env_test() {
 pub fn managed_port_interpolates_runner_args_test() {
   port_helpers.ensure_wrapper_path()
 
-  let runtime =
-    types_runner.ManagedPort(
-      host_env_var: None,
-      port_env_var: None,
-    )
+  let runtime = types_runner.ManagedPort(host_env_var: None, port_env_var: None)
 
   let base_input = base_input_with_runtime(runtime)
 
   let input =
     types_input.SaarInput(
       ..base_input,
-      runner_def: types_runner.Runner(
-        ..base_input.runner_def,
-        args: ["--port", "{{runner.port}}"],
-      ),
+      runner_def: types_runner.Runner(..base_input.runner_def, args: [
+        "--port",
+        "{{runner.port}}",
+      ]),
     )
 
   let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
@@ -496,51 +493,54 @@ fn echo_server_profile_managed_port() -> types_profile.Profile {
     types_runner.Runner(
       ..runner0,
       tool_config: types_runner.ToolConfigScript(
-        "./test/fixtures/source_local/runners/echo_server.py",
+        "test/fixtures/source_local/runners/echo_server.py",
       ),
       runtime: runtime,
     )
 
-  types_profile.Profile(..profile0, runner: runner1)
+  profile_helpers.resolve_fixture_runner(
+    types_profile.Profile(..profile0, runner: runner1),
+  )
 }
 
 fn log_server_profile_managed_port() -> types_profile.Profile {
-  let runtime =
-    types_runner.ManagedPort(
-      host_env_var: None,
-      port_env_var: None,
+  let runtime = types_runner.ManagedPort(host_env_var: None, port_env_var: None)
+
+  let profile =
+    types_profile.Profile(
+      meta: types_profile.ProfileMeta(
+        id: types_core.profile_id("log_server"),
+        name: None,
+        lifecycle: types_enums.Continuous,
+        description: "Log server",
+      ),
+      parameters: dict.new(),
+      runner: types_runner.Runner(
+        type_: "log_server",
+        tool_config: types_runner.ToolConfigScript(
+          "test/fixtures/source_local/runners/log_server.py",
+        ),
+        runtime: runtime,
+        env_map: dict.new(),
+        args: [],
+        artifact_config: types_runner.default_artifact_config(),
+        exec_path: None,
+      ),
+      interface: types_profile.HttpInterface(
+        base_url: "http://{{runner.host}}:{{runner.port}}",
+        headers: dict.new(),
+        health_check: Some(
+          types_profile.HealthCheck(
+            path: "/health",
+            method: types_profile.HttpGet,
+            expect_statuses: [200],
+          ),
+        ),
+        capabilities: dict.new(),
+      ),
     )
 
-  types_profile.Profile(
-    meta: types_profile.ProfileMeta(
-      id: types_core.profile_id("log_server"),
-      name: None,
-      lifecycle: types_enums.Continuous,
-      description: "Log server",
-    ),
-    parameters: dict.new(),
-    runner: types_runner.Runner(
-      type_: "log_server",
-      tool_config: types_runner.ToolConfigScript(
-        "./test/fixtures/source_local/runners/log_server.py",
-      ),
-      runtime: runtime,
-      env_map: dict.new(),
-      args: [],
-      artifact_config: types_runner.default_artifact_config(),
-      exec_path: None,
-    ),
-    interface: types_profile.HttpInterface(
-      base_url: "http://{{runner.host}}:{{runner.port}}",
-      headers: dict.new(),
-      health_check: Some(types_profile.HealthCheck(
-        path: "/health",
-        method: types_profile.HttpGet,
-        expect_statuses: [200],
-      )),
-      capabilities: dict.new(),
-    ),
-  )
+  profile_helpers.resolve_fixture_runner(profile)
 }
 
 fn start_echo_server_with_runtime(

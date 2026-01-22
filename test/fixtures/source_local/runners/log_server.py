@@ -20,7 +20,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(b"{\"status\":\"healthy\"}")
+            payload = {"status": "healthy", "cwd": os.getcwd()}
+            self.wfile.write(json.dumps(payload).encode("utf-8"))
             return
 
         self.send_response(404)
@@ -28,7 +29,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    emit_log("server-start")
+    emit_log(f"server-start cwd={os.getcwd()}")
     host = os.environ.get("SAAR_HOST", "127.0.0.1")
     port = int(os.environ.get("SAAR_PORT", "0"))
     server = ThreadingHTTPServer((host, port), Handler)

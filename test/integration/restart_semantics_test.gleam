@@ -8,6 +8,7 @@ import gleam/otp/actor
 import gleeunit
 import gleeunit/should
 import port_helpers
+import profile_helpers
 import saar/app_state
 import saar/core/agent
 import saar/core/messages
@@ -136,12 +137,14 @@ fn echo_server_profile_managed_port() -> types_profile.Profile {
     types_runner.Runner(
       ..runner0,
       tool_config: types_runner.ToolConfigScript(
-        "./test/fixtures/source_local/runners/echo_server.py",
+        "test/fixtures/source_local/runners/echo_server.py",
       ),
       runtime: runtime,
     )
 
-  types_profile.Profile(..profile0, runner: runner1)
+  profile_helpers.resolve_fixture_runner(
+    types_profile.Profile(..profile0, runner: runner1),
+  )
 }
 
 fn start_until_ready_continuous(

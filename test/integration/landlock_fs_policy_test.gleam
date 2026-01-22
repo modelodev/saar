@@ -193,6 +193,19 @@ pub fn landlock_enforced_deny_is_permission_error_test() {
   }
 }
 
+pub fn transient_cwd_matches_workspace_test() {
+  let body =
+    run_fs_probe_interaction(
+      "test/fixtures/config/test_config.toml",
+      "inst-fs-probe-cwd",
+    )
+
+  case string.contains(body, "\"cwd_matches_workspace\":true") {
+    True -> Nil
+    False -> panic as { "Expected cwd_matches_workspace=true, got: " <> body }
+  }
+}
+
 pub fn landlock_enforced_wrapper_is_dumb_policy_must_include_workspace_test() {
   port_helpers.ensure_wrapper_path()
 

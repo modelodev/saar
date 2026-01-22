@@ -56,6 +56,7 @@ def main():
         })
         return 2
 
+    cwd = os.getcwd()
     inside_path = os.path.join(workspace, "ok.txt")
     outside_path = os.path.abspath(os.path.join(workspace, "..", "denied", "out.txt"))
 
@@ -72,8 +73,12 @@ def main():
 
     # Keep values JSON-null-free because the runner contract JSON decoder
     # currently maps values containing `null` to `json.null()`.
+    normalized_workspace = os.path.normpath(workspace).lstrip(os.sep)
+
     data = {
         "workspace": workspace,
+        "cwd": cwd,
+        "cwd_matches_workspace": cwd.endswith(normalized_workspace),
         "inside_path": inside_path,
         "outside_path": outside_path,
         "inside_ok": inside_ok,
