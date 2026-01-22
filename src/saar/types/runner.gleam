@@ -186,7 +186,11 @@ pub fn runner_exec_command(
   python_bin: String,
 ) -> #(String, List(String)) {
   case runner.exec_path {
-    Some(path) -> #(python_bin, [path, ..runner.args])
+    Some(path) ->
+      case runner.tool_config {
+        ToolConfigScript(_) -> #(python_bin, [path, ..runner.args])
+        ToolConfigPackage(_, _, _) -> #(python_bin, [path])
+      }
     None -> {
       case runner.tool_config {
         ToolConfigScript(script) -> #(python_bin, [script, ..runner.args])
