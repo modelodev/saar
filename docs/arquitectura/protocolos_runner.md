@@ -28,6 +28,16 @@
 - Las plantillas `{{...}}` se resuelven en SAAR (bridge) antes de invocar runners (args/env_map/headers/body, etc.).
 - Un runner debe asumir que `runner_def.args` y `runner_def.env_map` **ya están resueltos** (sin placeholders). Si detecta `{{` puede fallar fast para evitar ejecuciones ambiguas.
 
+### Ejecución del runner (source-owned)
+
+- SAAR **no interpreta** `tool_config` al ejecutar un runner; solo elige el
+  **script del runner** según `runner.type` y lo ejecuta vía wrapper.
+- Los detalles de `tool_config` (ej. `package`, `command`, `with_packages`) son
+  responsabilidad del runner (por ejemplo `generic_uvx(_server)` invoca `uvx
+  --from <package> <command>`).
+- Resultado: los perfiles pueden declararse solo con `tool_config`, sin shims
+  ni binarios instalados globalmente.
+
 ### Provision
 - `./runner --provision` recibe `SAAR_INPUT_JSON` (params resueltos, helpers, etc.) y debe ser idempotente.
 - Respuesta: emitir exactamente un evento `t="provision_result"` con la estructura `{"status":"success","log_files":[]}` o error.
