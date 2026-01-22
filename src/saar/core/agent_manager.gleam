@@ -999,7 +999,7 @@ fn runner_env() -> List(#(String, String)) {
   // Keep test/dev behavior aligned with `test/port_helpers.base_env/2`.
   let force_fallback = case envoy.get("SAAR_WRAPPER_FORCE_FALLBACK") {
     Ok(value) -> value
-    Error(_) -> "1"
+    Error(_) -> "0"
   }
 
   list.append(path_env, [#("SAAR_WRAPPER_FORCE_FALLBACK", force_fallback)])

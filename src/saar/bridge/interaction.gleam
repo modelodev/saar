@@ -649,6 +649,7 @@ fn execute_http_sync(
   let response = case capability.body {
     None -> {
       let body = json.to_string(input_payload_to_json(input.input))
+      let hdrs = ensure_json_content_type(hdrs)
       http_client.request_sync_string(
         method,
         url,
@@ -669,6 +670,7 @@ fn execute_http_sync(
     Some(types_profile.JsonBody(template)) -> {
       use rendered <- result.try(interpolator.interpolate_json(template, ctx))
       let body = json.to_string(rendered)
+      let hdrs = ensure_json_content_type(hdrs)
       http_client.request_sync_string(
         method,
         url,
@@ -756,6 +758,21 @@ fn execute_http_sync(
       trace_id: input.context.trace_id,
     ))
   })
+}
+
+fn ensure_json_content_type(
+  headers: dict.Dict(String, String),
+) -> dict.Dict(String, String) {
+  case header_present(headers, "content-type") {
+    True -> headers
+    False -> dict.insert(headers, "content-type", "application/json")
+  }
+}
+
+fn header_present(headers: dict.Dict(String, String), key: String) -> Bool {
+  headers
+  |> dict.to_list
+  |> list.any(fn(pair) { string.lowercase(pair.0) == key })
 }
 
 fn resolve_multipart_files(
@@ -906,7 +923,7 @@ fn runner_env() -> List(#(String, String)) {
 
   let force_fallback = case envoy.get("SAAR_WRAPPER_FORCE_FALLBACK") {
     Ok(value) -> value
-    Error(_) -> "1"
+    Error(_) -> "0"
   }
 
   list.append(path_env, [#("SAAR_WRAPPER_FORCE_FALLBACK", force_fallback)])

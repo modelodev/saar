@@ -77,6 +77,7 @@ Nota: en v0 el wrapper deriva `<source_root>` desde el directorio actual del run
 ## Errores y fallback
 - `best_effort`: si Landlock no esta soportado, se ejecuta sin restriccion y se continua.
 - `enforced`: si Landlock falla, la interaccion/provisioning falla y el agente transita a `Failed`.
+  - Nota: `SAAR_WRAPPER_FORCE_FALLBACK=1` fuerza el fallback; si no se define, no se fuerza.
 
 ## Compatibilidad y riesgos
 - Algunos runners pueden requerir mas paths (p.ej. certificados en ubicaciones no estandar).

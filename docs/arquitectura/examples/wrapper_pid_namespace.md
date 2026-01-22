@@ -12,7 +12,7 @@ Objetivo: lanzar cualquier runner a través de un wrapper que:
 - SAAR sigue necesitando FFI mínima para `open_port`/send/close (ver `../operaciones.md` ADR-002). Aquí “sin FFI” se refiere a **no necesitar FFI de señales/kill en SAAR**: el wrapper gestiona SIGTERM/SIGKILL.
 - Sin `CLONE_NEWUSER` el `CLONE_NEWPID` fallará para usuarios normales; hay que habilitar ambos. En userns, habrá que mapear uid/gid (0:UID real).
 - **Best-effort:** si namespaces no están permitidos (p.ej. Docker/CI), el wrapper debe hacer fallback a process group y mantener las mismas semantics de stop.
-- **Test-only:** `SAAR_WRAPPER_FORCE_FALLBACK=1` fuerza el modo fallback para pruebas deterministas (no recomendado en producción).
+- **Test-only:** `SAAR_WRAPPER_FORCE_FALLBACK=1` fuerza el modo fallback para pruebas deterministas (no recomendado en producción). Si no se define, el wrapper intenta aplicar sandbox con la configuracion normal.
 - Salida: SAAR captura un único canal vía `open_port` (STDOUT del wrapper/runner). Para mantener el contrato simple:
   - El wrapper debe permanecer en silencio en STDOUT.
   - El runner emite eventos JSONL por STDOUT (logs/stream/result) según `arquitectura/protocolos_runner.md`.
