@@ -31,6 +31,7 @@ import gleam/result
 import gleam/string
 import saar/bridge/http_client
 import saar/bridge/port_owner
+import saar/bridge/runner_prep
 
 import saar/core/agent
 import saar/core/artifact_registry_protocol
@@ -912,25 +913,51 @@ fn start_port_owner(
   params: types_input.ResolvedParams,
   port: Int,
 ) -> Result(port_owner.PortOwnerRef, types_agent.FailureReason) {
-  let #(runner_path, runner_args) = runner_command(profile.runner, config)
-  let input = provisioning_input(profile, instance_id, params)
+  let host = managed_port_host(config)
+  let trace_raw = "provision-" <> types_core.instance_id_to_string(instance_id)
+  let trace_id = types_core.trace_id(trace_raw)
+  let ctx =
+    types_input.RequestContext(trace_id: trace_id, extra: dict.new())
+  let payload = types_input.PayloadChat([], dict.new())
 
-  case
-    port_owner.start_link(
-      runner_path,
-      runner_args,
-      runner_env(),
-      ".",
-      input,
-      config,
+  let resolved_runner =
+    case runner_prep.interpolate_runner_def(
+      profile.runner,
+      params,
+      payload,
+      ctx,
+      Some(host),
       Some(port),
-      call_timeout_ms(config),
-    )
-  {
-    Ok(actor.Started(data: owner, ..)) -> Ok(owner)
-    Error(actor.InitFailed(reason)) ->
-      Error(provisioning_policy.from_port_owner_start_reason(reason))
-    Error(_) -> Error(types_agent.StartServerFailed)
+    ) {
+      Ok(runner) -> Ok(runner)
+      Error(_) -> Error(types_agent.StartServerFailed)
+    }
+
+  case resolved_runner {
+    Error(reason) -> Error(reason)
+    Ok(runner) -> {
+      let next_profile = types_profile.Profile(..profile, runner: runner)
+      let #(runner_path, runner_args) = runner_command(runner, config)
+      let input = provisioning_input(next_profile, instance_id, params)
+
+      case
+        port_owner.start_link(
+          runner_path,
+          runner_args,
+          runner_env(),
+          ".",
+          input,
+          config,
+          Some(port),
+          call_timeout_ms(config),
+        )
+      {
+        Ok(actor.Started(data: owner, ..)) -> Ok(owner)
+        Error(actor.InitFailed(reason)) ->
+          Error(provisioning_policy.from_port_owner_start_reason(reason))
+        Error(_) -> Error(types_agent.StartServerFailed)
+      }
+    }
   }
 }
 
