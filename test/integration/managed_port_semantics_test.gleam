@@ -137,6 +137,53 @@ pub fn port_injected_into_env_test() {
   test_port |> should.equal(int.to_string(port))
 }
 
+pub fn managed_port_interpolates_runner_args_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let runtime =
+    types_runner.ManagedPort(
+      host_env_var: None,
+      port_env_var: None,
+    )
+
+  let base_input = base_input_with_runtime(runtime)
+
+  let input =
+    types_input.SaarInput(
+      ..base_input,
+      runner_def: types_runner.Runner(
+        ..base_input.runner_def,
+        args: ["--port", "{{runner.port}}"],
+      ),
+    )
+
+  let assert Ok(#(listener, port)) = tcp_listener.listen(host, 0)
+  tcp_listener.close(listener)
+
+  let config = types_config.default_saar_config()
+  let env = port_helpers.base_env(500, [])
+
+  let server =
+    runner.start_server(
+      "python3",
+      ["./test/fixtures/source_local/runners/echo_server.py"],
+      env,
+      ".",
+      input,
+      config,
+      Some(port),
+    )
+    |> test_assertions.assert_ok
+
+  port_helpers.wait_for_http_200(
+    "http://" <> host <> ":" <> int.to_string(port) <> "/health",
+    40,
+    25,
+  )
+
+  runner.stop_server(server)
+}
+
 pub fn base_url_interpolation_uses_runner_host_port_test() {
   port_helpers.ensure_wrapper_path()
 
