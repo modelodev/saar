@@ -18,6 +18,7 @@
 ////   function signatures exactly.
 
 import gleam/erlang/port.{type Port}
+import gleam/erlang/process.{type Pid}
 
 /// Messages returned by `port_receive`.
 ///
@@ -95,6 +96,14 @@ fn open_port_ffi(
   env: List(#(String, String)),
   cd: String,
 ) -> Result(Port, String)
+
+/// Changes the owning process of a port.
+pub fn port_connect(port: Port, pid: Pid) -> Nil {
+  port_connect_ffi(port, pid)
+}
+
+@external(erlang, "saar_ffi", "port_connect")
+fn port_connect_ffi(port: Port, pid: Pid) -> Nil
 
 /// Sends data to an open port.
 ///

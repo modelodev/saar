@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "id": "log_server",
+    "lifecycle": "continuous",
+    "description": "Log server"
+  },
+  "parameters": {},
+  "runner": {
+    "type": "log_server",
+    "tool_config": {"script": "log_server.py"},
+    "runtime": {"mode": "managed_port"}
+  },
+  "interface": {
+    "protocol": "http",
+    "base_url": "http://{{runner.host}}:{{runner.port}}",
+    "health_check": {"path": "/health", "method": "GET", "expect_statuses": [200]},
+    "capabilities": {}
+  }
+}

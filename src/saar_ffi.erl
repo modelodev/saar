@@ -3,6 +3,7 @@
     now_ms/0,
     message_queue_len/1,
     open_port/4,
+    port_connect/2,
     port_send/2,
     port_close/1,
     port_receive/2,
@@ -36,6 +37,13 @@ open_port(Command, Args, Env, Cd) ->
         {ok, Port}
     catch
         _:Reason -> {error, format_error(Reason)}
+    end.
+
+port_connect(Port, Pid) ->
+    try erlang:port_connect(Port, Pid) of
+        _ -> nil
+    catch
+        _:_ -> nil
     end.
 
 port_send(Port, Data) ->

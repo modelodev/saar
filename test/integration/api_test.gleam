@@ -218,6 +218,25 @@ pub fn logs_stream_takeover() {
   http_client.close_sse(conn2)
 }
 
+pub fn logs_stream_managed_port_includes_runner_logs() {
+  let base_url = start_saar()
+
+  let instance_id = "inst-sys-logs-managed-1"
+  create_agent(base_url, "log_server", instance_id)
+  wait_phase(base_url, instance_id, "ready_continuous", 300)
+
+  let url = base_url <> "/sys/agents/" <> instance_id <> "/logs/stream"
+
+  let conn =
+    http_client.open_sse(http.Get, url, auth_headers(), None, 2000) |> assert_ok
+  let payload = wait_sse_data(conn, 2000)
+
+  assert_log_payload_fields(payload)
+  should.equal(string.contains(payload, "server-start"), True)
+
+  http_client.close_sse(conn)
+}
+
 pub fn post_reload_profiles_auth_required() {
   let base_url = start_saar()
 

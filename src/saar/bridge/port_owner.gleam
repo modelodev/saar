@@ -18,9 +18,14 @@ import gleam/erlang/process
 import gleam/option
 import gleam/otp/actor
 import saar/bridge/runner
+import saar/bridge/runner_contract
+import saar/bridge/port_process
 import saar/types/config as types_config
+import saar/types/core as types_core
 import saar/types/input as types_input
+import saar/types/log as types_log
 import saar/types/output as types_output
+import saar/types/runner as types_runner
 
 pub opaque type PortOwnerRef {
   PortOwnerRef(subject: process.Subject(Msg), pid: process.Pid)
@@ -37,7 +42,12 @@ fn subject(ref: PortOwnerRef) -> process.Subject(Msg) {
 }
 
 type State {
-  Running(server: runner.ServerHandle)
+  Running(
+    server: runner.ServerHandle,
+    log_sink: fn(types_log.LogEvent) -> Nil,
+    instance_id: types_core.InstanceId,
+    trace_id: types_core.TraceId,
+  )
 }
 
 pub fn start_link(
@@ -49,6 +59,9 @@ pub fn start_link(
   config: types_config.SaarConfig,
   assigned_port: option.Option(Int),
   init_timeout_ms: Int,
+  log_sink: fn(types_log.LogEvent) -> Nil,
+  instance_id: types_core.InstanceId,
+  trace_id: types_core.TraceId,
 ) -> actor.StartResult(PortOwnerRef) {
   actor.new_with_initialiser(init_timeout_ms, fn(self) {
     case
@@ -62,10 +75,17 @@ pub fn start_link(
         assigned_port,
       )
     {
-      Ok(server) ->
-        actor.initialised(Running(server))
+      Ok(server) -> {
+        spawn_log_pump(server.process, log_sink, instance_id, trace_id)
+        actor.initialised(Running(
+          server: server,
+          log_sink: log_sink,
+          instance_id: instance_id,
+          trace_id: trace_id,
+        ))
         |> actor.returning(PortOwnerRef(self, process.self()))
         |> Ok
+      }
 
       Error(err) -> Error(interaction_error_string(err))
     }
@@ -105,8 +125,56 @@ fn handle_message(state: State, msg: Msg) -> actor.Next(State, Msg) {
 }
 
 fn stop_server_best_effort(state: State) -> Nil {
-  let Running(server) = state
+  let Running(server: server, ..) = state
   runner.stop_server(server)
+}
+
+fn spawn_log_pump(
+  port_proc: port_process.PortProcess,
+  log_sink: fn(types_log.LogEvent) -> Nil,
+  instance_id: types_core.InstanceId,
+  trace_id: types_core.TraceId,
+) -> Nil {
+  let _ =
+    process.spawn(fn() {
+      port_process.connect(port_proc, process.self())
+      log_pump_loop(port_proc, log_sink, instance_id, trace_id)
+    })
+  Nil
+}
+
+fn log_pump_loop(
+  port_proc: port_process.PortProcess,
+  log_sink: fn(types_log.LogEvent) -> Nil,
+  instance_id: types_core.InstanceId,
+  trace_id: types_core.TraceId,
+) -> Nil {
+  let #(next_process, outcome) = port_process.read_line(port_proc, 50)
+
+  case outcome {
+    Ok(line) -> {
+      case runner_contract.decode_event(line) {
+        Ok(types_runner.RunnerEventLog(message: msg, level: level)) -> {
+          let line = "[" <> level <> "] " <> msg
+          let event =
+            types_log.log_event(
+              types_log.AppLog,
+              line,
+              option.Some(trace_id),
+              instance_id,
+            )
+          log_sink(event)
+        }
+
+        _ -> Nil
+      }
+
+      log_pump_loop(next_process, log_sink, instance_id, trace_id)
+    }
+
+    Error(port_process.PortExited(_)) -> Nil
+    Error(_) -> log_pump_loop(next_process, log_sink, instance_id, trace_id)
+  }
 }
 
 fn interaction_error_string(err: types_output.InteractionError) -> String {

@@ -20,6 +20,7 @@ import envoy
 import filepath
 import gleam/erlang/application
 import gleam/erlang/port.{type Port}
+import gleam/erlang/process.{type Pid}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -114,6 +115,12 @@ pub fn send(process: PortProcess, data: String) -> Nil {
 pub fn close(process: PortProcess) -> Nil {
   let PortProcess(port:, ..) = process
   ffi.port_close(port)
+}
+
+/// Transfers port ownership to another process.
+pub fn connect(process: PortProcess, pid: Pid) -> Nil {
+  let PortProcess(port:, ..) = process
+  ffi.port_connect(port, pid)
 }
 
 /// Receives the next port event, or `Error` on timeout.

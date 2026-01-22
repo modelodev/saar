@@ -6,6 +6,7 @@ import gleam/int
 import gleam/json
 import gleam/option.{None, Some}
 import gleam/otp/actor
+import gleam/string
 import gleeunit
 import gleeunit/should
 import port_helpers
@@ -23,7 +24,9 @@ import saar/otp/safe_call
 import saar/types/agent as types_agent
 import saar/types/config as types_config
 import saar/types/core as types_core
+import saar/types/enums as types_enums
 import saar/types/input as types_input
+import saar/types/log as types_log
 import saar/types/profile as types_profile
 import saar/types/runner as types_runner
 import simplifile
@@ -182,6 +185,26 @@ pub fn managed_port_interpolates_runner_args_test() {
   )
 
   runner.stop_server(server)
+}
+
+pub fn managed_port_streams_runner_logs_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let cfg = types_config.default_saar_config()
+  let manager = start_root(cfg)
+  let profile = log_server_profile_managed_port()
+
+  let assert Ok(id1) = types_core.instance_id("inst-logs-1")
+  let agent_ref = start_instance(manager, profile, id1, cfg)
+  wait_for_phase(agent_ref, types_agent.ReadyContinuous, 200)
+
+  let inbox = process.new_subject()
+  agent.attach_logs(agent_ref, inbox)
+
+  let assert Ok(types_log.LogEvent(line: line, ..)) =
+    process.receive(inbox, 2000)
+
+  string.contains(line, "server-start") |> should.equal(True)
 }
 
 pub fn base_url_interpolation_uses_runner_host_port_test() {
@@ -479,6 +502,45 @@ fn echo_server_profile_managed_port() -> types_profile.Profile {
     )
 
   types_profile.Profile(..profile0, runner: runner1)
+}
+
+fn log_server_profile_managed_port() -> types_profile.Profile {
+  let runtime =
+    types_runner.ManagedPort(
+      host_env_var: None,
+      port_env_var: None,
+    )
+
+  types_profile.Profile(
+    meta: types_profile.ProfileMeta(
+      id: types_core.profile_id("log_server"),
+      name: None,
+      lifecycle: types_enums.Continuous,
+      description: "Log server",
+    ),
+    parameters: dict.new(),
+    runner: types_runner.Runner(
+      type_: "log_server",
+      tool_config: types_runner.ToolConfigScript(
+        "./test/fixtures/source_local/runners/log_server.py",
+      ),
+      runtime: runtime,
+      env_map: dict.new(),
+      args: [],
+      artifact_config: types_runner.default_artifact_config(),
+      exec_path: None,
+    ),
+    interface: types_profile.HttpInterface(
+      base_url: "http://{{runner.host}}:{{runner.port}}",
+      headers: dict.new(),
+      health_check: Some(types_profile.HealthCheck(
+        path: "/health",
+        method: types_profile.HttpGet,
+        expect_statuses: [200],
+      )),
+      capabilities: dict.new(),
+    ),
+  )
 }
 
 fn start_echo_server_with_runtime(

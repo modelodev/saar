@@ -482,7 +482,7 @@ fn handle_start_existing_agent(
                   artifact_registry: artifact_registry,
                 )
 
-              let outcome = provision(snap_config, port_pool, args)
+              let outcome = provision(snap_config, port_pool, args, agent_ref)
               agent.internal_provisioning_done(agent_ref, outcome)
               update_registry_status_best_effort(
                 snap_config,
@@ -596,7 +596,7 @@ fn start_provisioning_worker(
   agent_ref: agent.AgentRef,
 ) -> process.Pid {
   process.spawn(fn() {
-    let outcome = provision(config, port_pool, args)
+  let outcome = provision(config, port_pool, args, agent_ref)
     agent.internal_provisioning_done(agent_ref, outcome)
     update_registry_status_best_effort(config, registry, agent_ref)
   })
@@ -606,6 +606,7 @@ fn provision(
   config: types_config.SaarConfig,
   port_pool: process.Subject(messages.PortPoolMsg),
   args: messages.StartArgs,
+  agent_ref: agent.AgentRef,
 ) -> Result(#(agent.AgentState, Option(Int)), types_agent.FailureReason) {
   let messages.StartArgs(
     profile: profile,
@@ -618,7 +619,14 @@ fn provision(
     types_enums.Transient -> Ok(#(agent.agent_ready_transient(params), None))
 
     types_enums.Continuous ->
-      provision_continuous(config, port_pool, profile, instance_id, params)
+      provision_continuous(
+        config,
+        port_pool,
+        profile,
+        instance_id,
+        params,
+        agent_ref,
+      )
   }
 }
 
@@ -628,6 +636,7 @@ fn provision_continuous(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
+  agent_ref: agent.AgentRef,
 ) -> Result(#(agent.AgentState, Option(Int)), types_agent.FailureReason) {
   case profile.runner.runtime {
     types_runner.NoNetwork -> Error(types_agent.NoNetwork)
@@ -639,6 +648,7 @@ fn provision_continuous(
         profile,
         instance_id,
         params,
+        agent_ref,
       )
   }
 }
@@ -771,6 +781,7 @@ fn provision_continuous_managed_port(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
+  agent_ref: agent.AgentRef,
 ) -> Result(#(agent.AgentState, Option(Int)), types_agent.FailureReason) {
   provision_continuous_managed_port_retry(
     config,
@@ -778,6 +789,7 @@ fn provision_continuous_managed_port(
     profile,
     instance_id,
     params,
+    agent_ref,
     5,
     None,
   )
@@ -789,6 +801,7 @@ fn provision_continuous_managed_port_retry(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
+  agent_ref: agent.AgentRef,
   remaining: Int,
   last_failure: Option(types_agent.FailureReason),
 ) -> Result(#(agent.AgentState, Option(Int)), types_agent.FailureReason) {
@@ -809,6 +822,7 @@ fn provision_continuous_managed_port_retry(
           profile,
           instance_id,
           params,
+          agent_ref,
           host,
         )
         |> result.map(fn(pair) {
@@ -835,6 +849,7 @@ fn provision_continuous_managed_port_retry(
             profile,
             instance_id,
             params,
+            agent_ref,
             next_remaining,
             next_last,
           )
@@ -849,6 +864,7 @@ fn attempt_provision_continuous_managed_port(
   profile: types_profile.Profile,
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
+  agent_ref: agent.AgentRef,
   host: String,
 ) -> Result(#(agent.AgentState, Int), types_agent.FailureReason) {
   use port <- result.try(allocate_port(
@@ -861,7 +877,14 @@ fn attempt_provision_continuous_managed_port(
   // Port availability is checked once by the port pool allocation.
   process.sleep(20)
 
-  case start_port_owner(config, profile, instance_id, params, port) {
+  case start_port_owner(
+    config,
+    profile,
+    instance_id,
+    params,
+    port,
+    agent_ref,
+  ) {
     Ok(owner) ->
       case wait_for_health_ready(profile.interface, host, port, config) {
         Ok(_) -> {
@@ -912,6 +935,7 @@ fn start_port_owner(
   instance_id: types_core.InstanceId,
   params: types_input.ResolvedParams,
   port: Int,
+  agent_ref: agent.AgentRef,
 ) -> Result(port_owner.PortOwnerRef, types_agent.FailureReason) {
   let host = managed_port_host(config)
   let trace_raw = "provision-" <> types_core.instance_id_to_string(instance_id)
@@ -940,6 +964,8 @@ fn start_port_owner(
       let #(runner_path, runner_args) = runner_command(runner, config)
       let input = provisioning_input(next_profile, instance_id, params)
 
+      let log_sink = fn(event) { agent.internal_ingest_log(agent_ref, event) }
+
       case
         port_owner.start_link(
           runner_path,
@@ -950,6 +976,9 @@ fn start_port_owner(
           config,
           Some(port),
           call_timeout_ms(config),
+          log_sink,
+          instance_id,
+          trace_id,
         )
       {
         Ok(actor.Started(data: owner, ..)) -> Ok(owner)

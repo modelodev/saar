@@ -14,6 +14,7 @@ pub fn decode_profile_examples_ok_test() {
     "test/fixtures/source_local/profiles/echo_cli.json",
     "test/fixtures/source_local/profiles/echo_server.json",
     "test/fixtures/source_local/profiles/greedy_logger.json",
+    "test/fixtures/source_local/profiles/log_server.json",
     "test/fixtures/source_local/profiles/slow_poke.json",
     "test/fixtures/source_local/profiles/crasher.json",
     "test/fixtures/source_local/profiles/artifact_gen.json",
