@@ -891,29 +891,6 @@ fn attempt_provision_continuous_managed_port(
   let types_config.SaarTimeouts(status_timeout_ms: status_timeout_ms, ..) =
     timeouts
 
-  case envoy.get("DEBUG") {
-    Ok("1") -> {
-      let call_timeout = call_timeout_ms(config)
-      let #(attempts, request_timeout_ms, _) = health_wait_settings(config)
-      agent.internal_ingest_log(
-        agent_ref,
-        types_log.log_event(
-          types_log.AppLog,
-          "[debug] provisioning timeouts: call_timeout_ms="
-            <> int.to_string(call_timeout)
-            <> ", health_attempts="
-            <> int.to_string(attempts)
-            <> ", health_request_timeout_ms="
-            <> int.to_string(request_timeout_ms),
-          option.Some(types_core.trace_id(
-            "provision-" <> types_core.instance_id_to_string(instance_id),
-          )),
-          instance_id,
-        ),
-      )
-    }
-    _ -> Nil
-  }
   use port <- result.try(allocate_port(
     config,
     port_pool_subject,

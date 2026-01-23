@@ -1,4 +1,5 @@
 .tmp/
+priv/
 build/
 bin/
 manifest.toml

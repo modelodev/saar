@@ -449,7 +449,6 @@ static bool landlock_apply_policy_from_json(const char *json,
       | LANDLOCK_ACCESS_FS_REFER
 #endif
       ;
-  debug_log("landlock: access_w=0x%llx", (unsigned long long)access_w);
 
   while (1) {
     pos = skip_json_ws(json, json_len, pos);
@@ -936,14 +935,6 @@ static int try_apply_landlock_policy_v0(const char *workspace_dir,
                               | LANDLOCK_ACCESS_FS_REFER
 #endif
       ;
-#ifdef LANDLOCK_ACCESS_FS_REFER
-  debug_log("landlock: refer_bit=0x%llx",
-            (unsigned long long)LANDLOCK_ACCESS_FS_REFER);
-#else
-  debug_log("landlock: refer_bit=<unset>");
-#endif
-  debug_log("landlock: handled_access_fs=0x%llx",
-            (unsigned long long)ruleset.handled_access_fs);
 
   int ruleset_fd = ll_create_ruleset(&ruleset, sizeof(ruleset), 0);
   if (ruleset_fd < 0) {
@@ -1023,7 +1014,6 @@ static int try_apply_landlock_policy_v0(const char *workspace_dir,
         | LANDLOCK_ACCESS_FS_REFER
 #endif
         ;
-    debug_log("landlock: access_rwx=0x%llx", (unsigned long long)access_rwx);
 
     // A minimal allowlist for v0. We allow access beneath each path.
     for (int i = 0; allow_r[i]; i++) {

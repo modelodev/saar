@@ -76,7 +76,7 @@ Nota: en v0 el wrapper deriva `<source_root>` desde el directorio actual del run
 - El runner siempre se ejecuta con `cwd` apuntando al workspace de la instancia.
 - SAAR añade automaticamente el directorio del runner y el workspace a `allow_exec`.
 - SAAR enables Landlock refer permission for write scopes so renames across directories in allowed paths succeed.
-- Los runners UVX fuerzan `XDG_CACHE_HOME` a `workspace/.tmp/uv-cache`, `UV_CACHE_DIR`/`UV_HTTP_CACHE_DIR`/`UV_TEMP_DIR` y `TMPDIR`/`TEMP`/`TMP` a `workspace/.tmp/uv-cache`, `XDG_DATA_HOME`/`UV_TOOL_DIR` a `workspace/.local/share/uv/tools`, fijan `UV_PYTHON` al interprete real y priorizan su directorio en `PATH`, desactivan Python gestionado (`UV_NO_MANAGED_PYTHON=1`), desactivan config (`UV_NO_CONFIG=1`), desactivan cache (`UV_NO_CACHE=1`), evitan el user site (`PYTHONNOUSERSITE=1`) y pasan `--cache-dir`/`--no-cache` a `uv`/`uvx` para fijar el cache y evitar renames.
+- Los runners UVX fuerzan `XDG_CACHE_HOME` a `workspace/.tmp/uv-cache`, `UV_CACHE_DIR`/`UV_HTTP_CACHE_DIR`/`UV_TEMP_DIR` y `TMPDIR`/`TEMP`/`TMP` a `workspace/.tmp/uv-cache`, `XDG_DATA_HOME`/`UV_TOOL_DIR` a `workspace/.local/share/uv/tools`, fijan `UV_PYTHON` al interprete real y priorizan su directorio en `PATH`, desactivan Python gestionado (`UV_NO_MANAGED_PYTHON=1`), desactivan config (`UV_NO_CONFIG=1`), evitan el user site (`PYTHONNOUSERSITE=1`) y pasan `--cache-dir` a `uv`/`uvx` para fijar el cache.
 
 ## Errores y fallback
 - `best_effort`: si Landlock no esta soportado, se ejecuta sin restriccion y se continua.
