@@ -45,6 +45,7 @@ import saar/types/config as types_config
 import saar/types/core as types_core
 import saar/types/enums as types_enums
 import saar/types/input as types_input
+import saar/types/log as types_log
 import saar/types/profile as types_profile
 import saar/types/runner as types_runner
 import saar/workspace
@@ -701,11 +702,16 @@ fn http_health_check(
 
 fn health_wait_settings(cfg: types_config.SaarConfig) -> #(Int, Int, Int) {
   let types_config.SaarConfig(timeouts: timeouts, limits: limits, ..) = cfg
+  let types_config.SaarTimeouts(
+    call_timeout_ms: call_timeout_ms,
+    health_check_timeout_ms: health_check_timeout_ms,
+    ..,
+  ) = timeouts
   let types_config.SaarLimits(max_http_response_bytes: max_bytes, ..) = limits
 
-  // Keep provisioning snappy in tests and v0.
-  let _ = timeouts
-  #(40, 200, max_bytes)
+  let request_timeout_ms = int.max(health_check_timeout_ms, 1)
+  let attempts = int.max(call_timeout_ms / request_timeout_ms, 1)
+  #(attempts, request_timeout_ms, max_bytes)
 }
 
 fn wait_for_http_status(
@@ -740,7 +746,7 @@ fn wait_for_http_status(
           case list.contains(expect, resp.status) {
             True -> Ok(Nil)
             False -> {
-              process.sleep(25)
+              process.sleep(request_timeout_ms)
               wait_for_http_status(
                 headers,
                 host,
@@ -756,7 +762,7 @@ fn wait_for_http_status(
           }
 
         Error(_) -> {
-          process.sleep(25)
+          process.sleep(request_timeout_ms)
           wait_for_http_status(
             headers,
             host,
@@ -881,6 +887,33 @@ fn attempt_provision_continuous_managed_port(
   agent_ref: agent.AgentRef,
   host: String,
 ) -> Result(#(agent.AgentState, Int), types_agent.FailureReason) {
+  let types_config.SaarConfig(timeouts: timeouts, ..) = config
+  let types_config.SaarTimeouts(status_timeout_ms: status_timeout_ms, ..) =
+    timeouts
+
+  case envoy.get("DEBUG") {
+    Ok("1") -> {
+      let call_timeout = call_timeout_ms(config)
+      let #(attempts, request_timeout_ms, _) = health_wait_settings(config)
+      agent.internal_ingest_log(
+        agent_ref,
+        types_log.log_event(
+          types_log.AppLog,
+          "[debug] provisioning timeouts: call_timeout_ms="
+            <> int.to_string(call_timeout)
+            <> ", health_attempts="
+            <> int.to_string(attempts)
+            <> ", health_request_timeout_ms="
+            <> int.to_string(request_timeout_ms),
+          option.Some(types_core.trace_id(
+            "provision-" <> types_core.instance_id_to_string(instance_id),
+          )),
+          instance_id,
+        ),
+      )
+    }
+    _ -> Nil
+  }
   use port <- result.try(allocate_port(
     config,
     port_pool_subject,
@@ -889,7 +922,7 @@ fn attempt_provision_continuous_managed_port(
   ))
 
   // Port availability is checked once by the port pool allocation.
-  process.sleep(20)
+  process.sleep(int.max(status_timeout_ms, 1))
 
   case
     start_port_owner(
@@ -910,9 +943,32 @@ fn attempt_provision_continuous_managed_port(
         }
 
         Error(_) -> {
+          let exited = case port_owner.detect_exit(owner, 50) {
+            Ok(True) -> True
+            _ -> False
+          }
+          case exited {
+            True ->
+              agent.internal_ingest_log(
+                agent_ref,
+                types_log.log_event(
+                  types_log.AppLog,
+                  "[error] server exited before health check",
+                  option.Some(types_core.trace_id(
+                    "provision-"
+                    <> types_core.instance_id_to_string(instance_id),
+                  )),
+                  instance_id,
+                ),
+              )
+            False -> Nil
+          }
           let _ = port_owner.stop(owner, 1000)
           release_port_best_effort(config, port_pool_subject, instance_id)
-          Error(types_agent.PortBindFailed)
+          case exited {
+            True -> Error(types_agent.StartServerFailed)
+            False -> Error(types_agent.PortBindFailed)
+          }
         }
       }
 
@@ -1000,9 +1056,30 @@ fn start_port_owner(
         )
       {
         Ok(actor.Started(data: owner, ..)) -> Ok(owner)
-        Error(actor.InitFailed(reason)) ->
+        Error(actor.InitFailed(reason)) -> {
+          agent.internal_ingest_log(
+            agent_ref,
+            types_log.log_event(
+              types_log.AppLog,
+              "[error] start_server_failed: " <> reason,
+              option.Some(trace_id),
+              instance_id,
+            ),
+          )
           Error(provisioning_policy.from_port_owner_start_reason(reason))
-        Error(_) -> Error(types_agent.StartServerFailed)
+        }
+        Error(_) -> {
+          agent.internal_ingest_log(
+            agent_ref,
+            types_log.log_event(
+              types_log.AppLog,
+              "[error] start_server_failed: port owner init failed",
+              option.Some(trace_id),
+              instance_id,
+            ),
+          )
+          Error(types_agent.StartServerFailed)
+        }
       }
     }
   }

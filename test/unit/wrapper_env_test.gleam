@@ -49,3 +49,54 @@ pub fn wrapper_env_includes_landlock_policy_json_with_workspace_test() {
   string.contains(json, "\"/tmp/workspace-x\"")
   |> should.equal(True)
 }
+
+pub fn runner_allowlists_for_command_includes_script_dir_test() {
+  let #(allow_read, allow_exec) =
+    wrapper_env.runner_allowlists_for_command("/usr/bin/python3", [
+      "/opt/saar/runners/runner.py",
+      "--flag",
+    ])
+
+  allow_read |> should.equal(["/usr/bin", "/opt/saar/runners"])
+  allow_exec |> should.equal(["/usr/bin", "/opt/saar/runners"])
+}
+
+pub fn append_with_allowlists_extends_policy_test() {
+  let wrapper =
+    types_config.WrapperConfig(
+      read_buffer_bytes: 1,
+      control_line_bytes: 2,
+      poll_interval_ms: 3,
+      post_kill_wait_ms: 4,
+    )
+
+  let policy =
+    types_config.LandlockPolicyConfig(
+      allow_read: ["/etc"],
+      allow_exec: ["/usr"],
+      allow_write: [],
+    )
+
+  let env =
+    wrapper_env.append_with_allowlists(
+      [],
+      wrapper,
+      10,
+      types_enums.LandlockEnforced,
+      option.Some(policy),
+      "/tmp/workspace-x",
+      ["/opt/extra"],
+      ["/opt/extra"],
+    )
+
+  let json =
+    env
+    |> list.filter(fn(pair) { pair.0 == "SAAR_LANDLOCK_POLICY_JSON" })
+    |> list.first
+    |> option.from_result
+    |> option.map(fn(pair) { pair.1 })
+    |> option.unwrap("")
+
+  string.contains(json, "\"/opt/extra\"")
+  |> should.equal(True)
+}

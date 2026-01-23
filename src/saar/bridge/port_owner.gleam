@@ -15,11 +15,12 @@
 //// - Wraps `saar/bridge/runner`.
 
 import gleam/erlang/process
+import gleam/int
 import gleam/option
 import gleam/otp/actor
+import saar/bridge/port_process
 import saar/bridge/runner
 import saar/bridge/runner_contract
-import saar/bridge/port_process
 import saar/types/config as types_config
 import saar/types/core as types_core
 import saar/types/input as types_input
@@ -34,6 +35,8 @@ pub opaque type PortOwnerRef {
 type Msg {
   Stop
   StopSync(process.Subject(Nil))
+  CheckExit(process.Subject(Bool))
+  PortExited
 }
 
 fn subject(ref: PortOwnerRef) -> process.Subject(Msg) {
@@ -47,6 +50,7 @@ type State {
     log_sink: fn(types_log.LogEvent) -> Nil,
     instance_id: types_core.InstanceId,
     trace_id: types_core.TraceId,
+    exited: Bool,
   )
 }
 
@@ -76,18 +80,29 @@ pub fn start_link(
       )
     {
       Ok(server) -> {
-        spawn_log_pump(server.process, log_sink, instance_id, trace_id)
+        let pump_pid =
+          spawn_log_pump(server.process, log_sink, instance_id, trace_id, self)
+        port_process.connect(server.process, pump_pid)
         actor.initialised(Running(
           server: server,
           log_sink: log_sink,
           instance_id: instance_id,
           trace_id: trace_id,
+          exited: False,
         ))
         |> actor.returning(PortOwnerRef(self, process.self()))
         |> Ok
       }
 
-      Error(err) -> Error(interaction_error_string(err))
+      Error(err) -> {
+        log_sink(types_log.log_event(
+          types_log.AppLog,
+          "[error] " <> interaction_error_string(err),
+          option.Some(trace_id),
+          instance_id,
+        ))
+        Error(interaction_error_string(err))
+      }
     }
   })
   |> actor.on_message(handle_message)
@@ -109,6 +124,16 @@ pub fn stop(ref: PortOwnerRef, timeout_ms: Int) -> Result(Nil, Nil) {
   }
 }
 
+pub fn detect_exit(ref: PortOwnerRef, timeout_ms: Int) -> Result(Bool, Nil) {
+  let reply_to = process.new_subject()
+  process.send(subject(ref), CheckExit(reply_to))
+
+  case process.receive(reply_to, timeout_ms) {
+    Ok(result) -> Ok(result)
+    Error(_) -> Error(Nil)
+  }
+}
+
 fn handle_message(state: State, msg: Msg) -> actor.Next(State, Msg) {
   case msg {
     Stop -> {
@@ -121,6 +146,29 @@ fn handle_message(state: State, msg: Msg) -> actor.Next(State, Msg) {
       stop_server_best_effort(state)
       actor.stop()
     }
+
+    CheckExit(reply_to) -> {
+      let #(exited, next_state) = detect_server_exit(state)
+      process.send(reply_to, exited)
+      actor.continue(next_state)
+    }
+
+    PortExited -> {
+      let Running(
+        server: server,
+        log_sink: log_sink,
+        instance_id: instance_id,
+        trace_id: trace_id,
+        ..,
+      ) = state
+      actor.continue(Running(
+        server: server,
+        log_sink: log_sink,
+        instance_id: instance_id,
+        trace_id: trace_id,
+        exited: True,
+      ))
+    }
   }
 }
 
@@ -129,18 +177,51 @@ fn stop_server_best_effort(state: State) -> Nil {
   runner.stop_server(server)
 }
 
+fn detect_server_exit(state: State) -> #(Bool, State) {
+  let Running(
+    server: server,
+    log_sink: log_sink,
+    instance_id: instance_id,
+    trace_id: trace_id,
+    exited: exited,
+  ) = state
+  case exited {
+    True -> #(True, state)
+    False ->
+      case runner.detect_server_exit(server, trace_id) {
+        Ok(_) -> #(False, state)
+        Error(err) -> {
+          log_sink(types_log.log_event(
+            types_log.AppLog,
+            "[error] " <> interaction_error_string(err),
+            option.Some(trace_id),
+            instance_id,
+          ))
+          #(
+            True,
+            Running(
+              server: server,
+              log_sink: log_sink,
+              instance_id: instance_id,
+              trace_id: trace_id,
+              exited: True,
+            ),
+          )
+        }
+      }
+  }
+}
+
 fn spawn_log_pump(
   port_proc: port_process.PortProcess,
   log_sink: fn(types_log.LogEvent) -> Nil,
   instance_id: types_core.InstanceId,
   trace_id: types_core.TraceId,
-) -> Nil {
-  let _ =
-    process.spawn(fn() {
-      port_process.connect(port_proc, process.self())
-      log_pump_loop(port_proc, log_sink, instance_id, trace_id)
-    })
-  Nil
+  owner: process.Subject(Msg),
+) -> process.Pid {
+  process.spawn(fn() {
+    log_pump_loop(port_proc, log_sink, instance_id, trace_id, owner)
+  })
 }
 
 fn log_pump_loop(
@@ -148,6 +229,7 @@ fn log_pump_loop(
   log_sink: fn(types_log.LogEvent) -> Nil,
   instance_id: types_core.InstanceId,
   trace_id: types_core.TraceId,
+  owner: process.Subject(Msg),
 ) -> Nil {
   let #(next_process, outcome) = port_process.read_line(port_proc, 50)
 
@@ -166,14 +248,33 @@ fn log_pump_loop(
           log_sink(event)
         }
 
-        _ -> Nil
+        Ok(_) -> Nil
+
+        Error(_) -> {
+          log_sink(types_log.log_event(
+            types_log.AppLog,
+            "[raw] " <> line,
+            option.Some(trace_id),
+            instance_id,
+          ))
+        }
       }
 
-      log_pump_loop(next_process, log_sink, instance_id, trace_id)
+      log_pump_loop(next_process, log_sink, instance_id, trace_id, owner)
     }
 
-    Error(port_process.PortExited(_)) -> Nil
-    Error(_) -> log_pump_loop(next_process, log_sink, instance_id, trace_id)
+    Error(port_process.PortExited(code)) -> {
+      log_sink(types_log.log_event(
+        types_log.AppLog,
+        "[error] runner exited with code " <> int.to_string(code),
+        option.Some(trace_id),
+        instance_id,
+      ))
+      process.send(owner, PortExited)
+      Nil
+    }
+    Error(_) ->
+      log_pump_loop(next_process, log_sink, instance_id, trace_id, owner)
   }
 }
 

@@ -308,14 +308,21 @@ fn execute_runner_streaming(
     ..,
   ) = types_config.runner_exec_settings(config)
 
+  let #(extra_allow_read, extra_allow_exec) =
+    wrapper_env.runner_allowlists_for_command(
+      runner_path,
+      list.append(runner_args, args),
+    )
   let env =
-    wrapper_env.append(
+    wrapper_env.append_with_allowlists(
       env,
       wrapper,
       shutdown_timeout_ms,
       config.landlock_mode,
       config.landlock_policy,
       workspace,
+      extra_allow_read,
+      extra_allow_exec,
     )
 
   let types_config.RunnerExecSettings(

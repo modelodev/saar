@@ -101,6 +101,22 @@ pub fn managed_port_bind_failed_transitions_to_failed_test() {
   Nil
 }
 
+pub fn managed_port_start_server_failed_transitions_to_failed_test() {
+  port_helpers.ensure_wrapper_path()
+
+  let port = pick_free_port()
+  let cfg = config_with_port_range(port)
+
+  let manager = start_root(cfg)
+  let profile = crash_on_start_profile_managed_port()
+
+  let assert Ok(id1) = types_core.instance_id("inst-crash-start-1")
+
+  let a1 = start_instance(manager, profile, id1, cfg)
+  wait_for_failure_reason(a1, types_agent.StartServerFailed, 600)
+  Nil
+}
+
 pub fn port_injected_into_env_test() {
   port_helpers.ensure_wrapper_path()
 
@@ -541,6 +557,30 @@ fn log_server_profile_managed_port() -> types_profile.Profile {
     )
 
   profile_helpers.resolve_fixture_runner(profile)
+}
+
+fn crash_on_start_profile_managed_port() -> types_profile.Profile {
+  let assert Ok(raw) =
+    simplifile.read("./test/fixtures/source_local/profiles/crasher.json")
+
+  let assert Ok(profile0) = json.parse(raw, decoders.profile_decoder())
+
+  let types_profile.Profile(runner: runner0, ..) = profile0
+
+  let runtime = types_runner.ManagedPort(host_env_var: None, port_env_var: None)
+
+  let runner1 =
+    types_runner.Runner(
+      ..runner0,
+      tool_config: types_runner.ToolConfigScript(
+        "test/fixtures/source_local/runners/missing_server.py",
+      ),
+      runtime: runtime,
+    )
+
+  profile_helpers.resolve_fixture_runner(
+    types_profile.Profile(..profile0, runner: runner1),
+  )
 }
 
 fn start_echo_server_with_runtime(

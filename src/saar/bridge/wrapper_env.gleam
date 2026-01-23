@@ -13,6 +13,8 @@
 //// - Used by `saar/bridge/runner` and `saar/bridge/interaction`.
 //// - Consumes `saar/types/config` values.
 
+import envoy
+import filepath
 import gleam/int
 import gleam/json
 import gleam/list
@@ -32,6 +34,28 @@ pub fn append(
   landlock_policy: Option(types_config.LandlockPolicyConfig),
   workspace: String,
 ) -> List(#(String, String)) {
+  append_with_allowlists(
+    env,
+    wrapper,
+    shutdown_timeout_ms,
+    landlock_mode,
+    landlock_policy,
+    workspace,
+    [],
+    [],
+  )
+}
+
+pub fn append_with_allowlists(
+  env: List(#(String, String)),
+  wrapper: types_config.WrapperConfig,
+  shutdown_timeout_ms: Int,
+  landlock_mode: types_enums.LandlockMode,
+  landlock_policy: Option(types_config.LandlockPolicyConfig),
+  workspace: String,
+  extra_allow_read: List(String),
+  extra_allow_exec: List(String),
+) -> List(#(String, String)) {
   let types_config.WrapperConfig(
     read_buffer_bytes: read_buffer_bytes,
     control_line_bytes: control_line_bytes,
@@ -48,19 +72,33 @@ pub fn append(
     #("SAAR_LANDLOCK_MODE", types_enums.landlock_mode_to_string(landlock_mode)),
   ]
 
-  let policy_json = landlock_policy_json(landlock_policy, workspace)
+  let policy_json =
+    landlock_policy_json(
+      landlock_policy,
+      workspace,
+      extra_allow_read,
+      extra_allow_exec,
+    )
 
   let policy = case policy_json {
     option.Some(policy_json) -> [#("SAAR_LANDLOCK_POLICY_JSON", policy_json)]
     option.None -> []
   }
 
-  list.append(env, list.append(base, policy))
+  let debug_env = case envoy.get("SAAR_DEBUG_LOG_STDOUT") {
+    Ok("1") -> [#("DEBUG", "1")]
+    Ok("true") -> [#("DEBUG", "1")]
+    _ -> []
+  }
+
+  list.append(env, list.append(base, list.append(policy, debug_env)))
 }
 
 fn landlock_policy_json(
   policy_opt: Option(types_config.LandlockPolicyConfig),
   workspace: String,
+  extra_allow_read: List(String),
+  extra_allow_exec: List(String),
 ) -> Option(String) {
   case policy_opt {
     option.None -> option.None
@@ -71,16 +109,53 @@ fn landlock_policy_json(
         allow_write: allow_write0,
       ) = policy0
 
-      let allow_read = list.append(allow_read0, [workspace])
+      let allow_read =
+        unique_paths(list.append(allow_read0, [workspace, ..extra_allow_read]))
+      let allow_exec =
+        unique_paths(list.append(allow_exec0, [workspace, ..extra_allow_exec]))
       let allow_write = list.append(allow_write0, [workspace])
 
       json.object([
         #("allow_read", json.array(allow_read, json.string)),
-        #("allow_exec", json.array(allow_exec0, json.string)),
+        #("allow_exec", json.array(allow_exec, json.string)),
         #("allow_write", json.array(allow_write, json.string)),
       ])
       |> json.to_string
       |> option.Some
     }
   }
+}
+
+pub fn runner_allowlists_for_command(
+  runner_path: String,
+  runner_args: List(String),
+) -> #(List(String), List(String)) {
+  let #(base_read, base_exec) = runner_allowlists(runner_path)
+  let #(arg_read, arg_exec) = case runner_args {
+    [script, ..] -> runner_allowlists(script)
+    _ -> #([], [])
+  }
+
+  let allow_read = unique_paths(list.append(base_read, arg_read))
+  let allow_exec = unique_paths(list.append(base_exec, arg_exec))
+
+  #(allow_read, allow_exec)
+}
+
+fn runner_allowlists(runner_path: String) -> #(List(String), List(String)) {
+  let dir = filepath.directory_name(runner_path)
+  case filepath.is_absolute(dir) {
+    True -> #([dir], [dir])
+    False -> #([], [])
+  }
+}
+
+fn unique_paths(paths: List(String)) -> List(String) {
+  list.fold(paths, [], fn(acc, item) {
+    case list.contains(acc, item) {
+      True -> acc
+      False -> [item, ..acc]
+    }
+  })
+  |> list.reverse
 }

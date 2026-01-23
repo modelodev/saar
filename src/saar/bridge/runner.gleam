@@ -78,6 +78,9 @@ pub fn execute_transient(
     wrapper: wrapper,
   ) = types_config.runner_exec_settings(config)
 
+  let #(extra_allow_read, extra_allow_exec) =
+    wrapper_env.runner_allowlists_for_command(runner_path, runner_args)
+
   use events <- result.try(run_and_collect_events(
     runner_path,
     runner_args,
@@ -93,6 +96,8 @@ pub fn execute_transient(
     wrapper,
     config.landlock_mode,
     config.landlock_policy,
+    extra_allow_read,
+    extra_allow_exec,
     True,
   ))
 
@@ -142,6 +147,9 @@ pub fn run_provision(
   let args = list.append(runner_args, ["--provision"])
   let env = list.append(env, [#("SAAR_WORKSPACE", cwd)])
 
+  let #(extra_allow_read, extra_allow_exec) =
+    wrapper_env.runner_allowlists_for_command(runner_path, args)
+
   use events <- result.try(run_and_collect_events(
     runner_path,
     args,
@@ -157,6 +165,8 @@ pub fn run_provision(
     wrapper,
     config.landlock_mode,
     config.landlock_policy,
+    extra_allow_read,
+    extra_allow_exec,
     True,
   ))
 
@@ -204,15 +214,19 @@ pub fn start_server(
     ..,
   ) = types_config.runner_exec_settings(config)
 
+  let #(extra_allow_read, extra_allow_exec) =
+    wrapper_env.runner_allowlists_for_command(runner_path, runner_args)
   let env = list.append(env, [#("SAAR_WORKSPACE", cwd)])
   let env =
-    wrapper_env.append(
+    wrapper_env.append_with_allowlists(
       env,
       wrapper,
       shutdown_timeout_ms,
       config.landlock_mode,
       config.landlock_policy,
       cwd,
+      extra_allow_read,
+      extra_allow_exec,
     )
 
   use env <- result.try(managed_port_env.inject_managed_port_env(
@@ -350,16 +364,20 @@ fn run_and_collect_events(
   wrapper: types_config.WrapperConfig,
   landlock_mode: types_enums.LandlockMode,
   landlock_policy: option.Option(types_config.LandlockPolicyConfig),
+  extra_allow_read: List(String),
+  extra_allow_exec: List(String),
   stop_on_timeout: Bool,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let env =
-    wrapper_env.append(
+    wrapper_env.append_with_allowlists(
       env,
       wrapper,
       shutdown_timeout_ms,
       landlock_mode,
       landlock_policy,
       cwd,
+      extra_allow_read,
+      extra_allow_exec,
     )
 
   use process <- result.try(start_process(

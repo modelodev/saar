@@ -37,10 +37,13 @@ static void debug_log(const char *fmt, ...) {
   if (!debug_enabled()) {
     return;
   }
+  bool to_stdout = getenv("SAAR_WRAPPER_DEBUG_STDOUT") != NULL;
   va_list args;
   va_start(args, fmt);
-  vfprintf(stderr, fmt, args);
-  fprintf(stderr, "\n");
+  FILE *out = to_stdout ? stdout : stderr;
+  vfprintf(out, fmt, args);
+  fprintf(out, "\n");
+  fflush(out);
   va_end(args);
 }
 
@@ -441,7 +444,12 @@ static bool landlock_apply_policy_from_json(const char *json,
       LANDLOCK_ACCESS_FS_REMOVE_FILE | LANDLOCK_ACCESS_FS_MAKE_CHAR |
       LANDLOCK_ACCESS_FS_MAKE_DIR | LANDLOCK_ACCESS_FS_MAKE_REG |
       LANDLOCK_ACCESS_FS_MAKE_SOCK | LANDLOCK_ACCESS_FS_MAKE_FIFO |
-      LANDLOCK_ACCESS_FS_MAKE_BLOCK | LANDLOCK_ACCESS_FS_MAKE_SYM;
+      LANDLOCK_ACCESS_FS_MAKE_BLOCK | LANDLOCK_ACCESS_FS_MAKE_SYM
+#ifdef LANDLOCK_ACCESS_FS_REFER
+      | LANDLOCK_ACCESS_FS_REFER
+#endif
+      ;
+  debug_log("landlock: access_w=0x%llx", (unsigned long long)access_w);
 
   while (1) {
     pos = skip_json_ws(json, json_len, pos);
@@ -923,7 +931,19 @@ static int try_apply_landlock_policy_v0(const char *workspace_dir,
                               LANDLOCK_ACCESS_FS_MAKE_SOCK |
                               LANDLOCK_ACCESS_FS_MAKE_FIFO |
                               LANDLOCK_ACCESS_FS_MAKE_BLOCK |
-                              LANDLOCK_ACCESS_FS_MAKE_SYM;
+                              LANDLOCK_ACCESS_FS_MAKE_SYM
+#ifdef LANDLOCK_ACCESS_FS_REFER
+                              | LANDLOCK_ACCESS_FS_REFER
+#endif
+      ;
+#ifdef LANDLOCK_ACCESS_FS_REFER
+  debug_log("landlock: refer_bit=0x%llx",
+            (unsigned long long)LANDLOCK_ACCESS_FS_REFER);
+#else
+  debug_log("landlock: refer_bit=<unset>");
+#endif
+  debug_log("landlock: handled_access_fs=0x%llx",
+            (unsigned long long)ruleset.handled_access_fs);
 
   int ruleset_fd = ll_create_ruleset(&ruleset, sizeof(ruleset), 0);
   if (ruleset_fd < 0) {
@@ -992,6 +1012,19 @@ static int try_apply_landlock_policy_v0(const char *workspace_dir,
         NULL,
     };
 
+    const __u64 access_rwx =
+        LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR |
+        LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_REMOVE_DIR |
+        LANDLOCK_ACCESS_FS_REMOVE_FILE | LANDLOCK_ACCESS_FS_MAKE_CHAR |
+        LANDLOCK_ACCESS_FS_MAKE_DIR | LANDLOCK_ACCESS_FS_MAKE_REG |
+        LANDLOCK_ACCESS_FS_MAKE_SOCK | LANDLOCK_ACCESS_FS_MAKE_FIFO |
+        LANDLOCK_ACCESS_FS_MAKE_BLOCK | LANDLOCK_ACCESS_FS_MAKE_SYM
+#ifdef LANDLOCK_ACCESS_FS_REFER
+        | LANDLOCK_ACCESS_FS_REFER
+#endif
+        ;
+    debug_log("landlock: access_rwx=0x%llx", (unsigned long long)access_rwx);
+
     // A minimal allowlist for v0. We allow access beneath each path.
     for (int i = 0; allow_r[i]; i++) {
       int fd = open(allow_r[i], O_PATH | O_CLOEXEC);
@@ -1023,18 +1056,7 @@ static int try_apply_landlock_policy_v0(const char *workspace_dir,
       if (fd < 0) {
         continue;
       }
-      path.allowed_access = LANDLOCK_ACCESS_FS_READ_FILE |
-                            LANDLOCK_ACCESS_FS_READ_DIR |
-                            LANDLOCK_ACCESS_FS_WRITE_FILE |
-                            LANDLOCK_ACCESS_FS_REMOVE_DIR |
-                            LANDLOCK_ACCESS_FS_REMOVE_FILE |
-                            LANDLOCK_ACCESS_FS_MAKE_CHAR |
-                            LANDLOCK_ACCESS_FS_MAKE_DIR |
-                            LANDLOCK_ACCESS_FS_MAKE_REG |
-                            LANDLOCK_ACCESS_FS_MAKE_SOCK |
-                            LANDLOCK_ACCESS_FS_MAKE_FIFO |
-                            LANDLOCK_ACCESS_FS_MAKE_BLOCK |
-                            LANDLOCK_ACCESS_FS_MAKE_SYM;
+      path.allowed_access = access_rwx;
       path.parent_fd = fd;
       (void)ll_add_rule(ruleset_fd, LANDLOCK_RULE_PATH_BENEATH, &path, 0);
       close(fd);
@@ -1072,12 +1094,21 @@ static int run_child(char **argv) {
 #ifdef __linux__
   LandlockMode mode = read_landlock_mode();
   const char *workspace = getenv("SAAR_WORKSPACE");
+  debug_log("runner argv0: %s", argv[0]);
+  if (workspace) {
+    debug_log("runner workspace: %s", workspace);
+  }
+  const char *policy_json = getenv("SAAR_LANDLOCK_POLICY_JSON");
+  if (policy_json) {
+    debug_log("landlock policy: %s", policy_json);
+  }
   if (try_apply_landlock_policy_v0(workspace, mode) != 0) {
     _exit(LANDLOCK_UNAVAILABLE_EXIT_CODE);
   }
 #endif
 
   execvp(argv[0], argv);
+  debug_log("exec failed: %s (%s)", argv[0], strerror(errno));
   _exit(127);
 }
 
