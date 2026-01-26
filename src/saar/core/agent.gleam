@@ -646,6 +646,8 @@ fn start_interaction(
 
   let params = get_params(state.state) |> option.unwrap(dict.new())
 
+  let log_sink = fn(event) { internal_ingest_log(state.self_ref, event) }
+
   let worker_pid =
     process.spawn_unlinked(fn() {
       let AgentRequest(
@@ -670,6 +672,7 @@ fn start_interaction(
           state.artifact_registry,
           state.assigned_port,
           stream_mode,
+          log_sink,
         )
 
       internal_interaction_done(state.self_ref, out)

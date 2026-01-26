@@ -95,6 +95,7 @@ Perfiles en `tests/fixtures/profiles/*.json` con runners reales (scripts Python/
 **Valida:**
 - `ArtifactRef` con `WorkspacePath` válido
 - Validación en `workspace.gleam`
+- Filtrado de dotfiles salvo opt-in explícito
 - Servicio `/artifacts/:artifact_id`
 
 **Uso:** `runner_contract`, `workspace`, `bridge/runner`, `gateway/proxy`

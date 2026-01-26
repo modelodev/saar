@@ -127,7 +127,7 @@ Módulos:
 | `saar/core/task_store.gleam` | TaskStore (tareas diferidas) |
 | `saar/core/agent_manager.gleam` | Actor “manager” de instancias (start vía factory supervisor) |
 | `saar/gateway/http_server.gleam` | Servidor HTTP (mist) supervisado |
-| `saar/bridge/runner.gleam` | Ports a `generic_uvx`/`generic_uvx_server` |
+| `saar/bridge/runner.gleam` | Ports a `generic_uvx_unified` |
 | `saar/bridge/client.gleam` | HTTP para continuous (httpp) |
 
 ## 2. Imports y tipos del actor

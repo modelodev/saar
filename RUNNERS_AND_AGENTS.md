@@ -88,6 +88,16 @@ SAAR is designed to be **fail-fast**:
 
 As a runner author, prefer deterministic startup and clear error events.
 
+## Artifacts and dotfiles
+
+SAAR ignores dotfiles/dotdirs (path segments starting with `.`) when collecting
+artifacts, unless the profile explicitly opts in with an include pattern that
+mentions a dot segment (e.g. `.well-known/**` or `**/.well-known/**`).
+
+Runner guidance:
+- Put caches, installs, and temporary files under dot directories.
+- If you need a dot-path as a real artifact, update `artifact_config.include`.
+
 ## URL-backed FileRefs (important)
 
 When a client provides a file to SAAR, SAAR represents it as a **URL-backed file reference**.

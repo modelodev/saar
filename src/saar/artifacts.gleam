@@ -6,6 +6,7 @@
 //// Responsibilities:
 //// - Validate artifact paths against workspace rules.
 //// - Apply glob filtering (`*`, `?`, `**`) over path segments.
+//// - Ignore dotfiles/dotdirs unless includes opt in.
 ////
 //// Non-responsibilities:
 //// - Generating artifact ids.
@@ -39,6 +40,9 @@ pub type CollectedArtifact {
 ///
 /// The function validates each artifact `path` using `saar/workspace` and then
 /// filters it using `config.include` and `config.exclude` globs.
+///
+/// Dotfiles/dotdirs (path segments that start with `.`) are ignored unless an
+/// `include` pattern explicitly mentions a dot segment (e.g. `.well-known/**`).
 ///
 /// - If `config.include` is empty, the result is `Ok([])`.
 /// - A path is included when it matches any `include` pattern and matches no
@@ -87,9 +91,39 @@ fn matches_globs(
   include: List(String),
   exclude: List(String),
 ) -> Bool {
-  let included = include |> list.any(fn(pattern) { glob_match(pattern, path) })
-  let excluded = exclude |> list.any(fn(pattern) { glob_match(pattern, path) })
-  included && !excluded
+  case path_has_dot_segment(path), include_allows_dot(include) {
+    True, False -> False
+    _, _ -> {
+      let included =
+        include |> list.any(fn(pattern) { glob_match(pattern, path) })
+      let excluded =
+        exclude |> list.any(fn(pattern) { glob_match(pattern, path) })
+      included && !excluded
+    }
+  }
+}
+
+fn path_has_dot_segment(path: String) -> Bool {
+  path
+  |> string.split("/")
+  |> list.any(is_dot_segment)
+}
+
+fn include_allows_dot(include: List(String)) -> Bool {
+  include |> list.any(pattern_has_dot_segment)
+}
+
+fn pattern_has_dot_segment(pattern: String) -> Bool {
+  pattern
+  |> string.split("/")
+  |> list.any(is_dot_segment)
+}
+
+fn is_dot_segment(segment: String) -> Bool {
+  string.starts_with(segment, ".")
+  && segment != "."
+  && segment != ".."
+  && segment != ""
 }
 
 fn glob_match(pattern: String, path: String) -> Bool {

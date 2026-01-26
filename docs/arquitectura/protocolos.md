@@ -114,6 +114,8 @@ Contrato obligatorio para scripts runner que interactúen con SAAR.
 | Stop | En el core, SAAR cierra stdin/envía la línea `{"t":"stop"}` (terminada en `\n`) al wrapper y espera `shutdown_timeout_ms`; el wrapper aplica SIGTERM→timeout→SIGKILL al runner | - | - |
 | Status (continuous) | Health-check HTTP definido en perfil | - | - |
 
+**Runner unificado (uvx):** un runner puede soportar ambos modos (`cli`/`server`) y elegir el modo con `runner_def.mode` o por inferencia. Si `mode=server`, no se emite `t="result"` por interacción; solo logs del proceso y salida al terminar.
+
 **Nota wrapper (stdin de control):** SAAR escribe al wrapper líneas JSONL de control. La primera es `{"t":"input","payload":<SAAR_INPUT_JSON>}` y el wrapper reenvía `payload` al runner y cierra su stdin. Las líneas siguientes pueden ser `{"t":"stop"}` (o futuras). **Sin compatibilidad v0:** no se acepta el formato previo de input “implícito” (JSON único sin `t`).
 
 ### 1.2 Reglas
@@ -124,6 +126,7 @@ Contrato obligatorio para scripts runner que interactúen con SAAR.
 4. **Idempotencia** — `--provision` puede ejecutarse múltiples veces
 5. **Stop** — Wrapper debe salir tras `stop`/EOF propagando SIGTERM→SIGKILL a la subtree; SAAR no envía señales directas.
 6. **Artifacts first-class** — Paths validados (`WorkspacePath`) → UUID público
+   - Dotfiles/dotdirs se ignoran salvo opt-in con `artifact_config.include`.
 7. **Streaming y logs** — Eventos por STDOUT (JSONL); sin buffers infinitos
 8. **Interpolación** — SAAR resuelve plantillas `{{...}}` antes de invocar runners; el runner recibe `args/env_map` ya resueltos.
 
@@ -864,7 +867,8 @@ Ver también `integracion.md` para el contrato completo de integración (perfil+
     "api_key": {"source": "secret", "key": "OPENAI_API_KEY", "type": "string"}
   },
   "runner": {
-    "type": "generic_uvx",
+    "type": "generic_uvx_unified",
+    "mode": "auto",
     "tool_config": {"package": "aider-chat", "command": "aider"}
   },
   "interface": {

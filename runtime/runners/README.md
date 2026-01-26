@@ -17,7 +17,6 @@ Expectativas para cualquier runner:
 - Host/port llegan por env (`SAAR_HOST`/`SAAR_PORT` o `runtime.port_env_var/host_env_var`).
 - Input llega en `SAAR_INPUT_JSON` (ya validado) reenviado por el wrapper desde `{"t":"input","payload":<SAAR_INPUT_JSON>}`.
 - SAAR habla con el wrapper/runner vía una única abstracción (`saar/bridge/port_process.gleam`) para aislar la implementación de ports (FFI mínima).
-- **Artefactos:** por defecto se ignoran paths con segmentos que empiezan por `.`. Usa dotdirs para caches/instalaciones, o añade `artifact_config.include` explícito si necesitas exponerlos.
 
 Runners incluidos:
 - `generic_uvx_unified.py`: runner unificado (cli + server) con modo explícito o inferido.

@@ -106,7 +106,7 @@ fn config_with_port_range(
   min_port: Int,
   max_port: Int,
 ) -> types_config.SaarConfig {
-  let types_config.SaarConfig(runner: runner_cfg, ..) = cfg
+  let types_config.SaarConfig(runner: runner_cfg, timeouts: timeouts0, ..) = cfg
 
   let next_runner =
     types_config.RunnerSystemConfig(
@@ -115,8 +115,15 @@ fn config_with_port_range(
       port_range_max: max_port,
       managed_port_host: "127.0.0.1",
     )
+  let next_timeouts =
+    types_config.SaarTimeouts(
+      ..timeouts0,
+      status_timeout_ms: 200,
+      health_check_timeout_ms: 200,
+      call_timeout_ms: 2000,
+    )
 
-  types_config.SaarConfig(..cfg, runner: next_runner)
+  types_config.SaarConfig(..cfg, runner: next_runner, timeouts: next_timeouts)
 }
 
 fn echo_server_profile_managed_port() -> types_profile.Profile {

@@ -183,12 +183,19 @@ fn runner_to_json(runner: types_runner.Runner) -> Json {
 
 fn tool_config_to_json(config: types_runner.ToolConfig) -> Json {
   case config {
-    types_runner.ToolConfigPackage(package, command, with_packages) ->
-      json.object([
+    types_runner.ToolConfigPackage(package, command, with_packages, python) -> {
+      let base = [
         #("package", json.string(package)),
         #("command", json.string(command)),
         #("with_packages", json.array(with_packages, json.string)),
-      ])
+      ]
+      let fields = case python {
+        option.Some(value) ->
+          list.append(base, [#("python", json.string(value))])
+        option.None -> base
+      }
+      json.object(fields)
+    }
     types_runner.ToolConfigScript(script) ->
       json.object([#("script", json.string(script))])
   }

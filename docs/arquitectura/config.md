@@ -28,7 +28,8 @@ Un perfil JSON define completamente un agente.
     "model": {"source": "init", "key": "model", "default": "gpt-4", "type": "string"}
   },
   "runner": {
-    "type": "generic_uvx",
+    "type": "generic_uvx_unified",
+    "mode": "auto",
     "tool_config": {"package": "aider-chat", "command": "aider"}
   },
   "interface": {
@@ -84,9 +85,10 @@ Un perfil JSON define completamente un agente.
 ### 1.4 Runner
 
 ```json
-"runner": {
-  "type": "generic_uvx",
-  "tool_config": {
+  "runner": {
+    "type": "generic_uvx_unified",
+    "mode": "auto",
+    "tool_config": {
     "package": "aider-chat",
     "command": "aider",
     "with_packages": ["openai"]
@@ -301,6 +303,7 @@ pub fn cleanup(workspace_path: String) -> Result(Nil, String)
 ### 3.6 Retención (artefactos y logs)
 
 - **Artefactos:** el `artifact_registry` mantiene una whitelist en memoria `ArtifactId → #(InstanceId, WorkspacePath, mime)` para servir `/artifacts/:artifact_id`. SAAR v0 no implementa TTL/GC automático: los artefactos se eliminan al hacer `/delete` (stop ≠ delete).
+- **Filtro de dotfiles:** los paths con segmentos que empiezan por `.` se ignoran al recolectar artefactos, salvo opt-in con `artifact_config.include`.
 - **Logs:** buffer en memoria acotado por `log_buffer_bytes` (para SSE). SAAR v0 no persiste logs a disco.
 
 ### 3.6.1 Decisión v0: no hacer “sweep” de huérfanos por PID

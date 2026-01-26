@@ -629,9 +629,15 @@ fn config_with_port_range(port: Int) -> types_config.SaarConfig {
       managed_port_host: host,
     )
 
-  // Keep stop tests fast.
+  // Keep stop tests fast while still validating managed-port cleanup.
   let timeouts =
-    types_config.SaarTimeouts(..timeouts0, shutdown_timeout_ms: 250)
+    types_config.SaarTimeouts(
+      ..timeouts0,
+      shutdown_timeout_ms: 250,
+      status_timeout_ms: 200,
+      health_check_timeout_ms: 200,
+      call_timeout_ms: 2000,
+    )
 
   types_config.SaarConfig(..cfg0, runner: runner, timeouts: timeouts)
 }

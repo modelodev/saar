@@ -28,9 +28,10 @@ pub fn exec_command_prefers_exec_path_test() {
   let runner =
     base_runner(
       types_runner.ToolConfigPackage(
-        package: "aider-chat",
-        command: "aider",
-        with_packages: ["pip"],
+        "aider-chat",
+        "aider",
+        ["pip"],
+        option.None,
       ),
       option.Some("/tmp/generic_uvx_server.py"),
       ["--host", "127.0.0.1"],
@@ -54,11 +55,7 @@ pub fn exec_command_exec_path_script_keeps_args_test() {
 
 pub fn exec_command_uses_script_when_no_exec_path_test() {
   let runner =
-    base_runner(
-      types_runner.ToolConfigScript("echo.py"),
-      option.None,
-      ["--foo"],
-    )
+    base_runner(types_runner.ToolConfigScript("echo.py"), option.None, ["--foo"])
 
   types_runner.runner_exec_command(runner, "python3")
   |> should.equal(#("python3", ["echo.py", "--foo"]))
@@ -68,9 +65,10 @@ pub fn exec_command_uses_package_when_no_exec_path_test() {
   let runner =
     base_runner(
       types_runner.ToolConfigPackage(
-        package: "aider-chat",
-        command: "aider",
-        with_packages: ["pip", "uvicorn"],
+        "aider-chat",
+        "aider",
+        ["pip", "uvicorn"],
+        option.None,
       ),
       option.None,
       ["--bar"],

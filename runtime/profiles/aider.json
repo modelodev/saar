@@ -5,8 +5,8 @@
     "description": "Aider, AI coding companion in your local repository."
   },
   "parameters": {
-    "openrouter_api_key": { "source": "secret", "key": "openrouter_api_key", "type": "string" },
-    "model": { "source": "config", "key": "model", "type": "string" },
+    "openrouter_api_key": { "source": "secret", "key": "OPENROUTER_API_KEY", "type": "string" },
+    "model": { "source": "config", "key": "params.model", "type": "string" },
     "aider_yes_always": { "source": "fixed", "value": "true", "type": "string" },
     "aider_auto_commit": { "source": "fixed", "value": "false", "type": "string" },
     "aider_git": { "source": "fixed", "value": "false", "type": "string" },
@@ -38,6 +38,8 @@
       "--no-analytics",
       "--no-show-model-warnings",
       "--no-detect-urls",
+      "--no-show-release-notes",
+      "--no-browser",
       "--no-auto-test",
       "--no-check-update",
       "--no-git",
@@ -64,9 +66,7 @@
     "protocol": "runner",
     "capabilities": {
       "chat": {
-        "input_schema": { "$ref": "std:chat" },
-        "response_mode": "sync",
-        "streaming": false
+        "input_schema": { "$ref": "std:chat" }
       }
     }
   }

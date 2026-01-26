@@ -7,6 +7,5 @@ priv/sad_wrapper
 
 erl_crash.dump
 test-workspaces/
-runtime/
 
 inventario.yml

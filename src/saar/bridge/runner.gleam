@@ -38,6 +38,7 @@ import saar/types/config as types_config
 import saar/types/core as types_core
 import saar/types/enums as types_enums
 import saar/types/input as types_input
+import saar/types/log as types_log
 import saar/types/output as types_output
 import saar/types/runner as types_runner
 
@@ -68,6 +69,8 @@ pub fn execute_transient(
   ),
   streaming: Bool,
   timeout_ms: Int,
+  log_sink: fn(types_log.LogEvent) -> Nil,
+  instance_id: types_core.InstanceId,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   let types_config.RunnerExecSettings(
     max_runner_event_bytes: max_runner_event_bytes,
@@ -99,6 +102,8 @@ pub fn execute_transient(
     extra_allow_read,
     extra_allow_exec,
     True,
+    log_sink,
+    instance_id,
   ))
 
   use _ <- result.try(
@@ -110,8 +115,6 @@ pub fn execute_transient(
       )
     }),
   )
-
-  use instance_id <- result.try(instance_id_from_input(input))
 
   case first_result(events, input.context.trace_id) {
     Ok(response) ->
@@ -150,6 +153,8 @@ pub fn run_provision(
   let #(extra_allow_read, extra_allow_exec) =
     wrapper_env.runner_allowlists_for_command(runner_path, args)
 
+  use instance_id <- result.try(instance_id_from_input(input))
+
   use events <- result.try(run_and_collect_events(
     runner_path,
     args,
@@ -168,6 +173,8 @@ pub fn run_provision(
     extra_allow_read,
     extra_allow_exec,
     True,
+    fn(_) { Nil },
+    instance_id,
   ))
 
   use provision <- result.try(provision_result_from_events(
@@ -367,6 +374,8 @@ fn run_and_collect_events(
   extra_allow_read: List(String),
   extra_allow_exec: List(String),
   stop_on_timeout: Bool,
+  log_sink: fn(types_log.LogEvent) -> Nil,
+  instance_id: types_core.InstanceId,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let env =
     wrapper_env.append_with_allowlists(
@@ -407,6 +416,8 @@ fn run_and_collect_events(
     shutdown_timeout_ms,
     wrapper,
     stop_on_timeout,
+    log_sink,
+    instance_id,
   )
 }
 
@@ -420,6 +431,8 @@ fn read_events(
   shutdown_timeout_ms: Int,
   wrapper: types_config.WrapperConfig,
   stop_on_timeout: Bool,
+  log_sink: fn(types_log.LogEvent) -> Nil,
+  instance_id: types_core.InstanceId,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let call_deadline = deadline_from_timeout(timeout_ms)
   read_events_loop(
@@ -438,6 +451,8 @@ fn read_events(
     shutdown_timeout_ms,
     wrapper,
     stop_on_timeout,
+    log_sink,
+    instance_id,
   )
 }
 
@@ -451,6 +466,8 @@ fn read_events_loop(
   shutdown_timeout_ms: Int,
   wrapper: types_config.WrapperConfig,
   stop_on_timeout: Bool,
+  log_sink: fn(types_log.LogEvent) -> Nil,
+  instance_id: types_core.InstanceId,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let now_ms = ffi.now_ms()
 
@@ -479,6 +496,8 @@ fn read_events_loop(
         wrapper,
         stop_on_timeout,
         state,
+        log_sink,
+        instance_id,
       )
   }
 }
@@ -493,6 +512,8 @@ fn read_event(
   wrapper: types_config.WrapperConfig,
   stop_on_timeout: Bool,
   state: ReadState,
+  log_sink: fn(types_log.LogEvent) -> Nil,
+  instance_id: types_core.InstanceId,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let ReadState(events: events, ..) = state
 
@@ -511,6 +532,8 @@ fn read_event(
         stop_on_timeout,
         state,
         line,
+        log_sink,
+        instance_id,
       )
 
     Error(port_process.Timeout) ->
@@ -524,6 +547,8 @@ fn read_event(
         shutdown_timeout_ms,
         wrapper,
         stop_on_timeout,
+        log_sink,
+        instance_id,
       )
     Error(port_process.NoeolFragment(fragment)) ->
       Error(interaction_error(trace_id, "Fragmented output: " <> fragment))
@@ -552,6 +577,8 @@ fn handle_read_line(
   stop_on_timeout: Bool,
   state: ReadState,
   line: String,
+  log_sink: fn(types_log.LogEvent) -> Nil,
+  instance_id: types_core.InstanceId,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let now_ms = ffi.now_ms()
   use state <- result.try(update_state_for_timeout(
@@ -577,6 +604,8 @@ fn handle_read_line(
         shutdown_timeout_ms,
         wrapper,
         stop_on_timeout,
+        log_sink,
+        instance_id,
       )
     False ->
       handle_event_line(
@@ -590,6 +619,8 @@ fn handle_read_line(
         stop_on_timeout,
         state,
         line,
+        log_sink,
+        instance_id,
       )
   }
 }
@@ -605,6 +636,8 @@ fn handle_event_line(
   stop_on_timeout: Bool,
   state: ReadState,
   line: String,
+  log_sink: fn(types_log.LogEvent) -> Nil,
+  instance_id: types_core.InstanceId,
 ) -> Result(List(types_runner.RunnerEvent), types_output.InteractionError) {
   let ReadState(total_bytes: total_bytes, events: events, ..) = state
   use next_total <- result.try(enforce_stdout_limit(
@@ -614,6 +647,21 @@ fn handle_event_line(
     trace_id,
   ))
   use event <- result.try(decode_runner_event(line, trace_id))
+
+  case event {
+    types_runner.RunnerEventLog(message: msg, level: level) -> {
+      let line = "[" <> level <> "] " <> msg
+      let event =
+        types_log.log_event(
+          types_log.AppLog,
+          line,
+          option.Some(trace_id),
+          instance_id,
+        )
+      log_sink(event)
+    }
+    _ -> Nil
+  }
 
   read_events_loop(
     process,
@@ -625,6 +673,8 @@ fn handle_event_line(
     shutdown_timeout_ms,
     wrapper,
     stop_on_timeout,
+    log_sink,
+    instance_id,
   )
 }
 

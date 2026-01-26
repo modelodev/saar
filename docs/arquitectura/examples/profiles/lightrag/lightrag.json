@@ -18,7 +18,8 @@
     "embedding_model": { "source": "config", "key": "embedding_model", "type": "string" }
   },
   "runner": {
-    "type": "generic_uvx_server",
+    "type": "generic_uvx_unified",
+    "mode": "server",
     "tool_config": {
       "package": "lightrag-hku[api]",
       "command": "lightrag-server",
@@ -65,6 +66,8 @@
     },
     "capabilities": {
       "chat": {
+        "response_mode": "sync",
+        "streaming": false,
         "path": "/query",
         "method": "POST",
         "input_schema": {
@@ -88,9 +91,15 @@
         },
         "response": {
           "text_pointer": "/response"
+        },
+        "files": {
+          "accepts": false,
+          "max_files": 0
         }
       },
       "files": {
+        "response_mode": "sync",
+        "streaming": false,
         "path": "/documents/upload",
         "method": "POST",
         "input_schema": "std:files",
@@ -103,6 +112,11 @@
         },
         "response": {
           "text_pointer": "/message"
+        },
+        "files": {
+          "accepts": true,
+          "max_files": 1,
+          "ingest_effect": "eventual"
         }
       }
     }

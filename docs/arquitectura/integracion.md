@@ -79,13 +79,14 @@ Ejemplos:
 Contrato v0:
 - SAAR pasa siempre `FileRef.url` (equivalente a A2A `file.uri`).
 - Si el runner necesita una ruta local, debe materializarla dentro del workspace (download/copy) antes de invocar el agente real.
+- **Artefactos:** por defecto se ignoran paths con segmentos que empiezan por `.`; si un runner necesita exponerlos, debe opt-in con `artifact_config.include`.
 
 Si el cliente no tiene una URL pública, debe subir el fichero a un storage accesible (S3/GCS/HTTP) y enviar su URL.
 
 ## 6. Ejemplos
 
-- Perfil continuous con runner genérico (vNext): `arquitectura/examples/profiles/lightrag/lightrag_vnext.json`
-- Perfil transient (CLI) con runner genérico (vNext): `arquitectura/examples/profiles/aider/aider_vnext.json`
+- Perfil continuous con runner genérico: `arquitectura/examples/profiles/lightrag/lightrag.json`
+- Perfil transient (CLI) con runner genérico: `arquitectura/examples/profiles/aider/aider.json`
 - Runners genéricos: `arquitectura/examples/runners/README.md`
 
 ## 7. Capacidades

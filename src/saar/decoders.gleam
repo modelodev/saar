@@ -583,10 +583,16 @@ fn tool_config_package_decoder() -> decode.Decoder(types_runner.ToolConfig) {
       [],
       decode.list(of: decode.string),
     )
+    use python <- decode.optional_field(
+      "python",
+      option.None,
+      decode.optional(decode.string),
+    )
     decode.success(types_runner.ToolConfigPackage(
       package: package,
       command: command,
       with_packages: with_packages,
+      python: python,
     ))
   }
   decoder

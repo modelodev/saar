@@ -17,9 +17,10 @@ pub fn interpolate_runner_args_and_env_test() {
     types_runner.Runner(
       type_: "generic_uvx",
       tool_config: types_runner.ToolConfigPackage(
-        package: "pkg",
-        command: "tool",
-        with_packages: [],
+        "pkg",
+        "tool",
+        [],
+        option.None,
       ),
       runtime: types_runner.default_runtime_config(),
       env_map: dict.from_list([#("HOST", "{{runner.host}}")]),

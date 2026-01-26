@@ -86,13 +86,14 @@ Eventos mínimos:
 
 ### Artefactos
 - `artifacts` en `RunnerResponse` deben usar rutas relativas dentro del workspace. El decoder valida `WorkspacePath`, genera `id` y deja `url` vacío hasta que exista registro/almacenamiento público.
+- **Dotfiles/dotdirs:** por defecto se ignoran paths con segmentos que empiezan por `.`. Solo se incluyen si `artifact_config.include` menciona explícitamente un segmento con `.` (ej. `.well-known/**`).
 
 ### Red
 - Solo `managed_port` o `no_network`.
 - Host/port se pasan en env (`SAAR_HOST`/`SAAR_PORT` y/o `runtime.port_env_var`/`host_env_var`).
 
 ### Ejemplos
-- Ver `arquitectura/examples/runners/` para `generic_uvx` (CLI) y `generic_uvx_server` (server) ya listos para usarse con el wrapper.
+- Ver `arquitectura/examples/runners/` para `generic_uvx_unified` (cli + server) ya listo para usarse con el wrapper.
 
 ### Guías relacionadas
 - `RUNNERS_AND_AGENTS.md`: cómo los perfiles definen capacidades, cómo los runners las mapean a invocaciones reales y cómo los modos de respuesta afectan al cliente.

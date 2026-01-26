@@ -240,7 +240,7 @@ saar dry-run ./profiles/aider.json --input payload.json --capability chat
 
 	# Test de contrato runner
 	saar runner-test ./profiles/aider.json --input payload.json
-	saar runner-test --contract ./runners/generic_uvx.py
+	saar runner-test --contract ./runners/generic_uvx_unified.py
 	
 	# Info
 	saar --version

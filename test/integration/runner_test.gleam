@@ -19,6 +19,7 @@ import saar/types/config as types_config
 import saar/types/core as types_core
 import saar/types/enums as types_enums
 import saar/types/input as types_input
+import saar/types/log as types_log
 import saar/types/output as types_output
 import saar/types/runner as types_runner
 import simplifile
@@ -26,6 +27,15 @@ import test_assertions
 import youid/uuid
 
 const host = "127.0.0.1"
+
+fn test_instance_id() -> types_core.InstanceId {
+  let assert Ok(id) = types_core.instance_id("inst-runner-test")
+  id
+}
+
+fn test_log_sink() -> fn(types_log.LogEvent) -> Nil {
+  fn(_event) { Nil }
+}
 
 pub fn main() {
   gleeunit.main()
@@ -39,6 +49,8 @@ pub fn transient_echo_happy_test() {
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
   let config = default_config()
+  let instance_id = test_instance_id()
+  let log_sink = test_log_sink()
   let assert Ok(actor.Started(data: registry, ..)) =
     artifact_registry.start_unnamed()
 
@@ -53,6 +65,8 @@ pub fn transient_echo_happy_test() {
       registry,
       False,
       config.timeouts.call_timeout_ms,
+      log_sink,
+      instance_id,
     )
 
   let assert Ok(output) = result
@@ -78,6 +92,8 @@ pub fn transient_invalid_json_fails_test() {
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
   let config = default_config()
+  let instance_id = test_instance_id()
+  let log_sink = test_log_sink()
   let script = "print('not-json')"
   let assert Ok(actor.Started(data: registry, ..)) =
     artifact_registry.start_unnamed()
@@ -93,6 +109,8 @@ pub fn transient_invalid_json_fails_test() {
       registry,
       False,
       config.timeouts.call_timeout_ms,
+      log_sink,
+      instance_id,
     )
 
   let assert Error(err) = result
@@ -108,6 +126,8 @@ pub fn jsonl_invalid_line_is_infra_error() {
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
   let config = default_config()
+  let instance_id = test_instance_id()
+  let log_sink = test_log_sink()
 
   let script =
     "import json; print(json.dumps({'t':'log','level':'info','message':'ok'})); print('{bad json')"
@@ -126,6 +146,8 @@ pub fn jsonl_invalid_line_is_infra_error() {
       registry,
       False,
       config.timeouts.call_timeout_ms,
+      log_sink,
+      instance_id,
     )
 
   let assert Error(err) = result
@@ -148,6 +170,8 @@ pub fn greedy_logger_hits_limits_and_fails_cleanly() {
       ..base,
       limits: types_config.SaarLimits(..base.limits, max_stdout_bytes: 5000),
     )
+  let instance_id = test_instance_id()
+  let log_sink = test_log_sink()
 
   let assert Ok(actor.Started(data: registry, ..)) =
     artifact_registry.start_unnamed()
@@ -163,6 +187,8 @@ pub fn greedy_logger_hits_limits_and_fails_cleanly() {
       registry,
       False,
       config.timeouts.call_timeout_ms,
+      log_sink,
+      instance_id,
     )
 
   let assert Error(err) = result
@@ -205,6 +231,8 @@ pub fn streaming_chunks_ok_test() {
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
   let config = default_config()
+  let instance_id = test_instance_id()
+  let log_sink = test_log_sink()
   let assert Ok(actor.Started(data: registry, ..)) =
     artifact_registry.start_unnamed()
 
@@ -219,6 +247,8 @@ pub fn streaming_chunks_ok_test() {
       registry,
       True,
       config.timeouts.call_timeout_ms,
+      log_sink,
+      instance_id,
     )
 
   let assert Ok(_) = result
@@ -234,6 +264,8 @@ pub fn streaming_chunks_ok_test() {
       registry,
       False,
       config.timeouts.call_timeout_ms,
+      log_sink,
+      instance_id,
     )
 
   let assert Error(err) = result
@@ -249,6 +281,8 @@ pub fn runner_crash_returns_infra_error_test() {
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
   let config = default_config()
+  let instance_id = test_instance_id()
+  let log_sink = test_log_sink()
   let assert Ok(actor.Started(data: registry, ..)) =
     artifact_registry.start_unnamed()
 
@@ -263,6 +297,8 @@ pub fn runner_crash_returns_infra_error_test() {
       registry,
       False,
       config.timeouts.call_timeout_ms,
+      log_sink,
+      instance_id,
     )
 
   let assert Error(err) = result
@@ -289,6 +325,8 @@ pub fn transient_timeout_stops_runner_test() {
       runner_fixtures.default_chat_payload(),
       types_runner.ArtifactConfig(include: [], exclude: []),
     )
+  let instance_id = test_instance_id()
+  let log_sink = test_log_sink()
   let env = port_helpers.base_env(500, [#("SAAR_TIMEOUT_MARKER", marker)])
   let assert Ok(actor.Started(data: registry, ..)) =
     artifact_registry.start_unnamed()
@@ -304,6 +342,8 @@ pub fn transient_timeout_stops_runner_test() {
       registry,
       False,
       50,
+      log_sink,
+      instance_id,
     )
 
   let assert Error(err) = result
@@ -317,6 +357,8 @@ pub fn artifact_collection_respects_globs_test() {
   let workspace = "./build/test-workspaces/artifacts"
   let _ = ensure_workspace(workspace)
   let config = default_config()
+  let instance_id = test_instance_id()
+  let log_sink = test_log_sink()
   let assert Ok(actor.Started(data: registry, ..)) =
     artifact_registry.start_unnamed()
 
@@ -341,6 +383,8 @@ pub fn artifact_collection_respects_globs_test() {
       registry,
       False,
       config.timeouts.call_timeout_ms,
+      log_sink,
+      instance_id,
     )
 
   let assert Ok(types_output.InteractionResult(artifacts: artifacts, ..)) =
@@ -366,6 +410,8 @@ pub fn artifact_collection_respects_globs_test() {
       registry,
       False,
       config.timeouts.call_timeout_ms,
+      log_sink,
+      instance_id,
     )
 
   let assert Ok(types_output.InteractionResult(artifacts: artifacts, ..)) =
@@ -378,6 +424,8 @@ pub fn artifact_id_is_uuid_v7_test() {
   let workspace = "./build/test-workspaces/artifacts-uuid"
   let _ = ensure_workspace(workspace)
   let saar_config = default_config()
+  let instance_id = test_instance_id()
+  let log_sink = test_log_sink()
   let assert Ok(actor.Started(data: registry, ..)) =
     artifact_registry.start_unnamed()
 
@@ -402,6 +450,8 @@ pub fn artifact_id_is_uuid_v7_test() {
       registry,
       False,
       saar_config.timeouts.call_timeout_ms,
+      log_sink,
+      instance_id,
     )
 
   let assert Ok(types_output.InteractionResult(artifacts: artifacts, ..)) =

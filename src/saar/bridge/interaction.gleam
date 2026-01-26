@@ -49,6 +49,7 @@ import saar/types/config as types_config
 import saar/types/core as types_core
 import saar/types/enums as types_enums
 import saar/types/input as types_input
+import saar/types/log as types_log
 import saar/types/output as types_output
 import saar/types/profile as types_profile
 import saar/types/resolved_params
@@ -77,6 +78,7 @@ pub fn run(
   ),
   assigned_port: Option(Int),
   stream_mode: sink.StreamMode,
+  log_sink: fn(types_log.LogEvent) -> Nil,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   let meta = case profile.meta.lifecycle {
     types_enums.Transient ->
@@ -116,9 +118,17 @@ pub fn run(
                 config,
                 artifact_registry,
                 stream_sink,
+                log_sink,
               )
             _, _ ->
-              execute_runner_sync(input, workspace, config, artifact_registry)
+              execute_runner_sync(
+                input,
+                instance_id,
+                workspace,
+                config,
+                artifact_registry,
+                log_sink,
+              )
           }
       }
 
@@ -156,11 +166,13 @@ pub fn run(
 
 fn execute_runner_sync(
   input: types_input.SaarInput,
+  instance_id: types_core.InstanceId,
   workspace: String,
   config: types_config.SaarConfig,
   artifact_registry: process.Subject(
     artifact_registry_protocol.ArtifactRegistryMsg,
   ),
+  log_sink: fn(types_log.LogEvent) -> Nil,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   let #(runner_path, runner_args) = runner_command(input.runner_def, config)
 
@@ -195,6 +207,8 @@ fn execute_runner_sync(
     artifact_registry,
     False,
     0,
+    log_sink,
+    instance_id,
   )
 }
 
@@ -250,6 +264,7 @@ fn execute_runner_streaming(
     artifact_registry_protocol.ArtifactRegistryMsg,
   ),
   stream_sink: sink.StreamSink,
+  log_sink: fn(types_log.LogEvent) -> Nil,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   let types_config.SaarConfig(stream: stream_cfg, ..) = config
   let types_config.StreamConfig(
@@ -366,6 +381,7 @@ fn execute_runner_streaming(
     config,
     artifact_registry,
     instance_id,
+    log_sink,
   )
 }
 
@@ -380,6 +396,7 @@ fn read_runner_stream(
     artifact_registry_protocol.ArtifactRegistryMsg,
   ),
   instance_id: types_core.InstanceId,
+  log_sink: fn(types_log.LogEvent) -> Nil,
 ) -> Result(types_output.InteractionResult, types_output.InteractionError) {
   let #(proc, out) = port_process.read_line(proc, read_timeout_ms)
 
@@ -394,6 +411,7 @@ fn read_runner_stream(
         config,
         artifact_registry,
         instance_id,
+        log_sink,
       )
 
     Error(port_process.NoeolFragment(fragment)) ->
@@ -438,7 +456,16 @@ fn read_runner_stream(
       })
       |> result.try(fn(event) {
         case event {
-          types_runner.RunnerEventLog(_, _) ->
+          types_runner.RunnerEventLog(message: msg, level: level) -> {
+            let line = "[" <> level <> "] " <> msg
+            let event =
+              types_log.log_event(
+                types_log.AppLog,
+                line,
+                option.Some(input.context.trace_id),
+                instance_id,
+              )
+            log_sink(event)
             read_runner_stream(
               proc,
               read_timeout_ms,
@@ -448,7 +475,9 @@ fn read_runner_stream(
               config,
               artifact_registry,
               instance_id,
+              log_sink,
             )
+          }
 
           types_runner.RunnerEventChunk(delta) -> {
             let flags = emit_chunk(pump, input.context.trace_id, delta, flags)
@@ -461,6 +490,7 @@ fn read_runner_stream(
               config,
               artifact_registry,
               instance_id,
+              log_sink,
             )
           }
 

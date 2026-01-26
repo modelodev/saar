@@ -203,7 +203,7 @@ pub fn managed_port_interpolates_runner_args_test() {
 pub fn managed_port_streams_runner_logs_test() {
   port_helpers.ensure_wrapper_path()
 
-  let cfg = types_config.default_saar_config()
+  let cfg = config_with_port_range(pick_free_port())
   let manager = start_root(cfg)
   let profile = log_server_profile_managed_port()
 
@@ -478,9 +478,15 @@ fn config_with_port_range(port: Int) -> types_config.SaarConfig {
       managed_port_host: host,
     )
 
-  // Keep these tests fast.
+  // Keep these tests fast while still exercising managed-port semantics.
   let timeouts =
-    types_config.SaarTimeouts(..timeouts0, shutdown_timeout_ms: 250)
+    types_config.SaarTimeouts(
+      ..timeouts0,
+      shutdown_timeout_ms: 250,
+      status_timeout_ms: 200,
+      health_check_timeout_ms: 200,
+      call_timeout_ms: 2000,
+    )
 
   types_config.SaarConfig(..cfg0, runner: runner, timeouts: timeouts)
 }

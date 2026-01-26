@@ -1,0 +1,78 @@
+[server]
+host = "127.0.0.1"
+port = 8081
+
+[auth]
+api_key = "dev"
+
+[limits]
+call_timeout_ms = 120000
+status_timeout_ms = 1000
+shutdown_timeout_ms = 10000
+health_check_timeout_ms = 1000
+max_runner_event_bytes = 10485760
+
+[profiles]
+sources = [
+  {type = "dir", path = "."}
+]
+git_cache_dir = "./test/fixtures/.cache/git"
+
+[runners]
+python_bin = "/usr/bin/python3.14"
+
+[workspaces]
+directory = "/.../workspaces"
+
+[security]
+landlock_mode = "enforced"
+
+[security.landlock]
+allow_read = [
+  "/usr",
+  "/usr/bin",
+  "/usr/lib",
+  "/usr/lib64",
+  "/etc",
+  "/proc",
+  "/dev",
+  "/dev/null",
+  "/dev/random",
+  "/dev/urandom",
+  "/dev/shm",
+  "/bin",
+  "/lib",
+  "/lib64",
+  "/sys/fs/cgroup",
+  "/home/yo/.local/bin"
+]
+allow_exec = [
+  "/usr",
+  "/usr/bin",
+  "/usr/lib",
+  "/usr/lib64",
+  "/usr/lib/python-exec",
+  "/bin",
+  "/lib",
+  "/lib64",
+  "/dev/null",
+  "/home/yo/.local/bin"
+]
+allow_write = ["/tmp", "/var/tmp", "/dev/null", "/dev/shm"]
+
+[params]
+gemini_url = ""
+openrouter_url = ""
+openrouter_temperature = "0.1"
+sam_base_url = ""
+sam_tenant_id = ""
+apify_timeout = 300
+model = ""
+embedding_model = ""
+embedding_dimensions = 3072
+litellm_url = ""
+shp_site_url = ""
+shp_doc_library = ""
+shp_max_depth = 15
+shp_max_folders_per_level = 100
+shp_level_delay = 0.5

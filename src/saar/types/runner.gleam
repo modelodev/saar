@@ -100,6 +100,7 @@ pub type ToolConfig {
     package: String,
     command: String,
     with_packages: List(String),
+    python: Option(String),
   )
   ToolConfigScript(script: String)
 }
@@ -189,13 +190,13 @@ pub fn runner_exec_command(
     Some(path) ->
       case runner.tool_config {
         ToolConfigScript(_) -> #(python_bin, [path, ..runner.args])
-        ToolConfigPackage(_, _, _) -> #(python_bin, [path])
+        ToolConfigPackage(_, _, _, _) -> #(python_bin, [path])
       }
     None -> {
       case runner.tool_config {
         ToolConfigScript(script) -> #(python_bin, [script, ..runner.args])
 
-        ToolConfigPackage(package, command, with_packages) -> {
+        ToolConfigPackage(package, command, with_packages, _) -> {
           let args = list.append([package, ..with_packages], runner.args)
           #(command, args)
         }

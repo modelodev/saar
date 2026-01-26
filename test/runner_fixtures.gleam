@@ -32,6 +32,7 @@ pub fn base_input(
         package: "aider-chat",
         command: "aider",
         with_packages: [],
+        python: option.None,
       ),
       runtime: types_runner.default_runtime_config(),
       env_map: dict.new(),

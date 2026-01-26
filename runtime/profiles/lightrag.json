@@ -2,26 +2,24 @@
   "meta": {
     "id": "lightrag",
     "lifecycle": "continuous",
-    "description": "LightRAG: Document-based RAG queries (vNext: explicit files semantics)"
+    "description": "LightRAG: Document-based RAG queries"
   },
   "parameters": {
     "llm_binding": { "source": "fixed", "value": "openai", "type": "string" },
     "embedding_binding": { "source": "fixed", "value": "openai", "type": "string" },
     "embedding_dim": { "source": "fixed", "value": 3072, "type": "int" },
-
-    "embedding_binding_api_key": { "source": "secret", "key": "gemini_api_key", "type": "string" },
-    "embedding_binding_host": { "source": "config", "key": "gemini_url", "type": "string" },
-
-    "llm_binding_api_key": { "source": "secret", "key": "openrouter_api_key", "type": "string" },
-    "llm_binding_host": { "source": "config", "key": "openrouter_url", "type": "string" },
-    "llm_model": { "source": "config", "key": "model", "type": "string" },
-    "embedding_model": { "source": "config", "key": "embedding_model", "type": "string" },
-
-    "lightrag_api_key": { "source": "secret", "key": "lightrag_api_key", "type": "string" },
-    "name": { "source": "fixed", "value": "lightrag", "type": "string" }
+    "lightrag_api_key": { "source": "fixed", "value": "alsjdlaskjd191039uh", "type": "string" },
+    "name": { "source": "fixed", "value": "lightrag", "type": "string" },
+    "embedding_binding_api_key": { "source": "secret", "key": "GEMINI_API_KEY", "type": "string" },
+    "embedding_binding_host": { "source": "config", "key": "params.gemini_url", "type": "string" },
+    "llm_binding_api_key": { "source": "secret", "key": "OPENROUTER_API_KEY", "type": "string" },
+    "llm_binding_host": { "source": "config", "key": "params.openrouter_url", "type": "string" },
+    "llm_model": { "source": "config", "key": "params.model", "type": "string" },
+    "embedding_model": { "source": "config", "key": "params.embedding_model", "type": "string" }
   },
   "runner": {
-    "type": "generic_uvx_server",
+    "type": "generic_uvx_unified",
+    "mode": "server",
     "tool_config": {
       "package": "lightrag-hku[api]",
       "command": "lightrag-server",
@@ -41,21 +39,19 @@
       "port_env_var": "PORT",
       "host_env_var": "HOST"
     },
+    "args": ["--host", "{{runner.host}}", "--port", "{{runner.port}}"],
     "env_map": {
       "LLM_BINDING": "{{params.llm_binding}}",
       "EMBEDDING_BINDING": "{{params.embedding_binding}}",
       "EMBEDDING_DIM": "{{params.embedding_dim}}",
+      "LIGHTRAG_API_KEY": "{{params.lightrag_api_key}}",
       "NAME": "{{params.name}}",
-
       "EMBEDDING_BINDING_API_KEY": "{{params.embedding_binding_api_key}}",
       "EMBEDDING_BINDING_HOST": "{{params.embedding_binding_host}}",
-
       "LLM_BINDING_API_KEY": "{{params.llm_binding_api_key}}",
       "LLM_BINDING_HOST": "{{params.llm_binding_host}}",
       "LLM_MODEL": "{{params.llm_model}}",
-      "EMBEDDING_MODEL": "{{params.embedding_model}}",
-
-      "LIGHTRAG_API_KEY": "{{params.lightrag_api_key}}"
+      "EMBEDDING_MODEL": "{{params.embedding_model}}"
     }
   },
   "interface": {
@@ -71,8 +67,8 @@
     },
     "capabilities": {
       "chat": {
-        "response_mode": "sync",
-        "streaming": false,
+        "path": "/query",
+        "method": "POST",
         "input_schema": {
           "base": "std:chat",
           "extra_fields": {
@@ -83,8 +79,6 @@
             }
           }
         },
-        "path": "/query",
-        "method": "POST",
         "body": {
           "type": "json",
           "template": {
@@ -96,34 +90,21 @@
         },
         "response": {
           "text_pointer": "/response"
-        },
-        "files": {
-          "accepts": false,
-          "max_files": 0
         }
       },
       "files": {
-        "response_mode": "sync",
-        "streaming": false,
-        "input_schema": "std:files",
-
-        "path": "/upload",
+        "path": "/documents/upload",
         "method": "POST",
+        "input_schema": "std:files",
         "body": {
           "type": "multipart",
           "fields": {},
-          "files": [{ "field": "file", "source_pointer": "/input/files/0" }]
+          "files": [
+            { "field": "file", "source_pointer": "/input/files/0" }
+          ]
         },
         "response": {
-          "text_pointer": "/message",
-          "capture": {
-            "track_id": "/track_id"
-          }
-        },
-        "files": {
-          "accepts": true,
-          "max_files": 1,
-          "ingest_effect": "eventual"
+          "text_pointer": "/message"
         }
       }
     }
