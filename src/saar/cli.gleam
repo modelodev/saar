@@ -78,6 +78,7 @@ pub type AgentCommand {
   AgentStart(instance_id: String, config_path: Option(String))
   AgentStop(instance_id: String, config_path: Option(String))
   AgentInfo(instance_id: String, config_path: Option(String))
+  AgentLogs(instance_id: String, config_path: Option(String))
   AgentParams(profile_id: String, config_path: Option(String))
   AgentCapability(
     profile_id: String,
@@ -371,6 +372,11 @@ fn parse_agent(args: List(String)) -> Result(Command, ParseError) {
         ["info", instance_id] ->
           Ok(
             Agent(AgentInfo(instance_id: instance_id, config_path: config_path)),
+          )
+
+        ["logs", instance_id] ->
+          Ok(
+            Agent(AgentLogs(instance_id: instance_id, config_path: config_path)),
           )
 
         ["params", profile_id] ->

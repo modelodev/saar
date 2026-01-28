@@ -171,6 +171,13 @@ pub fn interact_sets_stream_accept_header() {
   should.equal(dict.get(headers, "accept"), Ok("text/event-stream"))
 }
 
+pub fn logs_stream_sets_accept_header() {
+  let cfg = types_config.default_saar_config()
+  let headers = cli_http.logs_stream_headers(cfg)
+
+  should.equal(dict.get(headers, "accept"), Ok("text/event-stream"))
+}
+
 pub fn interact_builds_inputs_from_flags() {
   let flags =
     cli_http.InteractFlags(content: Some("hola"), extra_fields: dict.new())
