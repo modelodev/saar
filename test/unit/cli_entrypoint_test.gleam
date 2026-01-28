@@ -135,6 +135,43 @@ pub fn main_serve_background_plan_exit_0() {
   should.equal(string_contains(out, "port=9090"), True)
 }
 
+pub fn main_agent_list_builds_plan() {
+  let plan =
+    saar.plan(
+      argv: ["agent", "list"],
+      program: "saar",
+      get_env: env_none,
+      read_file: read_file_stub,
+      status: fn(_) { daemon_control.NotRunning },
+      kill: fn(_, _) { Error(daemon_control.NoServer) },
+    )
+
+  should.equal(saar.action_kind(plan), saar.PlanAgent)
+  should.equal(saar.exit_code(plan), saar.exit_ok)
+}
+
+pub fn main_agent_create_builds_plan() {
+  let plan =
+    saar.plan(
+      argv: [
+        "agent",
+        "create",
+        "--profile",
+        "aider",
+        "--instance",
+        "aider-1",
+      ],
+      program: "saar",
+      get_env: env_none,
+      read_file: read_file_stub,
+      status: fn(_) { daemon_control.NotRunning },
+      kill: fn(_, _) { Error(daemon_control.NoServer) },
+    )
+
+  should.equal(saar.action_kind(plan), saar.PlanAgent)
+  should.equal(saar.exit_code(plan), saar.exit_ok)
+}
+
 fn env_none(_key: String) -> Result(String, Nil) {
   Error(Nil)
 }

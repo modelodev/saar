@@ -20,16 +20,21 @@
 
 import argv
 import envoy
+import gleam/dict
 import gleam/erlang/process
+import gleam/http
 import gleam/int
 import gleam/io
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import gleam/result
 import gleam/string
 import saar/app_state
+import saar/bridge/http_client
 import saar/cli
+import saar/cli_http
 import saar/config_loader
 import saar/core/root_supervisor
 import saar/core/supervisor_names
@@ -39,6 +44,7 @@ import saar/ffi/daemon
 import saar/ffi/signals
 import saar/profiles_sources
 import saar/types/config as types_config
+import saar/types/core as types_core
 import simplifile
 import tom
 
@@ -55,10 +61,19 @@ pub opaque type RunPlan {
   )
 }
 
+/// High-level action kind for inspecting a run plan.
+pub type PlanAction {
+  PlanNoAction
+  PlanServeForeground
+  PlanServeBackground
+  PlanAgent
+}
+
 type Action {
   NoAction
   ServeForeground(ForegroundPlan)
   ServeBackground(BackgroundPlan)
+  Agent(AgentPlan)
 }
 
 type ForegroundPlan {
@@ -72,6 +87,15 @@ type BackgroundPlan {
     pidfile: String,
     logfile: String,
   )
+}
+
+type AgentPlan {
+  AgentPlan(config: types_config.SaarConfig, command: cli.AgentCommand)
+}
+
+type AgentResult {
+  AgentSuccess(List(String))
+  AgentFailure(List(String))
 }
 
 /// Exit code for successful execution.
@@ -126,6 +150,8 @@ pub fn plan(
     Ok(cli.Serve(args)) ->
       plan_serve(args, program, get_env, read_file, status_fn, kill_fn)
 
+    Ok(cli.Agent(cmd)) -> plan_agent(cmd, get_env, read_file)
+
     Ok(cli.Validate(_)) -> unimplemented("validate")
     Ok(cli.DryRun(_)) -> unimplemented("dry-run")
     Ok(cli.RunnerTest(_)) -> unimplemented("runner-test")
@@ -138,6 +164,18 @@ pub fn plan(
 pub fn exit_code(plan: RunPlan) -> Int {
   let RunPlan(exit_code: code, ..) = plan
   code
+}
+
+/// Returns the high-level action kind from a `RunPlan`.
+pub fn action_kind(plan: RunPlan) -> PlanAction {
+  let RunPlan(action: action, ..) = plan
+
+  case action {
+    NoAction -> PlanNoAction
+    ServeForeground(_) -> PlanServeForeground
+    ServeBackground(_) -> PlanServeBackground
+    Agent(_) -> PlanAgent
+  }
 }
 
 /// Returns the stdout lines from a `RunPlan`.
@@ -177,6 +215,19 @@ fn execute_plan(plan: RunPlan) -> Nil {
         Error(_) -> halt(exit_operational)
       }
     }
+
+    Agent(agent_plan) ->
+      case execute_agent_plan(agent_plan) {
+        AgentSuccess(lines) -> {
+          lines |> list.each(io.println)
+          halt(code)
+        }
+
+        AgentFailure(lines) -> {
+          lines |> list.each(io.println_error)
+          halt(exit_operational)
+        }
+      }
   }
 }
 
@@ -269,6 +320,14 @@ fn install_sigterm_handler(ref: root_supervisor.SupervisorRef) -> Nil {
 fn help_text() -> List(String) {
   [
     "saar serve [--port <port>] [--config <path>] [-b|--background] [-k|--kill] [--status]",
+    "saar agent list [--config <path>]",
+    "saar agent create --profile <id> --instance <id> [--config <path>]",
+    "saar agent status <instance_id> [--config <path>]",
+    "saar agent start <instance_id> [--config <path>]",
+    "saar agent stop <instance_id> [--config <path>]",
+    "saar agent info <instance_id> [--config <path>]",
+    "saar agent params <profile_id> [--config <path>]",
+    "saar agent capability <profile_id> <capability> [--config <path>]",
     "saar validate <path> [--config <path>]",
     "saar dry-run --profile <id> --input <path> --capability <cap> [--config <path>]",
     "saar runner-test <profile_path> [--input <path>] [--config <path>]",
@@ -377,6 +436,211 @@ fn plan_serve(
               config_path: resolved_config_path,
             )),
           )
+        }
+      }
+    }
+  }
+}
+
+fn plan_agent(
+  cmd: cli.AgentCommand,
+  get_env: fn(String) -> Result(String, Nil),
+  read_file: fn(String) -> Result(String, simplifile.FileError),
+) -> RunPlan {
+  let config_path =
+    config_loader.resolve_config_path_with_env(agent_config_path(cmd), get_env)
+
+  let loaded_cfg = config_loader.load_from_path(config_path, get_env, read_file)
+
+  case loaded_cfg {
+    Error(err) -> {
+      let msg = "config load failed: " <> string.inspect(err)
+      RunPlan(exit_operational, [], [msg], NoAction)
+    }
+
+    Ok(cfg) ->
+      RunPlan(exit_ok, [], [], Agent(AgentPlan(config: cfg, command: cmd)))
+  }
+}
+
+fn agent_config_path(cmd: cli.AgentCommand) -> Option(String) {
+  case cmd {
+    cli.AgentList(config_path) -> config_path
+    cli.AgentCreate(config_path: config_path, ..) -> config_path
+    cli.AgentStatus(config_path: config_path, ..) -> config_path
+    cli.AgentStart(config_path: config_path, ..) -> config_path
+    cli.AgentStop(config_path: config_path, ..) -> config_path
+    cli.AgentInfo(config_path: config_path, ..) -> config_path
+    cli.AgentParams(config_path: config_path, ..) -> config_path
+    cli.AgentCapability(config_path: config_path, ..) -> config_path
+  }
+}
+
+fn execute_agent_plan(plan: AgentPlan) -> AgentResult {
+  let AgentPlan(config: cfg, command: cmd) = plan
+
+  case cmd {
+    cli.AgentList(_) ->
+      execute_agent_request(cfg, http.Get, "/sys/agents", None)
+
+    cli.AgentCreate(profile_id: profile_id, instance_id: instance_id, ..) -> {
+      let body =
+        json.object([
+          #("profile_id", json.string(profile_id)),
+          #("instance_id", json.string(instance_id)),
+        ])
+        |> json.to_string
+
+      execute_agent_request(cfg, http.Post, "/sys/agents", Some(body))
+    }
+
+    cli.AgentStatus(instance_id: instance_id, ..) ->
+      execute_agent_request(
+        cfg,
+        http.Get,
+        "/sys/agents/" <> instance_id <> "/status",
+        None,
+      )
+
+    cli.AgentStart(instance_id: instance_id, ..) ->
+      execute_agent_request(
+        cfg,
+        http.Post,
+        "/sys/agents/" <> instance_id <> "/start",
+        None,
+      )
+
+    cli.AgentStop(instance_id: instance_id, ..) ->
+      execute_agent_request(
+        cfg,
+        http.Post,
+        "/sys/agents/" <> instance_id <> "/stop",
+        None,
+      )
+
+    cli.AgentInfo(instance_id: instance_id, ..) ->
+      execute_agent_request(cfg, http.Get, "/agents/" <> instance_id, None)
+
+    cli.AgentParams(profile_id: profile_id, ..) ->
+      execute_agent_params(cfg, profile_id)
+
+    cli.AgentCapability(profile_id: profile_id, capability: capability, ..) ->
+      execute_agent_capability(cfg, profile_id, capability)
+  }
+}
+
+fn execute_agent_request(
+  cfg: types_config.SaarConfig,
+  method: http.Method,
+  path: String,
+  body: Option(String),
+) -> AgentResult {
+  let base_url = cli_http.base_url_from_config(cfg)
+  let url = base_url <> path
+
+  let auth = cli_http.auth_header_from_config(cfg)
+
+  let headers =
+    dict.new()
+    |> dict.insert(auth.0, auth.1)
+    |> dict.insert("accept", "application/json")
+
+  let headers = case body {
+    None -> headers
+    Some(_) -> dict.insert(headers, "content-type", "application/json")
+  }
+
+  let types_config.SaarConfig(timeouts: timeouts, limits: limits, ..) = cfg
+  let types_config.SaarTimeouts(call_timeout_ms: timeout_ms, ..) = timeouts
+  let types_config.SaarLimits(max_http_response_bytes: max_body_bytes, ..) =
+    limits
+
+  case
+    http_client.request_sync_string(
+      method,
+      url,
+      headers,
+      body,
+      timeout_ms,
+      max_body_bytes,
+    )
+  {
+    Ok(http_client.HttpResponse(status: status, body: response_body, ..)) ->
+      case status >= 200 && status < 300 {
+        True -> AgentSuccess([response_body])
+        False -> AgentFailure([http_error_body(status, response_body)])
+      }
+
+    Error(err) -> AgentFailure([http_client.http_error_to_string(err)])
+  }
+}
+
+fn http_error_body(status: Int, body: String) -> String {
+  case string.is_empty(body) {
+    True -> "http error " <> int.to_string(status)
+    False -> body
+  }
+}
+
+fn execute_agent_params(
+  cfg: types_config.SaarConfig,
+  profile_id: String,
+) -> AgentResult {
+  case profiles_sources.load_profiles_from_sources(cfg) {
+    Error(err) ->
+      AgentFailure(["failed to load profiles: " <> string.inspect(err)])
+
+    Ok(profiles) -> {
+      let id = types_core.profile_id(profile_id)
+
+      case dict.get(profiles, id) {
+        Error(_) -> AgentFailure(["profile not found: " <> profile_id])
+        Ok(profile) -> {
+          let reports = cli_http.resolve_param_status(profile, cfg, envoy_get)
+
+          let header = ["profile: " <> profile_id, "creation params:"]
+
+          let lines = case reports {
+            [] -> list.append(header, ["- (none)"])
+            _ ->
+              list.append(
+                header,
+                reports |> list.map(cli_http.render_param_report),
+              )
+          }
+
+          AgentSuccess(lines)
+        }
+      }
+    }
+  }
+}
+
+fn execute_agent_capability(
+  cfg: types_config.SaarConfig,
+  profile_id: String,
+  capability: String,
+) -> AgentResult {
+  case profiles_sources.load_profiles_from_sources(cfg) {
+    Error(err) ->
+      AgentFailure(["failed to load profiles: " <> string.inspect(err)])
+
+    Ok(profiles) -> {
+      let id = types_core.profile_id(profile_id)
+
+      case dict.get(profiles, id) {
+        Error(_) -> AgentFailure(["profile not found: " <> profile_id])
+        Ok(profile) -> {
+          case cli_http.capability_schema_lines(profile, capability) {
+            Ok(schema_lines) ->
+              AgentSuccess([
+                "capability: " <> capability,
+                "input_schema:",
+                ..schema_lines
+              ])
+
+            Error(_) -> AgentFailure(["capability not found: " <> capability])
+          }
         }
       }
     }
