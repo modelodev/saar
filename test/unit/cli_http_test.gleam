@@ -152,6 +152,40 @@ pub fn agent_capability_reads_schema() {
   )
 }
 
+pub fn interact_body_builds_from_input_file() {
+  let raw = "{\"messages\":[{\"role\":\"user\",\"content\":\"hola\"}]}"
+  let assert Ok(inputs) = cli_http.parse_inputs_json(raw)
+
+  let body = cli_http.build_interact_body("chat", inputs, None)
+
+  should.equal(
+    body,
+    "{\"capability\":\"chat\",\"inputs\":{\"messages\":[{\"role\":\"user\",\"content\":\"hola\"}]}}",
+  )
+}
+
+pub fn interact_sets_stream_accept_header() {
+  let cfg = types_config.default_saar_config()
+  let headers = cli_http.interact_headers(cfg, True)
+
+  should.equal(dict.get(headers, "accept"), Ok("text/event-stream"))
+}
+
+pub fn interact_builds_inputs_from_flags() {
+  let flags =
+    cli_http.InteractFlags(content: Some("hola"), extra_fields: dict.new())
+
+  let assert Ok(inputs) =
+    cli_http.build_inputs_from_flags(types_profile.SchemaChat, flags)
+
+  let body = cli_http.build_interact_body("chat", inputs, None)
+
+  should.equal(
+    body,
+    "{\"capability\":\"chat\",\"inputs\":{\"messages\":[{\"role\":\"user\",\"content\":\"hola\"}]}}",
+  )
+}
+
 fn dummy_runner() -> types_runner.Runner {
   types_runner.Runner(
     type_: "dummy",

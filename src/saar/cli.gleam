@@ -25,6 +25,7 @@ pub type Command {
   DryRun(DryRunArgs)
   RunnerTest(RunnerTestArgs)
   Agent(AgentCommand)
+  Interact(InteractArgs)
   Version
   Help(Option(String))
 }
@@ -85,6 +86,19 @@ pub type AgentCommand {
   )
 }
 
+pub type InteractArgs {
+  InteractArgs(
+    instance_id: String,
+    capability: String,
+    input_path: Option(String),
+    content: Option(String),
+    mode: Option(String),
+    stream: Bool,
+    trace_id: Option(String),
+    config_path: Option(String),
+  )
+}
+
 pub type ParseError {
   MissingCommand
   UnknownCommand(name: String, suggestions: List(String))
@@ -115,12 +129,13 @@ fn parse_subcommand(
     "dry-run" -> parse_dry_run(args)
     "runner-test" -> parse_runner_test(args)
     "agent" -> parse_agent(args)
+    "interact" -> parse_interact(args)
     _ -> Error(UnknownCommand(cmd, known_commands()))
   }
 }
 
 fn known_commands() -> List(String) {
-  ["serve", "validate", "dry-run", "runner-test", "agent"]
+  ["serve", "validate", "dry-run", "runner-test", "agent", "interact"]
 }
 
 /// Maps parsing results to CLI exit codes.
@@ -379,6 +394,49 @@ fn parse_agent(args: List(String)) -> Result(Command, ParseError) {
   }
 }
 
+fn parse_interact(args: List(String)) -> Result(Command, ParseError) {
+  case list.any(args, fn(a) { a == "--help" || a == "-h" }) {
+    True -> Ok(Help(Some("interact")))
+    False -> {
+      use #(config_path, remaining) <- result.try(parse_optional_config(args))
+
+      use instance_id <- result.try(required_flag_value(remaining, "--instance"))
+      use capability <- result.try(required_flag_value(
+        remaining,
+        "--capability",
+      ))
+      use input_path <- result.try(optional_flag_value_checked(
+        remaining,
+        "--input",
+      ))
+      use content <- result.try(optional_flag_value_checked(
+        remaining,
+        "--content",
+      ))
+      use mode <- result.try(optional_flag_value_checked(remaining, "--mode"))
+      use trace_id <- result.try(optional_flag_value_checked(
+        remaining,
+        "--trace-id",
+      ))
+
+      let stream = list.any(remaining, fn(a) { a == "--stream" })
+
+      Ok(
+        Interact(InteractArgs(
+          instance_id: instance_id,
+          capability: capability,
+          input_path: input_path,
+          content: content,
+          mode: mode,
+          stream: stream,
+          trace_id: trace_id,
+          config_path: config_path,
+        )),
+      )
+    }
+  }
+}
+
 fn required_flag_value(
   args: List(String),
   flag: String,
@@ -386,6 +444,16 @@ fn required_flag_value(
   case find_flag_value(args, flag) {
     Ok(Some(value)) -> Ok(value)
     Ok(None) -> Error(MissingRequiredFlag(flag))
+    Error(err) -> Error(err)
+  }
+}
+
+fn optional_flag_value_checked(
+  args: List(String),
+  flag: String,
+) -> Result(Option(String), ParseError) {
+  case find_flag_value(args, flag) {
+    Ok(value) -> Ok(value)
     Error(err) -> Error(err)
   }
 }
