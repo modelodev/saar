@@ -24,6 +24,7 @@ pub type Command {
   Validate(ValidateArgs)
   DryRun(DryRunArgs)
   RunnerTest(RunnerTestArgs)
+  Agent(AgentCommand)
   Version
   Help(Option(String))
 }
@@ -65,6 +66,25 @@ pub type RunnerTestArgs {
   )
 }
 
+pub type AgentCommand {
+  AgentList(config_path: Option(String))
+  AgentCreate(
+    profile_id: String,
+    instance_id: String,
+    config_path: Option(String),
+  )
+  AgentStatus(instance_id: String, config_path: Option(String))
+  AgentStart(instance_id: String, config_path: Option(String))
+  AgentStop(instance_id: String, config_path: Option(String))
+  AgentInfo(instance_id: String, config_path: Option(String))
+  AgentParams(profile_id: String, config_path: Option(String))
+  AgentCapability(
+    profile_id: String,
+    capability: String,
+    config_path: Option(String),
+  )
+}
+
 pub type ParseError {
   MissingCommand
   UnknownCommand(name: String, suggestions: List(String))
@@ -94,12 +114,13 @@ fn parse_subcommand(
     "validate" -> parse_validate(args)
     "dry-run" -> parse_dry_run(args)
     "runner-test" -> parse_runner_test(args)
+    "agent" -> parse_agent(args)
     _ -> Error(UnknownCommand(cmd, known_commands()))
   }
 }
 
 fn known_commands() -> List(String) {
-  ["serve", "validate", "dry-run", "runner-test"]
+  ["serve", "validate", "dry-run", "runner-test", "agent"]
 }
 
 /// Maps parsing results to CLI exit codes.
@@ -268,10 +289,93 @@ fn parse_runner_test(args: List(String)) -> Result(Command, ParseError) {
 fn parse_optional_config(
   args: List(String),
 ) -> Result(#(Option(String), List(String)), ParseError) {
+  extract_flag_value(args, "--config")
+}
+
+fn extract_flag_value(
+  args: List(String),
+  flag: String,
+) -> Result(#(Option(String), List(String)), ParseError) {
+  extract_flag_value_loop(args, flag, None, [])
+}
+
+fn extract_flag_value_loop(
+  args: List(String),
+  flag: String,
+  found: Option(String),
+  acc: List(String),
+) -> Result(#(Option(String), List(String)), ParseError) {
   case args {
-    ["--config", value, ..rest] -> Ok(#(Some(value), rest))
-    ["--config"] -> Error(MissingFlagValue("--config"))
-    _ -> Ok(#(None, args))
+    [] -> Ok(#(found, list.reverse(acc)))
+    [a] if a == flag -> Error(MissingFlagValue(flag))
+    [a, b, ..rest] if a == flag ->
+      extract_flag_value_loop(rest, flag, Some(b), acc)
+    [a, ..rest] -> extract_flag_value_loop(rest, flag, found, [a, ..acc])
+  }
+}
+
+fn parse_agent(args: List(String)) -> Result(Command, ParseError) {
+  case list.any(args, fn(a) { a == "--help" || a == "-h" }) {
+    True -> Ok(Help(Some("agent")))
+    False -> {
+      use #(config_path, remaining) <- result.try(parse_optional_config(args))
+
+      case remaining {
+        ["list"] -> Ok(Agent(AgentList(config_path: config_path)))
+
+        ["create", ..rest] -> {
+          use profile_id <- result.try(required_flag_value(rest, "--profile"))
+          use instance_id <- result.try(required_flag_value(rest, "--instance"))
+          Ok(
+            Agent(AgentCreate(
+              profile_id: profile_id,
+              instance_id: instance_id,
+              config_path: config_path,
+            )),
+          )
+        }
+
+        ["status", instance_id] ->
+          Ok(
+            Agent(AgentStatus(
+              instance_id: instance_id,
+              config_path: config_path,
+            )),
+          )
+
+        ["start", instance_id] ->
+          Ok(
+            Agent(AgentStart(instance_id: instance_id, config_path: config_path)),
+          )
+
+        ["stop", instance_id] ->
+          Ok(
+            Agent(AgentStop(instance_id: instance_id, config_path: config_path)),
+          )
+
+        ["info", instance_id] ->
+          Ok(
+            Agent(AgentInfo(instance_id: instance_id, config_path: config_path)),
+          )
+
+        ["params", profile_id] ->
+          Ok(
+            Agent(AgentParams(profile_id: profile_id, config_path: config_path)),
+          )
+
+        ["capability", profile_id, capability] ->
+          Ok(
+            Agent(AgentCapability(
+              profile_id: profile_id,
+              capability: capability,
+              config_path: config_path,
+            )),
+          )
+
+        [] -> Error(MissingRequiredFlag("<agent_subcommand>"))
+        _ -> Error(UnknownFlag("<arg>"))
+      }
+    }
   }
 }
 

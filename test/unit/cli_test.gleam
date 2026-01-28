@@ -134,3 +134,132 @@ pub fn parse_conflicting_flags_test() {
 pub fn parse_duplicate_flags_test() {
   parse_duplicate_flags()
 }
+
+pub fn parse_agent_list() {
+  let result = cli.parse(["agent", "list"])
+
+  case result {
+    Ok(cli.Agent(cli.AgentList(config_path: None))) -> Nil
+    _ -> panic as "Expected AgentList"
+  }
+}
+
+pub fn parse_agent_create() {
+  let result =
+    cli.parse([
+      "agent",
+      "create",
+      "--profile",
+      "aider",
+      "--instance",
+      "aider-1",
+      "--config",
+      "./config.toml",
+    ])
+
+  case result {
+    Ok(cli.Agent(cli.AgentCreate(
+      profile_id: profile_id,
+      instance_id: instance_id,
+      config_path: Some(config_path),
+    ))) -> {
+      should.equal(profile_id, "aider")
+      should.equal(instance_id, "aider-1")
+      should.equal(config_path, "./config.toml")
+    }
+
+    _ -> panic as "Expected AgentCreate"
+  }
+}
+
+pub fn parse_agent_status() {
+  let result = cli.parse(["agent", "status", "inst-1"])
+
+  case result {
+    Ok(cli.Agent(cli.AgentStatus(instance_id: instance_id, ..))) ->
+      should.equal(instance_id, "inst-1")
+    _ -> panic as "Expected AgentStatus"
+  }
+}
+
+pub fn parse_agent_start_stop() {
+  let start = cli.parse(["agent", "start", "inst-2"])
+  let stop = cli.parse(["agent", "stop", "inst-2"])
+
+  case start {
+    Ok(cli.Agent(cli.AgentStart(instance_id: instance_id, ..))) ->
+      should.equal(instance_id, "inst-2")
+    _ -> panic as "Expected AgentStart"
+  }
+
+  case stop {
+    Ok(cli.Agent(cli.AgentStop(instance_id: instance_id, ..))) ->
+      should.equal(instance_id, "inst-2")
+    _ -> panic as "Expected AgentStop"
+  }
+}
+
+pub fn parse_agent_info() {
+  let result = cli.parse(["agent", "info", "inst-3"])
+
+  case result {
+    Ok(cli.Agent(cli.AgentInfo(instance_id: instance_id, ..))) ->
+      should.equal(instance_id, "inst-3")
+    _ -> panic as "Expected AgentInfo"
+  }
+}
+
+pub fn parse_agent_params() {
+  let result = cli.parse(["agent", "params", "aider"])
+
+  case result {
+    Ok(cli.Agent(cli.AgentParams(profile_id: profile_id, ..))) ->
+      should.equal(profile_id, "aider")
+    _ -> panic as "Expected AgentParams"
+  }
+}
+
+pub fn parse_agent_capability() {
+  let result = cli.parse(["agent", "capability", "lightrag", "chat"])
+
+  case result {
+    Ok(cli.Agent(cli.AgentCapability(
+      profile_id: profile_id,
+      capability: capability,
+      ..,
+    ))) -> {
+      should.equal(profile_id, "lightrag")
+      should.equal(capability, "chat")
+    }
+
+    _ -> panic as "Expected AgentCapability"
+  }
+}
+
+pub fn parse_agent_list_test() {
+  parse_agent_list()
+}
+
+pub fn parse_agent_create_test() {
+  parse_agent_create()
+}
+
+pub fn parse_agent_status_test() {
+  parse_agent_status()
+}
+
+pub fn parse_agent_start_stop_test() {
+  parse_agent_start_stop()
+}
+
+pub fn parse_agent_info_test() {
+  parse_agent_info()
+}
+
+pub fn parse_agent_params_test() {
+  parse_agent_params()
+}
+
+pub fn parse_agent_capability_test() {
+  parse_agent_capability()
+}
