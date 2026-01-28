@@ -134,6 +134,17 @@ pub fn interact_headers(
   |> dict.insert("content-type", "application/json")
 }
 
+/// Builds headers for logs stream requests.
+pub fn logs_stream_headers(
+  cfg: types_config.SaarConfig,
+) -> dict.Dict(String, String) {
+  let auth = auth_header_from_config(cfg)
+
+  dict.new()
+  |> dict.insert(auth.0, auth.1)
+  |> dict.insert("accept", "text/event-stream")
+}
+
 /// Parses a JSON input payload for `--input`.
 pub fn parse_inputs_json(raw: String) -> Result(dynamic.Dynamic, CliError) {
   json.parse(raw, decode.dynamic)

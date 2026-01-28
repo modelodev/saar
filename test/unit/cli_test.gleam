@@ -209,6 +209,16 @@ pub fn parse_agent_info() {
   }
 }
 
+pub fn parse_agent_logs() {
+  let result = cli.parse(["agent", "logs", "inst-4"])
+
+  case result {
+    Ok(cli.Agent(cli.AgentLogs(instance_id: instance_id, ..))) ->
+      should.equal(instance_id, "inst-4")
+    _ -> panic as "Expected AgentLogs"
+  }
+}
+
 pub fn parse_agent_params() {
   let result = cli.parse(["agent", "params", "aider"])
 
@@ -254,6 +264,10 @@ pub fn parse_agent_start_stop_test() {
 
 pub fn parse_agent_info_test() {
   parse_agent_info()
+}
+
+pub fn parse_agent_logs_test() {
+  parse_agent_logs()
 }
 
 pub fn parse_agent_params_test() {

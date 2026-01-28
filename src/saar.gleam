@@ -350,6 +350,7 @@ fn help_text() -> List(String) {
     "saar agent start <instance_id> [--config <path>]",
     "saar agent stop <instance_id> [--config <path>]",
     "saar agent info <instance_id> [--config <path>]",
+    "saar agent logs <instance_id> [--config <path>]",
     "saar agent params <profile_id> [--config <path>]",
     "saar agent capability <profile_id> <capability> [--config <path>]",
     "saar interact --instance <id> --capability <cap> [--input <path>] [--content <text>] [--mode <value>] [--stream] [--trace-id <id>] [--config <path>]",
@@ -496,6 +497,7 @@ fn agent_config_path(cmd: cli.AgentCommand) -> Option(String) {
     cli.AgentStart(config_path: config_path, ..) -> config_path
     cli.AgentStop(config_path: config_path, ..) -> config_path
     cli.AgentInfo(config_path: config_path, ..) -> config_path
+    cli.AgentLogs(config_path: config_path, ..) -> config_path
     cli.AgentParams(config_path: config_path, ..) -> config_path
     cli.AgentCapability(config_path: config_path, ..) -> config_path
   }
@@ -575,6 +577,9 @@ fn execute_agent_plan(plan: AgentPlan) -> AgentResult {
     cli.AgentInfo(instance_id: instance_id, ..) ->
       execute_agent_request(cfg, http.Get, "/agents/" <> instance_id, None)
 
+    cli.AgentLogs(instance_id: instance_id, ..) ->
+      execute_agent_logs_stream(cfg, instance_id)
+
     cli.AgentParams(profile_id: profile_id, ..) ->
       execute_agent_params(cfg, profile_id)
 
@@ -626,6 +631,32 @@ fn execute_agent_request(
       }
 
     Error(err) -> AgentFailure([http_client.http_error_to_string(err)])
+  }
+}
+
+fn execute_agent_logs_stream(
+  cfg: types_config.SaarConfig,
+  instance_id: String,
+) -> AgentResult {
+  let url =
+    cli_http.base_url_from_config(cfg)
+    <> "/sys/agents/"
+    <> instance_id
+    <> "/logs/stream"
+
+  let headers = cli_http.logs_stream_headers(cfg)
+
+  let types_config.SaarConfig(timeouts: timeouts, ..) = cfg
+  let types_config.SaarTimeouts(call_timeout_ms: timeout_ms, ..) = timeouts
+
+  case http_client.open_sse(http.Get, url, headers, None, timeout_ms) {
+    Error(err) -> AgentFailure([http_client.http_error_to_string(err)])
+
+    Ok(conn) -> {
+      stream_sse_events(conn)
+      http_client.close_sse(conn)
+      AgentSuccess([])
+    }
   }
 }
 
