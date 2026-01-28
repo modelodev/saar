@@ -263,3 +263,89 @@ pub fn parse_agent_params_test() {
 pub fn parse_agent_capability_test() {
   parse_agent_capability()
 }
+
+pub fn parse_interact_sync() {
+  let result =
+    cli.parse([
+      "interact",
+      "--instance",
+      "inst-1",
+      "--capability",
+      "chat",
+      "--content",
+      "hola",
+    ])
+
+  case result {
+    Ok(cli.Interact(cli.InteractArgs(
+      instance_id: instance_id,
+      capability: capability,
+      content: Some(content),
+      stream: False,
+      ..,
+    ))) -> {
+      should.equal(instance_id, "inst-1")
+      should.equal(capability, "chat")
+      should.equal(content, "hola")
+    }
+
+    _ -> panic as "Expected InteractArgs"
+  }
+}
+
+pub fn parse_interact_stream() {
+  let result =
+    cli.parse([
+      "interact",
+      "--instance",
+      "inst-2",
+      "--capability",
+      "chat",
+      "--stream",
+    ])
+
+  case result {
+    Ok(cli.Interact(cli.InteractArgs(stream: True, ..))) -> Nil
+    _ -> panic as "Expected --stream"
+  }
+}
+
+pub fn parse_interact_content_mode() {
+  let result =
+    cli.parse([
+      "interact",
+      "--instance",
+      "inst-3",
+      "--capability",
+      "chat",
+      "--content",
+      "hola",
+      "--mode",
+      "hybrid",
+    ])
+
+  case result {
+    Ok(cli.Interact(cli.InteractArgs(
+      content: Some(content),
+      mode: Some(mode),
+      ..,
+    ))) -> {
+      should.equal(content, "hola")
+      should.equal(mode, "hybrid")
+    }
+
+    _ -> panic as "Expected content+mode"
+  }
+}
+
+pub fn parse_interact_sync_test() {
+  parse_interact_sync()
+}
+
+pub fn parse_interact_stream_test() {
+  parse_interact_stream()
+}
+
+pub fn parse_interact_content_mode_test() {
+  parse_interact_content_mode()
+}

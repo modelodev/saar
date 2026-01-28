@@ -17,11 +17,17 @@
 //// - Consumes `saar/types/config` and `saar/types/profile`.
 
 import gleam/dict
+import gleam/dynamic
+import gleam/dynamic/decode
+import gleam/float
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import saar/decoders
+import saar/json_pointer
 import saar/types/config as types_config
 import saar/types/core as types_core
 import saar/types/profile as types_profile
@@ -59,6 +65,28 @@ pub type ExtraFieldView {
   )
 }
 
+/// CLI errors for interact input handling.
+pub type CliError {
+  InvalidInput(String)
+  InvalidResponse(String)
+}
+
+/// CLI flags used to build interaction inputs.
+pub type InteractFlags {
+  InteractFlags(
+    content: Option(String),
+    extra_fields: dict.Dict(String, String),
+  )
+}
+
+/// Parsed capability information from discovery.
+pub type CapabilityInfo {
+  CapabilityInfo(
+    input_schema: types_profile.InputSchema,
+    response_mode: types_profile.ResponseMode,
+  )
+}
+
 /// Builds the base URL for CLI requests from configuration.
 pub fn base_url_from_config(cfg: types_config.SaarConfig) -> String {
   let types_config.SaarConfig(server_host: host, server_port: port, ..) = cfg
@@ -78,6 +106,190 @@ pub fn auth_header_from_config(
   let types_config.SaarConfig(api_key: api_key, ..) = cfg
   let token = types_core.secret_to_env_value(api_key)
   #("authorization", "Bearer " <> token)
+}
+
+/// Renders a CLI error message.
+pub fn cli_error_message(err: CliError) -> String {
+  case err {
+    InvalidInput(message) -> message
+    InvalidResponse(message) -> message
+  }
+}
+
+/// Builds headers for interact requests.
+pub fn interact_headers(
+  cfg: types_config.SaarConfig,
+  stream: Bool,
+) -> dict.Dict(String, String) {
+  let auth = auth_header_from_config(cfg)
+
+  let accept = case stream {
+    True -> "text/event-stream"
+    False -> "application/json"
+  }
+
+  dict.new()
+  |> dict.insert(auth.0, auth.1)
+  |> dict.insert("accept", accept)
+  |> dict.insert("content-type", "application/json")
+}
+
+/// Parses a JSON input payload for `--input`.
+pub fn parse_inputs_json(raw: String) -> Result(dynamic.Dynamic, CliError) {
+  json.parse(raw, decode.dynamic)
+  |> result.map_error(fn(_) { InvalidInput("invalid JSON input") })
+}
+
+/// Builds the interaction request body as JSON.
+pub fn build_interact_body(
+  capability: String,
+  inputs: dynamic.Dynamic,
+  trace_id: Option(String),
+) -> String {
+  let fields = [
+    #("capability", json.string(capability)),
+    #("inputs", json_pointer.dynamic_to_json(inputs)),
+  ]
+
+  let fields = case trace_id {
+    None -> fields
+    Some(trace_id) ->
+      list.append(fields, [
+        #("context", json.object([#("trace_id", json.string(trace_id))])),
+      ])
+  }
+
+  json.object(fields) |> json.to_string
+}
+
+/// Builds interaction inputs from CLI flags when no `--input` is provided.
+pub fn build_inputs_from_flags(
+  schema: types_profile.InputSchema,
+  flags: InteractFlags,
+) -> Result(dynamic.Dynamic, CliError) {
+  use overrides <- result.try(build_inputs_overrides(schema, flags, True))
+
+  case overrides {
+    None -> Error(InvalidInput("missing required --content"))
+    Some(value) -> Ok(value)
+  }
+}
+
+/// Builds the optional overrides from CLI flags.
+pub fn build_inputs_overrides(
+  schema: types_profile.InputSchema,
+  flags: InteractFlags,
+  require_content: Bool,
+) -> Result(Option(dynamic.Dynamic), CliError) {
+  let InteractFlags(content: content, extra_fields: extra_fields) = flags
+
+  let base_fields = case schema {
+    types_profile.SchemaChat | types_profile.SchemaChatExtended(_) -> {
+      case content {
+        None -> []
+        Some(text) -> [#("messages", messages_input(text))]
+      }
+    }
+
+    types_profile.SchemaFiles -> []
+  }
+
+  case require_content, base_fields {
+    True, [] ->
+      case schema {
+        types_profile.SchemaFiles ->
+          Error(InvalidInput("capability requires files input"))
+        _ -> Error(InvalidInput("missing required --content"))
+      }
+
+    _, _ -> {
+      use extras <- result.try(extra_fields_inputs(schema, extra_fields))
+
+      let merged = list.append(base_fields, extras)
+
+      case merged {
+        [] -> Ok(None)
+        _ -> Ok(Some(dynamic_object(merged)))
+      }
+    }
+  }
+}
+
+/// Merges input overrides into a base input object.
+pub fn merge_inputs(
+  base: dynamic.Dynamic,
+  overrides: dynamic.Dynamic,
+) -> Result(dynamic.Dynamic, CliError) {
+  use base_dict <- result.try(decode_object(base))
+  use override_dict <- result.try(decode_object(overrides))
+
+  let merged =
+    dict.fold(override_dict, base_dict, fn(acc, key, value) {
+      dict.insert(acc, key, value)
+    })
+
+  Ok(dynamic_from_dict(merged))
+}
+
+/// Parses capability information from discovery JSON.
+pub fn parse_capability_info(
+  body: String,
+  capability: String,
+) -> Result(CapabilityInfo, CliError) {
+  use value <- result.try(
+    json.parse(body, decode.dynamic)
+    |> result.map_error(fn(_) { InvalidResponse("invalid discovery JSON") }),
+  )
+
+  let root_decoder = {
+    use caps <- decode.field(
+      "capabilities",
+      decode.dict(decode.string, decode.dynamic),
+    )
+    decode.success(caps)
+  }
+
+  use caps <- result.try(
+    decode.run(value, root_decoder)
+    |> result.map_error(fn(_) {
+      InvalidResponse("missing capabilities in discovery")
+    }),
+  )
+
+  use cap <- result.try(case dict.get(caps, capability) {
+    Ok(found) -> Ok(found)
+    Error(_) -> Error(InvalidResponse("capability not found in discovery"))
+  })
+
+  let cap_decoder = {
+    use schema_dyn <- decode.optional_field(
+      "input_schema",
+      dynamic.string("std:chat"),
+      decode.dynamic,
+    )
+    use response_mode <- decode.optional_field(
+      "response_mode",
+      "sync",
+      decode.string,
+    )
+    decode.success(#(schema_dyn, response_mode))
+  }
+
+  use #(schema_dyn, response_mode_raw) <- result.try(
+    decode.run(cap, cap_decoder)
+    |> result.map_error(fn(_) { InvalidResponse("invalid capability schema") }),
+  )
+
+  use schema <- result.try(
+    decoders.decode_input_schema(schema_dyn)
+    |> result.map_error(fn(_) { InvalidResponse("invalid input_schema") }),
+  )
+
+  let response_mode =
+    types_profile.response_mode_from_string(response_mode_raw)
+    |> result.unwrap(types_profile.ResponseModeSync)
+
+  Ok(CapabilityInfo(input_schema: schema, response_mode: response_mode))
 }
 
 /// Resolves parameter status for a profile against config and environment.
@@ -304,4 +516,89 @@ fn add_default_part(
     Some(value) ->
       list.append(parts, ["default: " <> types_core.value_to_string(value)])
   }
+}
+
+fn messages_input(content: String) -> dynamic.Dynamic {
+  dynamic.list([
+    dynamic.properties([
+      #(dynamic.string("role"), dynamic.string("user")),
+      #(dynamic.string("content"), dynamic.string(content)),
+    ]),
+  ])
+}
+
+fn extra_fields_inputs(
+  schema: types_profile.InputSchema,
+  extra_fields: dict.Dict(String, String),
+) -> Result(List(#(String, dynamic.Dynamic)), CliError) {
+  case schema {
+    types_profile.SchemaChatExtended(defs) ->
+      dict.fold(extra_fields, Ok([]), fn(acc, key, raw) {
+        use acc <- result.try(acc)
+
+        case dict.get(defs, key) {
+          Error(_) -> Ok(acc)
+          Ok(def) ->
+            parse_extra_field_value(def, raw)
+            |> result.map(fn(value) { [#(key, value), ..acc] })
+        }
+      })
+      |> result.map(list.reverse)
+
+    _ -> Ok([])
+  }
+}
+
+fn parse_extra_field_value(
+  def: types_profile.ExtraFieldDef,
+  raw: String,
+) -> Result(dynamic.Dynamic, CliError) {
+  let types_profile.ExtraFieldDef(type_: type_, ..) = def
+
+  case type_ {
+    types_profile.FieldString -> Ok(dynamic.string(raw))
+
+    types_profile.FieldBoolean ->
+      case string.lowercase(raw) {
+        "true" -> Ok(dynamic.bool(True))
+        "false" -> Ok(dynamic.bool(False))
+        _ -> Error(InvalidInput("invalid boolean for extra field"))
+      }
+
+    types_profile.FieldInteger ->
+      int.parse(raw)
+      |> result.map(dynamic.int)
+      |> result.map_error(fn(_) {
+        InvalidInput("invalid integer for extra field")
+      })
+
+    types_profile.FieldNumber ->
+      float.parse(raw)
+      |> result.map(dynamic.float)
+      |> result.map_error(fn(_) {
+        InvalidInput("invalid number for extra field")
+      })
+  }
+}
+
+fn dynamic_object(fields: List(#(String, dynamic.Dynamic))) -> dynamic.Dynamic {
+  fields
+  |> list.map(fn(pair) { #(dynamic.string(pair.0), pair.1) })
+  |> dynamic.properties
+}
+
+fn decode_object(
+  value: dynamic.Dynamic,
+) -> Result(dict.Dict(String, dynamic.Dynamic), CliError) {
+  decode.run(value, decode.dict(decode.string, decode.dynamic))
+  |> result.map_error(fn(_) { InvalidInput("inputs must be an object") })
+}
+
+fn dynamic_from_dict(
+  values: dict.Dict(String, dynamic.Dynamic),
+) -> dynamic.Dynamic {
+  values
+  |> dict.to_list
+  |> list.map(fn(pair) { #(dynamic.string(pair.0), pair.1) })
+  |> dynamic.properties
 }
