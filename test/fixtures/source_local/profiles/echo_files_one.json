@@ -17,7 +17,7 @@
       "files": {
         "input_schema": "std:files",
         "streaming": false,
-        "limits": {"call_timeout_ms": 50},
+        "limits": {"call_timeout_ms": 250},
         "files": {"accepts": true, "max_files": 1, "ingest_effect": "immediate"}
       }
     }

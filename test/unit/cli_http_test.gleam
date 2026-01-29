@@ -180,7 +180,11 @@ pub fn logs_stream_sets_accept_header() {
 
 pub fn interact_builds_inputs_from_flags() {
   let flags =
-    cli_http.InteractFlags(content: Some("hola"), extra_fields: dict.new())
+    cli_http.InteractFlags(
+      content: Some("hola"),
+      extra_fields: dict.new(),
+      file_refs: [],
+    )
 
   let assert Ok(inputs) =
     cli_http.build_inputs_from_flags(types_profile.SchemaChat, flags)
@@ -191,6 +195,50 @@ pub fn interact_builds_inputs_from_flags() {
     body,
     "{\"capability\":\"chat\",\"inputs\":{\"messages\":[{\"role\":\"user\",\"content\":\"hola\"}]}}",
   )
+}
+
+pub fn interact_merges_files_into_inputs() {
+  let assert Ok(file_refs) =
+    cli_http.build_file_refs(["https://example.com/intro.pdf"], ["intro.pdf"], [
+      "application/pdf",
+    ])
+
+  let assert Ok(base) =
+    cli_http.parse_inputs_json(
+      "{\"files\":[{\"url\":\"https://example.com/a.txt\",\"name\":\"a.txt\",\"mime\":\"text/plain\"}]}",
+    )
+
+  let assert Ok(merged) = cli_http.merge_files_into_inputs(base, file_refs)
+
+  let body = cli_http.build_interact_body("files", merged, None)
+
+  should.equal(
+    body,
+    "{\"capability\":\"files\",\"inputs\":{\"files\":[{\"url\":\"https://example.com/a.txt\",\"name\":\"a.txt\",\"mime\":\"text/plain\"},{\"url\":\"https://example.com/intro.pdf\",\"name\":\"intro.pdf\",\"mime\":\"application/pdf\"}]}}",
+  )
+}
+
+pub fn download_artifacts_skips_missing_urls() {
+  let artifacts = [
+    cli_http.ArtifactInfo(
+      id: "01J1",
+      name: "missing.pdf",
+      url: None,
+      mime: "application/pdf",
+    ),
+    cli_http.ArtifactInfo(
+      id: "01J2",
+      name: "report.pdf",
+      url: Some("/artifacts/01J2"),
+      mime: "application/pdf",
+    ),
+  ]
+
+  let #(targets, warnings) =
+    cli_http.build_download_targets("http://127.0.0.1:8080", "./out", artifacts)
+
+  should.equal(list.length(targets), 1)
+  should.equal(list.length(warnings), 1)
 }
 
 fn dummy_runner() -> types_runner.Runner {

@@ -352,6 +352,57 @@ pub fn parse_interact_content_mode() {
   }
 }
 
+pub fn parse_interact_files_flags() {
+  let result =
+    cli.parse([
+      "interact",
+      "--instance",
+      "inst-4",
+      "--capability",
+      "files",
+      "--file-url",
+      "https://example.com/a.pdf",
+      "--file-name",
+      "a.pdf",
+      "--file-mime",
+      "application/pdf",
+    ])
+
+  case result {
+    Ok(cli.Interact(cli.InteractArgs(
+      file_urls: file_urls,
+      file_names: file_names,
+      file_mimes: file_mimes,
+      ..,
+    ))) -> {
+      should.equal(file_urls, ["https://example.com/a.pdf"])
+      should.equal(file_names, ["a.pdf"])
+      should.equal(file_mimes, ["application/pdf"])
+    }
+
+    _ -> panic as "Expected file flags"
+  }
+}
+
+pub fn parse_output_dir() {
+  let result =
+    cli.parse([
+      "interact",
+      "--instance",
+      "inst-5",
+      "--capability",
+      "chat",
+      "--output",
+      "./out",
+    ])
+
+  case result {
+    Ok(cli.Interact(cli.InteractArgs(output_dir: Some(dir), ..))) ->
+      should.equal(dir, "./out")
+    _ -> panic as "Expected output dir"
+  }
+}
+
 pub fn parse_interact_sync_test() {
   parse_interact_sync()
 }
@@ -362,4 +413,12 @@ pub fn parse_interact_stream_test() {
 
 pub fn parse_interact_content_mode_test() {
   parse_interact_content_mode()
+}
+
+pub fn parse_interact_files_flags_test() {
+  parse_interact_files_flags()
+}
+
+pub fn parse_output_dir_test() {
+  parse_output_dir()
 }

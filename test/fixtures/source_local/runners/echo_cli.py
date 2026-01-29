@@ -24,13 +24,21 @@ def main():
         return 0
 
     input_json = json.loads(sys.stdin.read())
-    delay_ms = input_json.get("params", {}).get("delay_ms", 100)
+    payload = input_json
+    if isinstance(input_json, dict) and input_json.get("t") == "input":
+        payload = input_json.get("payload", {})
+
+    delay_ms_raw = payload.get("params", {}).get("delay_ms", 100)
+    try:
+        delay_ms = int(delay_ms_raw)
+    except (TypeError, ValueError):
+        delay_ms = 100
     time.sleep(delay_ms / 1000)
 
     response = {
         "t": "result",
         "status": "success",
-        "data": input_json.get("input", {}),
+        "data": payload.get("input", {}),
         "artifacts": [],
         "error": None,
     }

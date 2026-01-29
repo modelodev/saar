@@ -94,8 +94,12 @@ pub type InteractArgs {
     input_path: Option(String),
     content: Option(String),
     mode: Option(String),
+    file_urls: List(String),
+    file_names: List(String),
+    file_mimes: List(String),
     stream: Bool,
     trace_id: Option(String),
+    output_dir: Option(String),
     config_path: Option(String),
   )
 }
@@ -420,9 +424,16 @@ fn parse_interact(args: List(String)) -> Result(Command, ParseError) {
         "--content",
       ))
       use mode <- result.try(optional_flag_value_checked(remaining, "--mode"))
+      use file_urls <- result.try(collect_flag_values(remaining, "--file-url"))
+      use file_names <- result.try(collect_flag_values(remaining, "--file-name"))
+      use file_mimes <- result.try(collect_flag_values(remaining, "--file-mime"))
       use trace_id <- result.try(optional_flag_value_checked(
         remaining,
         "--trace-id",
+      ))
+      use output_dir <- result.try(optional_flag_value_checked(
+        remaining,
+        "--output",
       ))
 
       let stream = list.any(remaining, fn(a) { a == "--stream" })
@@ -434,12 +445,37 @@ fn parse_interact(args: List(String)) -> Result(Command, ParseError) {
           input_path: input_path,
           content: content,
           mode: mode,
+          file_urls: file_urls,
+          file_names: file_names,
+          file_mimes: file_mimes,
           stream: stream,
           trace_id: trace_id,
+          output_dir: output_dir,
           config_path: config_path,
         )),
       )
     }
+  }
+}
+
+fn collect_flag_values(
+  args: List(String),
+  flag: String,
+) -> Result(List(String), ParseError) {
+  collect_flag_values_loop(args, flag, [])
+}
+
+fn collect_flag_values_loop(
+  args: List(String),
+  flag: String,
+  acc: List(String),
+) -> Result(List(String), ParseError) {
+  case args {
+    [] -> Ok(list.reverse(acc))
+    [a] if a == flag -> Error(MissingFlagValue(flag))
+    [a, b, ..rest] if a == flag ->
+      collect_flag_values_loop(rest, flag, [b, ..acc])
+    [_a, ..rest] -> collect_flag_values_loop(rest, flag, acc)
   }
 }
 
