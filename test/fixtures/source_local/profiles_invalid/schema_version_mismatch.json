@@ -1,0 +1,16 @@
+{
+  "schema_version": "saar.profile/2.0",
+  "meta": {
+    "id": "schema_version_mismatch",
+    "lifecycle": "transient",
+    "description": "Schema version mismatch"
+  },
+  "runner": {
+    "type": "echo_cli",
+    "tool_config": {"script": "echo_cli.py"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {}
+  }
+}
