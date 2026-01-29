@@ -134,3 +134,291 @@ pub fn parse_conflicting_flags_test() {
 pub fn parse_duplicate_flags_test() {
   parse_duplicate_flags()
 }
+
+pub fn parse_agent_list() {
+  let result = cli.parse(["agent", "list"])
+
+  case result {
+    Ok(cli.Agent(cli.AgentList(config_path: None))) -> Nil
+    _ -> panic as "Expected AgentList"
+  }
+}
+
+pub fn parse_agent_create() {
+  let result =
+    cli.parse([
+      "agent",
+      "create",
+      "--profile",
+      "aider",
+      "--instance",
+      "aider-1",
+      "--config",
+      "./config.toml",
+    ])
+
+  case result {
+    Ok(cli.Agent(cli.AgentCreate(
+      profile_id: profile_id,
+      instance_id: instance_id,
+      config_path: Some(config_path),
+    ))) -> {
+      should.equal(profile_id, "aider")
+      should.equal(instance_id, "aider-1")
+      should.equal(config_path, "./config.toml")
+    }
+
+    _ -> panic as "Expected AgentCreate"
+  }
+}
+
+pub fn parse_agent_status() {
+  let result = cli.parse(["agent", "status", "inst-1"])
+
+  case result {
+    Ok(cli.Agent(cli.AgentStatus(instance_id: instance_id, ..))) ->
+      should.equal(instance_id, "inst-1")
+    _ -> panic as "Expected AgentStatus"
+  }
+}
+
+pub fn parse_agent_start_stop() {
+  let start = cli.parse(["agent", "start", "inst-2"])
+  let stop = cli.parse(["agent", "stop", "inst-2"])
+
+  case start {
+    Ok(cli.Agent(cli.AgentStart(instance_id: instance_id, ..))) ->
+      should.equal(instance_id, "inst-2")
+    _ -> panic as "Expected AgentStart"
+  }
+
+  case stop {
+    Ok(cli.Agent(cli.AgentStop(instance_id: instance_id, ..))) ->
+      should.equal(instance_id, "inst-2")
+    _ -> panic as "Expected AgentStop"
+  }
+}
+
+pub fn parse_agent_info() {
+  let result = cli.parse(["agent", "info", "inst-3"])
+
+  case result {
+    Ok(cli.Agent(cli.AgentInfo(instance_id: instance_id, ..))) ->
+      should.equal(instance_id, "inst-3")
+    _ -> panic as "Expected AgentInfo"
+  }
+}
+
+pub fn parse_agent_logs() {
+  let result = cli.parse(["agent", "logs", "inst-4"])
+
+  case result {
+    Ok(cli.Agent(cli.AgentLogs(instance_id: instance_id, ..))) ->
+      should.equal(instance_id, "inst-4")
+    _ -> panic as "Expected AgentLogs"
+  }
+}
+
+pub fn parse_agent_params() {
+  let result = cli.parse(["agent", "params", "aider"])
+
+  case result {
+    Ok(cli.Agent(cli.AgentParams(profile_id: profile_id, ..))) ->
+      should.equal(profile_id, "aider")
+    _ -> panic as "Expected AgentParams"
+  }
+}
+
+pub fn parse_agent_capability() {
+  let result = cli.parse(["agent", "capability", "lightrag", "chat"])
+
+  case result {
+    Ok(cli.Agent(cli.AgentCapability(
+      profile_id: profile_id,
+      capability: capability,
+      ..,
+    ))) -> {
+      should.equal(profile_id, "lightrag")
+      should.equal(capability, "chat")
+    }
+
+    _ -> panic as "Expected AgentCapability"
+  }
+}
+
+pub fn parse_agent_list_test() {
+  parse_agent_list()
+}
+
+pub fn parse_agent_create_test() {
+  parse_agent_create()
+}
+
+pub fn parse_agent_status_test() {
+  parse_agent_status()
+}
+
+pub fn parse_agent_start_stop_test() {
+  parse_agent_start_stop()
+}
+
+pub fn parse_agent_info_test() {
+  parse_agent_info()
+}
+
+pub fn parse_agent_logs_test() {
+  parse_agent_logs()
+}
+
+pub fn parse_agent_params_test() {
+  parse_agent_params()
+}
+
+pub fn parse_agent_capability_test() {
+  parse_agent_capability()
+}
+
+pub fn parse_interact_sync() {
+  let result =
+    cli.parse([
+      "interact",
+      "--instance",
+      "inst-1",
+      "--capability",
+      "chat",
+      "--content",
+      "hola",
+    ])
+
+  case result {
+    Ok(cli.Interact(cli.InteractArgs(
+      instance_id: instance_id,
+      capability: capability,
+      content: Some(content),
+      stream: False,
+      ..,
+    ))) -> {
+      should.equal(instance_id, "inst-1")
+      should.equal(capability, "chat")
+      should.equal(content, "hola")
+    }
+
+    _ -> panic as "Expected InteractArgs"
+  }
+}
+
+pub fn parse_interact_stream() {
+  let result =
+    cli.parse([
+      "interact",
+      "--instance",
+      "inst-2",
+      "--capability",
+      "chat",
+      "--stream",
+    ])
+
+  case result {
+    Ok(cli.Interact(cli.InteractArgs(stream: True, ..))) -> Nil
+    _ -> panic as "Expected --stream"
+  }
+}
+
+pub fn parse_interact_content_mode() {
+  let result =
+    cli.parse([
+      "interact",
+      "--instance",
+      "inst-3",
+      "--capability",
+      "chat",
+      "--content",
+      "hola",
+      "--mode",
+      "hybrid",
+    ])
+
+  case result {
+    Ok(cli.Interact(cli.InteractArgs(
+      content: Some(content),
+      mode: Some(mode),
+      ..,
+    ))) -> {
+      should.equal(content, "hola")
+      should.equal(mode, "hybrid")
+    }
+
+    _ -> panic as "Expected content+mode"
+  }
+}
+
+pub fn parse_interact_files_flags() {
+  let result =
+    cli.parse([
+      "interact",
+      "--instance",
+      "inst-4",
+      "--capability",
+      "files",
+      "--file-url",
+      "https://example.com/a.pdf",
+      "--file-name",
+      "a.pdf",
+      "--file-mime",
+      "application/pdf",
+    ])
+
+  case result {
+    Ok(cli.Interact(cli.InteractArgs(
+      file_urls: file_urls,
+      file_names: file_names,
+      file_mimes: file_mimes,
+      ..,
+    ))) -> {
+      should.equal(file_urls, ["https://example.com/a.pdf"])
+      should.equal(file_names, ["a.pdf"])
+      should.equal(file_mimes, ["application/pdf"])
+    }
+
+    _ -> panic as "Expected file flags"
+  }
+}
+
+pub fn parse_output_dir() {
+  let result =
+    cli.parse([
+      "interact",
+      "--instance",
+      "inst-5",
+      "--capability",
+      "chat",
+      "--output",
+      "./out",
+    ])
+
+  case result {
+    Ok(cli.Interact(cli.InteractArgs(output_dir: Some(dir), ..))) ->
+      should.equal(dir, "./out")
+    _ -> panic as "Expected output dir"
+  }
+}
+
+pub fn parse_interact_sync_test() {
+  parse_interact_sync()
+}
+
+pub fn parse_interact_stream_test() {
+  parse_interact_stream()
+}
+
+pub fn parse_interact_content_mode_test() {
+  parse_interact_content_mode()
+}
+
+pub fn parse_interact_files_flags_test() {
+  parse_interact_files_flags()
+}
+
+pub fn parse_output_dir_test() {
+  parse_output_dir()
+}
