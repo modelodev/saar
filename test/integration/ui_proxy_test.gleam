@@ -235,7 +235,7 @@ pub fn ui_proxy_rejects_path_traversal_test() {
   let resp1 =
     http_client.request_sync_string(
       http.Get,
-      base_url <> "/agents/inst-any/ui/../health",
+      base_url <> "/agents/inst-any/ui/%2e%2e/health",
       auth_headers(),
       option.None,
       2000,
@@ -265,7 +265,7 @@ pub fn ui_proxy_invalid_instance_id_test() {
   let resp =
     http_client.request_sync_string(
       http.Get,
-      base_url <> "/agents/!bad!/ui/health",
+      base_url <> "/agents/bad.id/ui/health",
       auth_headers(),
       option.None,
       2000,

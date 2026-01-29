@@ -1,0 +1,16 @@
+{
+  "schema_version": "saar.profile/1.0",
+  "meta": {
+    "id": "runner_missing",
+    "lifecycle": "transient",
+    "description": "Runner missing in context"
+  },
+  "runner": {
+    "type": "missing_runner",
+    "tool_config": {"script": "missing_runner.py"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {}
+  }
+}

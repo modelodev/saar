@@ -7,7 +7,8 @@
     port_send/2,
     port_close/1,
     port_receive/2,
-    check_port_available/2
+    check_port_available/2,
+    safe_hackney_send/5
 ]).
 
 now_ms() ->
@@ -89,8 +90,58 @@ check_port_available(Host, Port) ->
         _:Reason2 -> {error, format_error(Reason2)}
     end.
 
+safe_hackney_send(Method, Url, Headers, Body, Options) ->
+    ensure_hackney_started(),
+    try
+        MethodAtom = normalize_method(Method),
+        case hackney:request(MethodAtom, Url, Headers, Body, Options) of
+            {ok, Status, ResponseHeaders, <<Binary>>} ->
+                {ok, {binary_response, Status, ResponseHeaders, Binary}};
+
+            {ok, Status, ResponseHeaders, ClientRef} ->
+                {ok, {client_ref_response, Status, ResponseHeaders, ClientRef}};
+
+            {ok, Status, ResponseHeaders} ->
+                {ok, {empty_response, Status, ResponseHeaders}};
+
+            {ok, ClientRef} ->
+                {ok, {async_response, ClientRef}};
+
+            {error, {closed, PartialBody}} ->
+                {error, {connection_closed, PartialBody}};
+
+            {error, Error} ->
+                {error, {other, Error}}
+        end
+    catch
+        _:Reason ->
+            {error, {other, {Reason, Method, is_atom(Method), Url}}}
+    end.
+
+ensure_hackney_started() ->
+    case erlang:whereis(hackney_sup) of
+        undefined ->
+            try
+                case hackney_sup:start_link() of
+                    {ok, _} -> ok;
+                    {error, _} -> ok;
+                    _ -> ok
+                end
+            catch
+                _:_ -> ok
+            end;
+        _ -> ok
+    end.
+
 env_pairs(Env) ->
     [{to_list(Key), to_list(Value)} || {Key, Value} <- Env].
+
+normalize_method(Method) when is_atom(Method) ->
+    Method;
+normalize_method({other, Value}) ->
+    list_to_atom(string:lowercase(to_list(Value)));
+normalize_method(Method) ->
+    Method.
 
 format_error(Reason) ->
     list_to_binary(lists:flatten(io_lib:format("~p", [Reason]))).
