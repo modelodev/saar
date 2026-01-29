@@ -1,4 +1,5 @@
 {
+  "schema_version": "saar.profile/1.0",
   "meta": {
     "id": "error_cli_deferred",
     "lifecycle": "transient",

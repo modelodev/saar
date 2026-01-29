@@ -1,0 +1,16 @@
+{
+  "schema_version": "saar.profile/1",
+  "meta": {
+    "id": "invalid_enum",
+    "lifecycle": "transient",
+    "description": "Invalid enum for protocol"
+  },
+  "runner": {
+    "type": "echo_cli",
+    "tool_config": {"script": "echo_cli.py"}
+  },
+  "interface": {
+    "protocol": "grpc",
+    "capabilities": {}
+  }
+}

@@ -268,7 +268,7 @@ fn start_async(
 ) -> Result(hackney.ClientRef, HttpError) {
   let url = req |> request.to_uri |> uri.to_string
 
-  hackney.send(req.method, url, req.headers, req.body, [
+  safe_hackney_send(req.method, url, req.headers, req.body, [
     hackney.Async,
     hackney.Pool(False),
   ])
@@ -280,6 +280,15 @@ fn start_async(
     }
   })
 }
+
+@external(erlang, "saar_ffi", "safe_hackney_send")
+fn safe_hackney_send(
+  a: Method,
+  b: String,
+  c: List(#(String, String)),
+  d: bytes_tree.BytesTree,
+  e: List(hackney.Options),
+) -> Result(hackney.HackneyResponse, hackney.Error)
 
 type ResponseState {
   ResponseState(

@@ -1,0 +1,15 @@
+{
+  "schema_version": "saar.profile/1.0",
+  "meta": {
+    "id": "missing_required",
+    "lifecycle": "transient"
+  },
+  "runner": {
+    "type": "echo_cli",
+    "tool_config": {"script": "echo_cli.py"}
+  },
+  "interface": {
+    "protocol": "runner",
+    "capabilities": {}
+  }
+}
