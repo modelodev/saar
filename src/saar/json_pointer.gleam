@@ -230,16 +230,34 @@ fn json_decoder() -> decode.Decoder(json.Json) {
   use <- decode.recursive
 
   let object_decoder =
-    decode.dict(decode.string, json_decoder())
+    decode.dict(decode.string, decode.optional(json_decoder()))
     |> decode.map(fn(entries) {
       entries
       |> dict.to_list
+      |> list.map(fn(pair) {
+        let #(key, value) = pair
+        case value {
+          None -> #(key, json.null())
+          Some(inner) -> #(key, inner)
+        }
+      })
       |> json.object
     })
 
   let array_decoder =
-    decode.list(of: json_decoder())
-    |> decode.map(fn(items) { json.array(items, fn(item) { item }) })
+    decode.list(of: decode.optional(json_decoder()))
+    |> decode.map(fn(items) {
+      let values =
+        items
+        |> list.map(fn(item) {
+          case item {
+            None -> json.null()
+            Some(inner) -> inner
+          }
+        })
+
+      json.array(values, fn(item) { item })
+    })
 
   decode.one_of(decode.string |> decode.map(json.string), [
     decode.bool |> decode.map(json.bool),

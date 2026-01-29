@@ -20,6 +20,7 @@
 
 import argv
 import envoy
+import gleam/bit_array
 import gleam/dict
 import gleam/dynamic
 import gleam/erlang/process
@@ -740,8 +741,12 @@ fn execute_interact_plan(plan: InteractPlan) -> AgentResult {
     input_path: input_path,
     content: content,
     mode: mode,
+    file_urls: file_urls,
+    file_names: file_names,
+    file_mimes: file_mimes,
     stream: stream_flag,
     trace_id: trace_id,
+    output_dir: output_dir,
     ..,
   ) = args
 
@@ -759,35 +764,53 @@ fn execute_interact_plan(plan: InteractPlan) -> AgentResult {
         Some(value) -> dict.insert(dict.new(), "mode", value)
       }
 
-      let flags =
-        cli_http.InteractFlags(content: content, extra_fields: extra_fields)
-
-      let inputs_result = build_interact_inputs(input_schema, input_path, flags)
-
-      case inputs_result {
+      case cli_http.build_file_refs(file_urls, file_names, file_mimes) {
         Error(err) -> AgentFailure([cli_http.cli_error_message(err)])
 
-        Ok(inputs) -> {
-          let body = cli_http.build_interact_body(capability, inputs, trace_id)
+        Ok(file_refs) -> {
+          let flags =
+            cli_http.InteractFlags(
+              content: content,
+              extra_fields: extra_fields,
+              file_refs: file_refs,
+            )
 
-          case request_body_allowed(cfg, body) {
-            Error(message) -> AgentFailure([message])
-            Ok(_) -> {
-              let stream = case response_mode, stream_flag {
-                types_profile.ResponseModeStream, _ -> True
-                _, True -> True
-                _, False -> False
-              }
+          let inputs_result =
+            build_interact_inputs(input_schema, input_path, flags)
 
-              let url =
-                cli_http.base_url_from_config(cfg)
-                <> "/agents/"
-                <> instance_id
-                <> "/interact"
+          case inputs_result {
+            Error(err) -> AgentFailure([cli_http.cli_error_message(err)])
 
-              case stream {
-                True -> execute_interact_streaming(cfg, url, body)
-                False -> execute_interact_sync(cfg, url, body)
+            Ok(inputs) -> {
+              let body =
+                cli_http.build_interact_body(capability, inputs, trace_id)
+
+              case request_body_allowed(cfg, body) {
+                Error(message) -> AgentFailure([message])
+                Ok(_) -> {
+                  let stream = case response_mode, stream_flag {
+                    types_profile.ResponseModeStream, _ -> True
+                    _, True -> True
+                    _, False -> False
+                  }
+
+                  let url =
+                    cli_http.base_url_from_config(cfg)
+                    <> "/agents/"
+                    <> instance_id
+                    <> "/interact"
+
+                  case stream {
+                    True -> execute_interact_streaming(cfg, url, body)
+                    False ->
+                      execute_interact_sync_with_output(
+                        cfg,
+                        url,
+                        body,
+                        output_dir,
+                      )
+                  }
+                }
               }
             }
           }
@@ -806,6 +829,12 @@ fn build_interact_inputs(
     None -> cli_http.build_inputs_from_flags(schema, flags)
 
     Some(path) -> {
+      let cli_http.InteractFlags(
+        content: content,
+        extra_fields: extra_fields,
+        file_refs: file_refs,
+      ) = flags
+
       use raw <- result.try(
         simplifile.read(path)
         |> result.map_error(fn(err) {
@@ -816,16 +845,27 @@ fn build_interact_inputs(
       )
 
       use base <- result.try(cli_http.parse_inputs_json(raw))
+
+      let flags_no_files =
+        cli_http.InteractFlags(
+          content: content,
+          extra_fields: extra_fields,
+          file_refs: [],
+        )
+
       use overrides <- result.try(cli_http.build_inputs_overrides(
         schema,
-        flags,
+        flags_no_files,
         False,
       ))
 
-      case overrides {
+      let merged = case overrides {
         None -> Ok(base)
         Some(value) -> cli_http.merge_inputs(base, value)
       }
+
+      use merged <- result.try(merged)
+      cli_http.merge_files_into_inputs(merged, file_refs)
     }
   }
 }
@@ -892,6 +932,42 @@ fn execute_interact_sync(
   url: String,
   body: String,
 ) -> AgentResult {
+  case execute_interact_sync_raw(cfg, url, body) {
+    Ok(response_body) -> AgentSuccess([response_body])
+    Error(err) -> err
+  }
+}
+
+fn execute_interact_sync_with_output(
+  cfg: types_config.SaarConfig,
+  url: String,
+  body: String,
+  output_dir: Option(String),
+) -> AgentResult {
+  case output_dir {
+    None -> execute_interact_sync(cfg, url, body)
+
+    Some(dir) ->
+      case execute_interact_sync_raw(cfg, url, body) {
+        Error(err) -> err
+
+        Ok(response_body) ->
+          case download_artifacts(cfg, dir, response_body) {
+            Error(err) -> AgentFailure([cli_http.cli_error_message(err)])
+            Ok(warnings) -> {
+              warnings |> list.each(io.println_error)
+              AgentSuccess([response_body])
+            }
+          }
+      }
+  }
+}
+
+fn execute_interact_sync_raw(
+  cfg: types_config.SaarConfig,
+  url: String,
+  body: String,
+) -> Result(String, AgentResult) {
   let headers = cli_http.interact_headers(cfg, False)
 
   let types_config.SaarConfig(timeouts: timeouts, limits: limits, ..) = cfg
@@ -911,11 +987,110 @@ fn execute_interact_sync(
   {
     Ok(http_client.HttpResponse(status: status, body: response_body, ..)) ->
       case status >= 200 && status < 300 {
-        True -> AgentSuccess([response_body])
-        False -> AgentFailure([http_error_body(status, response_body)])
+        True -> Ok(response_body)
+        False -> Error(AgentFailure([http_error_body(status, response_body)]))
       }
 
-    Error(err) -> AgentFailure([http_client.http_error_to_string(err)])
+    Error(err) -> Error(AgentFailure([http_client.http_error_to_string(err)]))
+  }
+}
+
+fn download_artifacts(
+  cfg: types_config.SaarConfig,
+  output_dir: String,
+  response_body: String,
+) -> Result(List(String), cli_http.CliError) {
+  use artifacts <- result.try(cli_http.parse_artifacts(response_body))
+
+  case artifacts {
+    [] -> Ok([])
+    _ -> {
+      use _ <- result.try(
+        simplifile.create_directory_all(output_dir)
+        |> result.map_error(fn(err) {
+          cli_http.InvalidInput(
+            "failed to create output dir: " <> string.inspect(err),
+          )
+        }),
+      )
+
+      let base_url = cli_http.base_url_from_config(cfg)
+      let #(targets, warnings) =
+        cli_http.build_download_targets(base_url, output_dir, artifacts)
+
+      use _ <- result.try(download_targets(cfg, targets))
+      Ok(warnings)
+    }
+  }
+}
+
+fn download_targets(
+  cfg: types_config.SaarConfig,
+  targets: List(cli_http.DownloadTarget),
+) -> Result(Nil, cli_http.CliError) {
+  targets
+  |> list.try_map(fn(target) { download_target(cfg, target) })
+  |> result.map(fn(_) { Nil })
+}
+
+fn download_target(
+  cfg: types_config.SaarConfig,
+  target: cli_http.DownloadTarget,
+) -> Result(Nil, cli_http.CliError) {
+  let cli_http.DownloadTarget(url: url, output_path: output_path, name: name) =
+    target
+
+  let headers =
+    dict.new()
+    |> dict.insert(
+      cli_http.auth_header_from_config(cfg).0,
+      cli_http.auth_header_from_config(cfg).1,
+    )
+    |> dict.insert("accept", "application/octet-stream")
+
+  let types_config.SaarConfig(timeouts: timeouts, limits: limits, ..) = cfg
+  let types_config.SaarTimeouts(call_timeout_ms: timeout_ms, ..) = timeouts
+  let types_config.SaarLimits(max_http_response_bytes: max_body_bytes, ..) =
+    limits
+
+  let response =
+    http_client.request_sync_bits(
+      http.Get,
+      url,
+      headers,
+      None,
+      timeout_ms,
+      max_body_bytes,
+    )
+    |> result.map_error(fn(err) {
+      cli_http.InvalidResponse(
+        "artifact download failed: " <> http_client.http_error_to_string(err),
+      )
+    })
+
+  use http_client.HttpResponseBits(status: status, body: body, ..) <- result.try(
+    response,
+  )
+
+  case status >= 200 && status < 300 {
+    True -> {
+      use contents <- result.try(
+        bit_array.to_string(body)
+        |> result.map_error(fn(_) {
+          cli_http.InvalidResponse("artifact response not UTF-8: " <> name)
+        }),
+      )
+
+      simplifile.write(to: output_path, contents: contents)
+      |> result.map_error(fn(err) {
+        cli_http.InvalidInput(
+          "failed to write artifact: " <> string.inspect(err),
+        )
+      })
+    }
+
+    False ->
+      Error(cli_http.InvalidResponse("artifact download failed with status"))
   }
 }
 

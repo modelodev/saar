@@ -16,6 +16,7 @@
 //// - Used by `saar.gleam` when executing CLI agent commands.
 //// - Consumes `saar/types/config` and `saar/types/profile`.
 
+import filepath
 import gleam/dict
 import gleam/dynamic
 import gleam/dynamic/decode
@@ -30,6 +31,7 @@ import saar/decoders
 import saar/json_pointer
 import saar/types/config as types_config
 import saar/types/core as types_core
+import saar/types/input as types_input
 import saar/types/profile as types_profile
 
 /// Status of a profile parameter in the local environment.
@@ -76,6 +78,7 @@ pub type InteractFlags {
   InteractFlags(
     content: Option(String),
     extra_fields: dict.Dict(String, String),
+    file_refs: List(types_input.FileRef),
   )
 }
 
@@ -85,6 +88,16 @@ pub type CapabilityInfo {
     input_schema: types_profile.InputSchema,
     response_mode: types_profile.ResponseMode,
   )
+}
+
+/// Parsed artifact information from an interaction response.
+pub type ArtifactInfo {
+  ArtifactInfo(id: String, name: String, url: Option(String), mime: String)
+}
+
+/// Download target derived from artifacts.
+pub type DownloadTarget {
+  DownloadTarget(url: String, output_path: String, name: String)
 }
 
 /// Builds the base URL for CLI requests from configuration.
@@ -192,7 +205,11 @@ pub fn build_inputs_overrides(
   flags: InteractFlags,
   require_content: Bool,
 ) -> Result(Option(dynamic.Dynamic), CliError) {
-  let InteractFlags(content: content, extra_fields: extra_fields) = flags
+  let InteractFlags(
+    content: content,
+    extra_fields: extra_fields,
+    file_refs: file_refs,
+  ) = flags
 
   let base_fields = case schema {
     types_profile.SchemaChat | types_profile.SchemaChatExtended(_) -> {
@@ -205,18 +222,20 @@ pub fn build_inputs_overrides(
     types_profile.SchemaFiles -> []
   }
 
-  case require_content, base_fields {
-    True, [] ->
-      case schema {
-        types_profile.SchemaFiles ->
-          Error(InvalidInput("capability requires files input"))
-        _ -> Error(InvalidInput("missing required --content"))
-      }
+  let files_field = case file_refs {
+    [] -> []
+    _ -> [#("files", file_refs_input(file_refs))]
+  }
 
-    _, _ -> {
+  let merged_fields = list.append(base_fields, files_field)
+
+  case require_content, base_fields, file_refs {
+    True, [], [] -> Error(InvalidInput("missing required --content"))
+
+    _, _, _ -> {
       use extras <- result.try(extra_fields_inputs(schema, extra_fields))
 
-      let merged = list.append(base_fields, extras)
+      let merged = list.append(merged_fields, extras)
 
       case merged {
         [] -> Ok(None)
@@ -224,6 +243,92 @@ pub fn build_inputs_overrides(
       }
     }
   }
+}
+
+/// Builds file references from CLI flags.
+pub fn build_file_refs(
+  file_urls: List(String),
+  file_names: List(String),
+  file_mimes: List(String),
+) -> Result(List(types_input.FileRef), CliError) {
+  case
+    list.is_empty(file_urls),
+    list.is_empty(file_names),
+    list.is_empty(file_mimes)
+  {
+    True, False, _ -> Error(InvalidInput("--file-name requires --file-url"))
+    True, _, False -> Error(InvalidInput("--file-mime requires --file-url"))
+    True, True, True -> Ok([])
+    False, _, _ -> build_file_refs_from_urls(file_urls, file_names, file_mimes)
+  }
+}
+
+fn build_file_refs_from_urls(
+  file_urls: List(String),
+  file_names: List(String),
+  file_mimes: List(String),
+) -> Result(List(types_input.FileRef), CliError) {
+  case list.length(file_names) > list.length(file_urls) {
+    True -> Error(InvalidInput("too many --file-name values"))
+    False ->
+      case list.length(file_mimes) > list.length(file_urls) {
+        True -> Error(InvalidInput("too many --file-mime values"))
+        False -> Ok(build_file_refs_loop(file_urls, file_names, file_mimes, []))
+      }
+  }
+}
+
+fn build_file_refs_loop(
+  urls: List(String),
+  names: List(String),
+  mimes: List(String),
+  acc: List(types_input.FileRef),
+) -> List(types_input.FileRef) {
+  case urls {
+    [] -> list.reverse(acc)
+    [url, ..rest] -> {
+      let #(name, next_names) = pop_or_default(names, default_file_name(url))
+      let #(mime, next_mimes) =
+        pop_or_default(mimes, "application/octet-stream")
+
+      build_file_refs_loop(rest, next_names, next_mimes, [
+        types_input.FileRef(url: url, mime: mime, name: name, context: None),
+        ..acc
+      ])
+    }
+  }
+}
+
+fn pop_or_default(
+  values: List(String),
+  default: String,
+) -> #(String, List(String)) {
+  case values {
+    [] -> #(default, [])
+    [value, ..rest] -> #(value, rest)
+  }
+}
+
+fn default_file_name(url: String) -> String {
+  let segments = string.split(url, on: "/")
+  let name = list.last(segments) |> result.unwrap("file")
+  case string.is_empty(name) {
+    True -> "file"
+    False -> name
+  }
+}
+
+fn file_refs_input(file_refs: List(types_input.FileRef)) -> dynamic.Dynamic {
+  file_refs
+  |> list.map(fn(ref) {
+    let types_input.FileRef(url: url, mime: mime, name: name, ..) = ref
+    dynamic.properties([
+      #(dynamic.string("url"), dynamic.string(url)),
+      #(dynamic.string("name"), dynamic.string(name)),
+      #(dynamic.string("mime"), dynamic.string(mime)),
+    ])
+  })
+  |> dynamic.list
 }
 
 /// Merges input overrides into a base input object.
@@ -240,6 +345,61 @@ pub fn merge_inputs(
     })
 
   Ok(dynamic_from_dict(merged))
+}
+
+/// Merges file references into an existing inputs object.
+pub fn merge_files_into_inputs(
+  base: dynamic.Dynamic,
+  file_refs: List(types_input.FileRef),
+) -> Result(dynamic.Dynamic, CliError) {
+  case file_refs {
+    [] -> Ok(base)
+    _ -> {
+      use base_dict <- result.try(decode_object(base))
+
+      case dict.get(base_dict, "files") {
+        Error(_) ->
+          Ok(
+            dynamic_from_dict(dict.insert(
+              base_dict,
+              "files",
+              file_refs_input(file_refs),
+            )),
+          )
+
+        Ok(value) -> {
+          use existing <- result.try(
+            decode.run(value, decode.list(of: decode.dynamic))
+            |> result.map_error(fn(_) {
+              InvalidInput("inputs.files must be a list")
+            }),
+          )
+
+          let combined = list.append(existing, dynamic_files(file_refs))
+
+          Ok(
+            dynamic_from_dict(dict.insert(
+              base_dict,
+              "files",
+              dynamic.list(combined),
+            )),
+          )
+        }
+      }
+    }
+  }
+}
+
+fn dynamic_files(file_refs: List(types_input.FileRef)) -> List(dynamic.Dynamic) {
+  file_refs
+  |> list.map(fn(ref) {
+    let types_input.FileRef(url: url, mime: mime, name: name, ..) = ref
+    dynamic.properties([
+      #(dynamic.string("url"), dynamic.string(url)),
+      #(dynamic.string("name"), dynamic.string(name)),
+      #(dynamic.string("mime"), dynamic.string(mime)),
+    ])
+  })
 }
 
 /// Parses capability information from discovery JSON.
@@ -301,6 +461,87 @@ pub fn parse_capability_info(
     |> result.unwrap(types_profile.ResponseModeSync)
 
   Ok(CapabilityInfo(input_schema: schema, response_mode: response_mode))
+}
+
+/// Parses artifacts from an interaction response body.
+pub fn parse_artifacts(body: String) -> Result(List(ArtifactInfo), CliError) {
+  use value <- result.try(
+    json.parse(body, decode.dynamic)
+    |> result.map_error(fn(_) { InvalidResponse("invalid response JSON") }),
+  )
+
+  let decoder = {
+    use artifacts <- decode.optional_field(
+      "artifacts",
+      [],
+      decode.list(of: decode.dynamic),
+    )
+    decode.success(artifacts)
+  }
+
+  use artifacts_dyn <- result.try(
+    decode.run(value, decoder)
+    |> result.map_error(fn(_) { InvalidResponse("invalid artifacts payload") }),
+  )
+
+  artifacts_dyn
+  |> list.try_map(fn(item) { decode_artifact(item) })
+}
+
+fn decode_artifact(value: dynamic.Dynamic) -> Result(ArtifactInfo, CliError) {
+  let decoder = {
+    use id <- decode.field("id", decode.string)
+    use name <- decode.field("name", decode.string)
+    use url <- decode.optional_field(
+      "url",
+      None,
+      decode.optional(decode.string),
+    )
+    use mime <- decode.field("mime", decode.string)
+    decode.success(ArtifactInfo(id: id, name: name, url: url, mime: mime))
+  }
+
+  decode.run(value, decoder)
+  |> result.map_error(fn(_) { InvalidResponse("invalid artifact entry") })
+}
+
+/// Builds download targets and warnings for artifacts with missing URLs.
+pub fn build_download_targets(
+  base_url: String,
+  output_dir: String,
+  artifacts: List(ArtifactInfo),
+) -> #(List(DownloadTarget), List(String)) {
+  let init = #([], [])
+
+  list.fold(artifacts, init, fn(acc, artifact) {
+    let #(targets, warnings) = acc
+    let ArtifactInfo(name: name, url: url, ..) = artifact
+
+    case url {
+      None -> #(targets, ["artifact missing url: " <> name, ..warnings])
+      Some(raw_url) -> {
+        let full_url = qualify_url(base_url, raw_url)
+        let output_path = filepath.join(output_dir, name)
+        let target =
+          DownloadTarget(url: full_url, output_path: output_path, name: name)
+        #([target, ..targets], warnings)
+      }
+    }
+  })
+  |> fn(pair) {
+    let #(targets, warnings) = pair
+    #(list.reverse(targets), list.reverse(warnings))
+  }
+}
+
+fn qualify_url(base_url: String, raw_url: String) -> String {
+  case
+    string.starts_with(raw_url, "http://")
+    || string.starts_with(raw_url, "https://")
+  {
+    True -> raw_url
+    False -> base_url <> raw_url
+  }
 }
 
 /// Resolves parameter status for a profile against config and environment.
