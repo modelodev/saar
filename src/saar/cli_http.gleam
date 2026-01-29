@@ -319,16 +319,7 @@ fn default_file_name(url: String) -> String {
 }
 
 fn file_refs_input(file_refs: List(types_input.FileRef)) -> dynamic.Dynamic {
-  file_refs
-  |> list.map(fn(ref) {
-    let types_input.FileRef(url: url, mime: mime, name: name, ..) = ref
-    dynamic.properties([
-      #(dynamic.string("url"), dynamic.string(url)),
-      #(dynamic.string("name"), dynamic.string(name)),
-      #(dynamic.string("mime"), dynamic.string(mime)),
-    ])
-  })
-  |> dynamic.list
+  dynamic.list(file_ref_dynamics(file_refs))
 }
 
 /// Merges input overrides into a base input object.
@@ -375,7 +366,7 @@ pub fn merge_files_into_inputs(
             }),
           )
 
-          let combined = list.append(existing, dynamic_files(file_refs))
+          let combined = list.append(existing, file_ref_dynamics(file_refs))
 
           Ok(
             dynamic_from_dict(dict.insert(
@@ -390,7 +381,9 @@ pub fn merge_files_into_inputs(
   }
 }
 
-fn dynamic_files(file_refs: List(types_input.FileRef)) -> List(dynamic.Dynamic) {
+fn file_ref_dynamics(
+  file_refs: List(types_input.FileRef),
+) -> List(dynamic.Dynamic) {
   file_refs
   |> list.map(fn(ref) {
     let types_input.FileRef(url: url, mime: mime, name: name, ..) = ref

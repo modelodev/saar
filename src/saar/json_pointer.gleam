@@ -236,10 +236,7 @@ fn json_decoder() -> decode.Decoder(json.Json) {
       |> dict.to_list
       |> list.map(fn(pair) {
         let #(key, value) = pair
-        case value {
-          None -> #(key, json.null())
-          Some(inner) -> #(key, inner)
-        }
+        #(key, optional_json(value))
       })
       |> json.object
     })
@@ -247,14 +244,7 @@ fn json_decoder() -> decode.Decoder(json.Json) {
   let array_decoder =
     decode.list(of: decode.optional(json_decoder()))
     |> decode.map(fn(items) {
-      let values =
-        items
-        |> list.map(fn(item) {
-          case item {
-            None -> json.null()
-            Some(inner) -> inner
-          }
-        })
+      let values = items |> list.map(optional_json)
 
       json.array(values, fn(item) { item })
     })
@@ -266,4 +256,11 @@ fn json_decoder() -> decode.Decoder(json.Json) {
     object_decoder,
     array_decoder,
   ])
+}
+
+fn optional_json(value: Option(json.Json)) -> json.Json {
+  case value {
+    None -> json.null()
+    Some(inner) -> inner
+  }
 }
